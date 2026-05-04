@@ -11,7 +11,9 @@ enum MenuBarStatusItemInvocation: Equatable {
             return .componentPanel
         }
 
-        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+        if event.type == .rightMouseDown
+            || event.type == .rightMouseUp
+            || event.modifierFlags.contains(.control) {
             return .featurePanel
         }
 
@@ -27,27 +29,42 @@ final class MenuBarStatusItemController: NSObject {
     private let pluginHost: PluginHost
     private let windowRouter: AppWindowRouter
     private let statusItem: NSStatusItem
-    private let featurePopover = NSPopover()
-    private let componentPopover = NSPopover()
+    private var panelPresenter: MenuBarPanelPresenter!
     private var cancellables: Set<AnyCancellable> = []
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
     private var appActivationObserver: NSObjectProtocol?
+    private var refreshAfterPresentationTask: Task<Void, Never>?
 
     init(pluginHost: PluginHost, windowRouter: AppWindowRouter) {
         self.pluginHost = pluginHost
         self.windowRouter = windowRouter
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        panelPresenter = MenuBarPanelPresenter(
+            pluginHost: pluginHost,
+            onDismiss: { [weak self] in
+                self?.dismissPanels()
+            },
+            onOpenSettings: { [weak self] in
+                self?.windowRouter.showSettings()
+            },
+            onOpenDiskCleanDetails: { [weak self] in
+                self?.windowRouter.showDiskCleanDetails()
+            },
+            onAllPanelsClosed: { [weak self] in
+                self?.removeDismissMonitorsIfNeeded()
+            }
+        )
         configureStatusItem()
-        configurePopovers()
         observePluginHost()
         updateStatusIcon()
     }
 
     func dismissPanels() {
-        featurePopover.performClose(nil)
-        componentPopover.performClose(nil)
+        refreshAfterPresentationTask?.cancel()
+        refreshAfterPresentationTask = nil
+        panelPresenter.dismissPanels()
         removeDismissMonitorsIfNeeded()
     }
 
@@ -58,17 +75,8 @@ final class MenuBarStatusItemController: NSObject {
 
         button.target = self
         button.action = #selector(handleStatusItemAction(_:))
-        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = "MacTools"
-    }
-
-    private func configurePopovers() {
-        featurePopover.behavior = .transient
-        featurePopover.animates = true
-        featurePopover.delegate = self
-        componentPopover.behavior = .transient
-        componentPopover.animates = true
-        componentPopover.delegate = self
     }
 
     private func observePluginHost() {
@@ -107,60 +115,22 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func toggleFeaturePanel(relativeTo button: NSStatusBarButton) {
-        if featurePopover.isShown {
-            featurePopover.performClose(nil)
-            return
-        }
-
-        componentPopover.performClose(nil)
-        let hostingController = NSHostingController(
-            rootView: MenuBarContent(
-                pluginHost: pluginHost,
-                onDismiss: { [weak self] in
-                    self?.featurePopover.performClose(nil)
-                },
-                onOpenSettings: { [weak self] in
-                    self?.windowRouter.showSettings()
-                },
-                onOpenDiskCleanDetails: { [weak self] in
-                    self?.windowRouter.showDiskCleanDetails()
-                }
-            )
-        )
-        featurePopover.contentViewController = hostingController
-        featurePopover.contentSize = hostingController.view.fittingSize
-        featurePopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        focusPresentedPopover(featurePopover)
-        installDismissMonitorsIfNeeded()
-        refreshAfterPresentation()
+        panelPresenter.toggleFeaturePanel(relativeTo: button)
+        handlePresentationResult()
     }
 
     private func toggleComponentPanel(relativeTo button: NSStatusBarButton) {
-        if componentPopover.isShown {
-            componentPopover.performClose(nil)
+        panelPresenter.toggleComponentPanel(relativeTo: button)
+        handlePresentationResult()
+    }
+
+    private func handlePresentationResult() {
+        guard panelPresenter.isAnyPanelShown else {
+            refreshAfterPresentationTask?.cancel()
+            refreshAfterPresentationTask = nil
             return
         }
 
-        featurePopover.performClose(nil)
-        let panelHeight = ComponentPanelLayout.preferredPanelHeight(
-            for: pluginHost.componentItems,
-            screen: button.window?.screen ?? NSScreen.main
-        )
-        componentPopover.contentSize = NSSize(
-            width: ComponentPanelLayout.panelWidth,
-            height: panelHeight
-        )
-        componentPopover.contentViewController = NSHostingController(
-            rootView: ComponentPanelContent(
-                pluginHost: pluginHost,
-                panelHeight: panelHeight,
-                onDismiss: { [weak self] in
-                    self?.componentPopover.performClose(nil)
-                }
-            )
-        )
-        componentPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        focusPresentedPopover(componentPopover)
         installDismissMonitorsIfNeeded()
         refreshAfterPresentation()
     }
@@ -204,6 +174,9 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func removeDismissMonitorsIfNeeded() {
+        refreshAfterPresentationTask?.cancel()
+        refreshAfterPresentationTask = nil
+
         if let localEventMonitor {
             NSEvent.removeMonitor(localEventMonitor)
             self.localEventMonitor = nil
@@ -220,22 +193,8 @@ final class MenuBarStatusItemController: NSObject {
         }
     }
 
-    private func focusPresentedPopover(_ popover: NSPopover) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        popover.contentViewController?.view.window?.makeKey()
-
-        Task { @MainActor [weak popover] in
-            await Task.yield()
-            guard let popover, popover.isShown else {
-                return
-            }
-
-            popover.contentViewController?.view.window?.makeKey()
-        }
-    }
-
     private func handleLocalMouseEvent(_ event: NSEvent) -> NSEvent {
-        guard featurePopover.isShown || componentPopover.isShown else {
+        guard panelPresenter.isAnyPanelShown else {
             removeDismissMonitorsIfNeeded()
             return event
         }
@@ -253,8 +212,7 @@ final class MenuBarStatusItemController: NSObject {
             return false
         }
 
-        return eventWindow === featurePopover.contentViewController?.view.window
-            || eventWindow === componentPopover.contentViewController?.view.window
+        return panelPresenter.containsPopoverWindow(eventWindow)
     }
 
     private func isEventInsideStatusButton(_ event: NSEvent) -> Bool {
@@ -280,19 +238,22 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func refreshAfterPresentation() {
-        Task { @MainActor in
-            await Task.yield()
-            pluginHost.refreshAll()
-        }
-    }
-}
+        refreshAfterPresentationTask?.cancel()
+        refreshAfterPresentationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(140))
+            } catch {
+                return
+            }
 
-extension MenuBarStatusItemController: NSPopoverDelegate {
-    func popoverDidClose(_ notification: Notification) {
-        guard !featurePopover.isShown, !componentPopover.isShown else {
-            return
-        }
+            guard
+                !Task.isCancelled,
+                self?.panelPresenter.isAnyPanelShown == true
+            else {
+                return
+            }
 
-        removeDismissMonitorsIfNeeded()
+            self?.pluginHost.refreshAll()
+        }
     }
 }

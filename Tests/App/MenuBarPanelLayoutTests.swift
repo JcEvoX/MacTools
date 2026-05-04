@@ -5,7 +5,7 @@ import XCTest
 
 final class MenuBarPanelLayoutTests: XCTestCase {
     func testBaseWidthRemainsFixedForCompactPanelPresentation() {
-        XCTAssertEqual(MenuBarPanelLayout.baseWidth, 296)
+        XCTAssertEqual(MenuBarPanelLayout.baseWidth, 288)
     }
 
     func testSurfaceWidthStaysAtBaseCardWidthWhenSecondaryPanelIsVisible() {
@@ -77,10 +77,47 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
     }
 
+    func testContentSizeUsesModelWithoutSwiftUILayoutMeasurement() {
+        let expandedNavigationItem = makeItem(
+            controlStyle: .disclosure,
+            isExpanded: true,
+            secondaryPanel: nil,
+            controls: [
+                PluginPanelControl(
+                    id: "display-navigation",
+                    kind: .navigationList,
+                    options: [
+                        PluginPanelControlOption(id: "1", title: "Studio Display"),
+                        PluginPanelControlOption(id: "2", title: "LG UltraFine")
+                    ],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: nil,
+                    isEnabled: true
+                )
+            ]
+        )
+
+        let collapsedItem = makeItem(
+            controlStyle: .switch,
+            isExpanded: false,
+            secondaryPanel: nil
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.contentSize(for: [expandedNavigationItem, collapsedItem]),
+            NSSize(width: 288, height: 298)
+        )
+    }
+
     private func makeItem(
         controlStyle: PluginControlStyle,
         isExpanded: Bool,
-        secondaryPanel: PluginPanelSecondaryPanel?
+        secondaryPanel: PluginPanelSecondaryPanel?,
+        controls: [PluginPanelControl] = []
     ) -> PluginPanelItem {
         PluginPanelItem(
             id: "display-resolution",
@@ -95,7 +132,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             isOn: false,
             isExpanded: isExpanded,
             isEnabled: true,
-            detail: PluginPanelDetail(primaryControls: [], secondaryPanel: secondaryPanel)
+            detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: secondaryPanel)
         )
     }
 }

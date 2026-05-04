@@ -133,6 +133,11 @@ struct PluginComponentContext {
     let dismiss: () -> Void
 }
 
+struct PluginComponentViewItem: Identifiable {
+    let id: String
+    let content: AnyView
+}
+
 struct PluginComponentItem: Identifiable {
     let id: String
     let title: String

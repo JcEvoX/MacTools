@@ -172,6 +172,10 @@ struct ComponentPanelContent: View {
     let panelHeight: CGFloat
     let onDismiss: () -> Void
 
+    private var placements: [ComponentGridPlacement] {
+        ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
+    }
+
     var body: some View {
         Group {
             if pluginHost.componentItems.isEmpty {
@@ -182,6 +186,7 @@ struct ComponentPanelContent: View {
                     ComponentGridView(
                         pluginHost: pluginHost,
                         items: pluginHost.componentItems,
+                        placements: placements,
                         onDismiss: onDismiss
                     )
                 }
@@ -218,11 +223,8 @@ struct ComponentPanelContent: View {
 private struct ComponentGridView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [PluginComponentItem]
+    let placements: [ComponentGridPlacement]
     let onDismiss: () -> Void
-
-    private var placements: [ComponentGridPlacement] {
-        ComponentGridPlacementEngine.placements(for: items)
-    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -258,7 +260,7 @@ private struct ComponentCardContainer: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        pluginHost.makeComponentView(for: item.id, dismiss: onDismiss)
+        pluginHost.componentViewItem(for: item.id, dismiss: onDismiss).content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .disabled(!item.isEnabled)

@@ -38,6 +38,7 @@ final class PluginHost: ObservableObject {
     private let globalShortcutManager: GlobalShortcutManager
 
     private var shortcutErrors: [String: String] = [:]
+    private var componentViewCache: [String: PluginComponentViewItem] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -352,14 +353,31 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
-    func makeComponentView(for itemID: String, dismiss: @escaping () -> Void) -> AnyView {
-        guard let plugin = componentPlugin(for: itemID) else {
-            return AnyView(EmptyView())
+    func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
+        if let cachedItem = componentViewCache[itemID] {
+            return cachedItem
         }
 
-        return plugin.makeComponentView(
-            context: PluginComponentContext(pluginID: itemID, dismiss: dismiss)
+        guard let plugin = componentPlugin(for: itemID) else {
+            let item = PluginComponentViewItem(id: itemID, content: AnyView(EmptyView()))
+            componentViewCache[itemID] = item
+            return item
+        }
+
+        let item = PluginComponentViewItem(
+            id: itemID,
+            content: plugin.makeComponentView(
+                context: PluginComponentContext(pluginID: itemID, dismiss: dismiss)
+            )
         )
+        componentViewCache[itemID] = item
+        return item
+    }
+
+    func warmComponentViews(dismiss: @escaping () -> Void) {
+        for item in componentItems {
+            _ = componentViewItem(for: item.id, dismiss: dismiss)
+        }
     }
 
     private func plugin(for pluginID: String) -> (any FeaturePlugin)? {
@@ -441,6 +459,7 @@ final class PluginHost: ObservableObject {
                 isEnabled: state.isEnabled
             )
         }
+        trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
 
         featureManagementItems = orderedDescriptors.map { descriptor in
             let metadata = descriptor.metadata
@@ -616,6 +635,10 @@ final class PluginHost: ObservableObject {
 
             return lhs.metadata.order < rhs.metadata.order
         }
+    }
+
+    private func trimComponentViewCache(keeping visibleComponentIDs: Set<String>) {
+        componentViewCache = componentViewCache.filter { visibleComponentIDs.contains($0.key) }
     }
 
     private func shortcutDescriptor(for shortcutID: String) -> ShortcutDescriptor? {

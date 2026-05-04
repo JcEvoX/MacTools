@@ -2,11 +2,22 @@ import AppKit
 import SwiftUI
 
 enum MenuBarPanelLayout {
-    static let baseWidth: CGFloat = 296
-    static let secondaryPanelWidth: CGFloat = 220
-    static let panelSpacing: CGFloat = 12
-    static let outerPadding: CGFloat = 4
-    static let navigationRowHeight: CGFloat = 58
+    static let baseWidth: CGFloat = 288
+    static let secondaryPanelWidth: CGFloat = 216
+    static let panelSpacing: CGFloat = 10
+    static let outerPadding: CGFloat = 6
+    static let rootSpacing: CGFloat = 6
+    static let featureRowSpacing: CGFloat = 5
+    static let rowHeaderHeight: CGFloat = 26
+    static let rowVerticalPadding: CGFloat = 16
+    static let detailSpacing: CGFloat = 8
+    static let detailControlSpacing: CGFloat = 8
+    static let settingsRowHeight: CGFloat = 36
+    static let actionRowVerticalPadding: CGFloat = 8
+    static let selectRowVerticalPadding: CGFloat = 5
+    static let sliderVerticalPadding: CGFloat = 9
+    static let navigationRowHeight: CGFloat = 52
+    static let secondaryPanelMinimumHeight: CGFloat = 148
 
     static var surfaceWidth: CGFloat {
         baseWidth - (outerPadding * 2)
@@ -15,20 +26,98 @@ enum MenuBarPanelLayout {
     static func width(for panelItems: [PluginPanelItem]) -> CGFloat {
         baseWidth
     }
+
+    static func contentSize(for panelItems: [PluginPanelItem]) -> NSSize {
+        NSSize(
+            width: width(for: panelItems),
+            height: height(for: panelItems)
+        )
+    }
+
+    static func height(for panelItems: [PluginPanelItem]) -> CGFloat {
+        let featureRowsHeight = panelItems.reduce(CGFloat(0)) { partialResult, item in
+            partialResult + rowHeight(for: item)
+        }
+        let featureSpacing = CGFloat(max(panelItems.count - 1, 0)) * featureRowSpacing
+        let dividerHeight: CGFloat = 1
+        let settingsRowsHeight: CGFloat = settingsRowHeight * 2
+        let rootSpacing = rootSpacing * 2
+        let verticalPadding = outerPadding * 2
+
+        return featureRowsHeight
+            + featureSpacing
+            + dividerHeight
+            + settingsRowsHeight
+            + rootSpacing
+            + verticalPadding
+    }
+
+    private static func rowHeight(for item: PluginPanelItem) -> CGFloat {
+        guard
+            item.controlStyle == .disclosure,
+            item.isExpanded,
+            let detail = item.detail
+        else {
+            return rowHeaderHeight + rowVerticalPadding
+        }
+
+        return rowHeaderHeight
+            + detailSpacing
+            + detailHeight(for: detail.primaryControls)
+            + rowVerticalPadding
+    }
+
+    private static func detailHeight(for controls: [PluginPanelControl]) -> CGFloat {
+        controls.enumerated().reduce(CGFloat(0)) { partialResult, element in
+            let (index, control) = element
+            let controlSpacing = index == 0 ? CGFloat(0) : detailControlSpacing
+            let dividerHeight = control.showsLeadingDivider ? CGFloat(8) : CGFloat(0)
+            return partialResult + controlSpacing + dividerHeight + controlHeight(for: control)
+        }
+    }
+
+    private static func controlHeight(for control: PluginPanelControl) -> CGFloat {
+        switch control.kind {
+        case .segmented:
+            return 24
+        case .datePicker:
+            switch control.datePickerStyle ?? .compact {
+            case .compact:
+                return 26
+            case .dateTimeCard:
+                return 64
+            }
+        case .selectList:
+            let titleHeight = control.sectionTitle == nil ? CGFloat(0) : CGFloat(15)
+            return titleHeight + CGFloat(control.options.count) * 26
+        case .navigationList:
+            return CGFloat(control.options.count) * navigationRowHeight
+        case .slider:
+            let titleHeight = control.sectionTitle == nil && control.valueLabel == nil ? CGFloat(0) : CGFloat(15)
+            let titleSpacing = titleHeight > 0 ? CGFloat(6) : CGFloat(0)
+            return titleHeight + titleSpacing + 18 + sliderVerticalPadding * 2
+        case .actionRow:
+            return 16 + actionRowVerticalPadding * 2
+        }
+    }
 }
 
 private enum FeatureRowLayout {
-    static let iconSize: CGFloat = 28
+    static let iconSize: CGFloat = 26
+    static let iconCornerRadius: CGFloat = 10
     static let rowSpacing: CGFloat = 10
     static let detailControlHorizontalPadding: CGFloat = 10
     static let detailLeadingInset: CGFloat = iconSize + rowSpacing - detailControlHorizontalPadding
+    static let rowHorizontalPadding: CGFloat = 10
+    static let rowVerticalPadding: CGFloat = MenuBarPanelLayout.rowVerticalPadding / 2
+    static let chevronSize: CGFloat = 14
 }
 
 private enum MenuBarHoverStyle {
-    static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = 9
     static let fill = Color.primary.opacity(0.06)
     static let inset: CGFloat = 1
-    static let navigationCornerRadius: CGFloat = 10
+    static let navigationCornerRadius: CGFloat = 8
     static let navigationFill = Color.primary.opacity(0.10)
     static let navigationSelectedFill = Color.primary.opacity(0.13)
 }
@@ -240,7 +329,7 @@ struct MenuBarContent: View {
     @State private var deferredActionInvocation: DeferredActionInvocation?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
             featureCards
             Divider()
             settingsCard
@@ -452,7 +541,7 @@ struct MenuBarContent: View {
     }
 
     private var featureCards: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MenuBarPanelLayout.featureRowSpacing) {
             ForEach(pluginHost.panelItems) { item in
                 FeatureRowView(
                     item: item,
@@ -547,7 +636,7 @@ struct FeatureRowView: View {
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: detailToDisplay == nil ? 0 : 12) {
+        VStack(alignment: .leading, spacing: detailToDisplay == nil ? 0 : MenuBarPanelLayout.detailSpacing) {
             switch item.controlStyle {
             case .switch:
                 rowHeader
@@ -578,8 +667,8 @@ struct FeatureRowView: View {
                 .padding(.leading, FeatureRowLayout.detailLeadingInset)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
+        .padding(.horizontal, FeatureRowLayout.rowHorizontalPadding)
+        .padding(.vertical, FeatureRowLayout.rowVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .center) {
             RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous)
@@ -592,24 +681,24 @@ struct FeatureRowView: View {
     }
 
     private var rowHeader: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: FeatureRowLayout.rowSpacing) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
                     .fill(Color.primary.opacity(0.08))
 
                 Image(systemName: item.iconName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
                 Text(item.description)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -626,9 +715,9 @@ struct FeatureRowView: View {
                     .disabled(!item.isEnabled)
             case .disclosure:
                 Image(systemName: item.isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 16, height: 16)
+                    .frame(width: FeatureRowLayout.chevronSize, height: FeatureRowLayout.chevronSize)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -660,7 +749,7 @@ private struct PluginPanelDetailView: View {
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: MenuBarPanelLayout.detailControlSpacing) {
             ForEach(detail.primaryControls) { control in
                 if control.showsLeadingDivider {
                     Divider()
@@ -772,11 +861,11 @@ private struct ActionRowControl: View {
             guard control.isEnabled else { return }
             onInvoke()
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: control.actionIconSystemName ?? "arrow.up.right.square")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 14, height: 14)
 
                 Text(control.actionTitle ?? "")
                     .font(.system(size: 12, weight: .medium))
@@ -786,7 +875,7 @@ private struct ActionRowControl: View {
                 Spacer()
             }
             .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .background(alignment: .center) {
@@ -806,13 +895,13 @@ private struct SelectListControl: View {
     let onSelect: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             if let title = control.sectionTitle {
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 6)
-                    .padding(.bottom, 2)
+                    .padding(.leading, 5)
+                    .padding(.bottom, 1)
             }
 
             VStack(spacing: 0) {
@@ -846,20 +935,20 @@ private struct SelectListRow: View {
 
             action()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .opacity(isSelected ? 1 : 0)
-                    .frame(width: 14)
+                    .frame(width: 12)
 
                 Text(title)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.primary)
 
                 Spacer()
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 7)
+            .padding(.vertical, MenuBarPanelLayout.selectRowVerticalPadding)
             .contentShape(Rectangle())
             .background(alignment: .center) {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -923,15 +1012,15 @@ private struct NavigationListRow: View {
 
             action()
         } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.primary)
 
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -939,12 +1028,12 @@ private struct NavigationListRow: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .opacity(isSelected ? 1 : (isHovered ? 0.55 : 0.35))
             }
             .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
-            .padding(.vertical, 9)
+            .padding(.vertical, 6)
             .frame(minHeight: MenuBarPanelLayout.navigationRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .center) {
@@ -998,28 +1087,28 @@ private struct SliderControl: View {
     @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if control.sectionTitle != nil || control.valueLabel != nil {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     if let title = control.sectionTitle, !title.isEmpty {
                         Text(title)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 12.5, weight: .semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
 
-                    Spacer(minLength: 8)
+                    Spacer(minLength: 6)
 
                     if let valueLabel = control.valueLabel {
                         Text(valueLabel)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            HStack(alignment: .center, spacing: 10) {
-                brightnessGlyph(systemName: "sun.min.fill", size: 13)
+            HStack(alignment: .center, spacing: 8) {
+                brightnessGlyph(systemName: "sun.min.fill", size: 12)
 
                 Slider(
                     value: Binding(
@@ -1046,11 +1135,11 @@ private struct SliderControl: View {
                 .tint(Color(nsColor: .controlAccentColor))
                 .accessibilityLabel(control.sectionTitle ?? "显示器亮度")
 
-                brightnessGlyph(systemName: "sun.max.fill", size: 13)
+                brightnessGlyph(systemName: "sun.max.fill", size: 12)
             }
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
-        .padding(.vertical, 9)
+        .padding(.vertical, MenuBarPanelLayout.sliderVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .center) {
             RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
@@ -1096,7 +1185,7 @@ private struct SliderControl: View {
 }
 
 private struct SecondarySlidingPanel: View {
-    private static let cornerRadius: CGFloat = 14
+    private static let cornerRadius: CGFloat = 12
 
     let title: String
     let controls: [PluginPanelControl]
@@ -1107,7 +1196,7 @@ private struct SecondarySlidingPanel: View {
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -1124,7 +1213,7 @@ private struct SecondarySlidingPanel: View {
                 onActionInvoke: { _, _ in }
             )
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             PopoverMaterialBackground()
@@ -1256,7 +1345,7 @@ private final class SecondaryPanelController: ObservableObject {
 
         let fittingSize = hostingView.fittingSize
         let width = MenuBarPanelLayout.secondaryPanelWidth
-        let height = max(fittingSize.height, 160)
+        let height = max(fittingSize.height, MenuBarPanelLayout.secondaryPanelMinimumHeight)
         let origin = CGPoint(
             x: anchorRect.maxX + MenuBarPanelLayout.panelSpacing,
             y: anchorRect.maxY - height
@@ -1427,24 +1516,24 @@ private struct MenuActionRowLabel: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 16, height: 16)
+                .frame(width: 14, height: 14)
 
             Text(title)
-                .font(.system(size: 13))
+                .font(.system(size: 12.5))
                 .foregroundStyle(.primary)
 
             Spacer()
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, FeatureRowLayout.rowHorizontalPadding)
         .frame(
             minWidth: 0,
             maxWidth: .infinity,
-            minHeight: 38,
-            maxHeight: 38,
+            minHeight: MenuBarPanelLayout.settingsRowHeight,
+            maxHeight: MenuBarPanelLayout.settingsRowHeight,
             alignment: .leading
         )
         .background(alignment: .center) {

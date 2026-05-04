@@ -91,6 +91,30 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.first?.isActive, true)
     }
 
+    func testComponentViewsAreCachedForFastPanelPresentation() {
+        let componentPlugin = MockComponentPlugin(id: "component")
+        let host = makeHost(componentPlugins: [componentPlugin])
+
+        let first = host.componentViewItem(for: "component", dismiss: {})
+        let second = host.componentViewItem(for: "component", dismiss: {})
+
+        XCTAssertEqual(first.id, "component")
+        XCTAssertEqual(second.id, "component")
+        XCTAssertEqual(componentPlugin.makeComponentViewCallCount, 1)
+    }
+
+    func testWarmComponentViewsBuildsEachVisibleComponentOnce() {
+        let first = MockComponentPlugin(id: "first", order: 1)
+        let second = MockComponentPlugin(id: "second", order: 2)
+        let host = makeHost(componentPlugins: [first, second])
+
+        host.warmComponentViews(dismiss: {})
+        host.warmComponentViews(dismiss: {})
+
+        XCTAssertEqual(first.makeComponentViewCallCount, 1)
+        XCTAssertEqual(second.makeComponentViewCallCount, 1)
+    }
+
     func testFeaturePluginStillAppearsOnlyInPanelItems() {
         let featurePlugin = MockFeaturePlugin(id: "feature")
         let host = makeHost(plugins: [featurePlugin])
@@ -128,6 +152,7 @@ private final class MockComponentPlugin: ComponentPlugin {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private let isActive: Bool
+    private(set) var makeComponentViewCallCount = 0
 
     init(
         id: String,
@@ -164,7 +189,8 @@ private final class MockComponentPlugin: ComponentPlugin {
     }
 
     func makeComponentView(context: PluginComponentContext) -> AnyView {
-        AnyView(Text(context.pluginID))
+        makeComponentViewCallCount += 1
+        return AnyView(Text(context.pluginID))
     }
 
     func refresh() {}
