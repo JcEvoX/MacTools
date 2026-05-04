@@ -16,7 +16,7 @@ struct SettingsView: View {
             PluginConfigurationSettingsView(pluginHost: pluginHost)
                 .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
-                    Label("功能配置", systemImage: "slider.horizontal.3")
+                    Label("功能", systemImage: "slider.horizontal.3")
                 }
 
             AboutSettingsView(appUpdater: appUpdater)
@@ -145,12 +145,6 @@ private struct PluginConfigurationSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("功能")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.top, 14)
-
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     ForEach(items) { item in
@@ -166,6 +160,7 @@ private struct PluginConfigurationSidebar: View {
                     }
                 }
                 .padding(.horizontal, 8)
+                .padding(.top, 14)
                 .padding(.bottom, 14)
             }
         }

@@ -219,7 +219,7 @@ final class PhysicalCleanModePlugin: FeaturePlugin {
 
         guard let exitBinding = shortcutBindingResolver?(ShortcutID.exitPhysicalCleanMode), exitBinding.isValid else {
             logger.error("enable aborted because exit shortcut is missing or invalid")
-            lastErrorMessage = "请先在功能配置中设置有效的退出快捷键。"
+            lastErrorMessage = "请先在功能中设置有效的退出快捷键。"
             notifyChange()
             return
         }

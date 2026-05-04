@@ -270,6 +270,8 @@ final class PluginHost: ObservableObject {
     }
 
     func presentPluginConfiguration(pluginID: String) {
+        rebuildDerivedState()
+
         guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
             return
         }

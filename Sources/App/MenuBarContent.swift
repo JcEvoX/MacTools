@@ -413,10 +413,7 @@ struct MenuBarContent: View {
         behavior: PluginMenuActionBehavior
     ) {
         if isDiskCleanOpenDetailsAction(pluginID: item.id, controlID: controlID) {
-            deferredActionInvocation = DeferredActionInvocation(
-                pluginID: item.id,
-                controlID: controlID
-            )
+            presentDiskCleanDetails()
             onDismiss()
             return
         }
