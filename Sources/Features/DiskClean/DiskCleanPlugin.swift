@@ -66,6 +66,20 @@ final class DiskCleanPlugin: FeaturePlugin {
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+    var configuration: PluginConfiguration? {
+        guard let controller = controller as? DiskCleanController else {
+            return nil
+        }
+
+        return PluginConfiguration(description: manifest.defaultDescription) { _ in
+            DiskCleanDetailView(
+                controller: controller,
+                showsHeader: false,
+                contentPadding: 0,
+                minimumContentHeight: 0
+            )
+        }
+    }
 
     func refresh() {}
 

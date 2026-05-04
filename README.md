@@ -11,9 +11,9 @@
 | --- | --- |
 | <img src="docs/assets/screenshots/menu-panel.png" width="320" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="320" alt="日历与系统状态组件面板"> |
 
-| 设置与权限 | 关于与更新 |
+| 设置与功能配置 | 关于与更新 |
 | --- | --- |
-| <img src="docs/assets/screenshots/settings-general.png" width="420" alt="设置与权限页面"> | <img src="docs/assets/screenshots/settings-about.png" width="420" alt="关于与更新页面"> |
+| <img src="docs/assets/screenshots/settings-general.png" width="420" alt="设置与功能配置页面"> | <img src="docs/assets/screenshots/settings-about.png" width="420" alt="关于与更新页面"> |
 
 ## 功能
 
@@ -27,7 +27,7 @@
 | 磁盘清理 | 扫描缓存、开发者缓存与浏览器缓存，执行前进行路径安全和敏感数据保护校验。 |
 | 日历组件 | 在组件面板中查看月历、农历、节假日与当天日程。 |
 | 系统状态 | 展示 CPU、内存、磁盘、电量、网络速率与高占用进程。 |
-| 快捷键与设置 | 集中管理权限、功能显示顺序、全局快捷键、版本信息与更新检查。 |
+| 功能配置与设置 | 管理功能显示顺序，并在各功能配置面板中维护权限、快捷键和插件专属设置。 |
 
 ## 特性
 

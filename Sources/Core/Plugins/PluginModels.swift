@@ -55,8 +55,27 @@ enum PluginPermissionKind {
 
 enum SettingsDestination: Hashable {
     case general
-    case shortcuts
+    case pluginConfiguration
     case about
+}
+
+struct PluginConfigurationContext {
+    let pluginID: String
+}
+
+struct PluginConfiguration {
+    let description: String?
+    let makeView: (PluginConfigurationContext) -> AnyView
+
+    init<Content: View>(
+        description: String? = nil,
+        @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
+    ) {
+        self.description = description
+        self.makeView = { context in
+            AnyView(content(context))
+        }
+    }
 }
 
 struct PluginManifest: Identifiable {
@@ -369,6 +388,24 @@ struct PluginFeatureManagementItem: Identifiable {
     let isVisible: Bool
     let isActive: Bool
     let presentation: PluginFeaturePresentation
+}
+
+struct PluginConfigurationItem: Identifiable {
+    let id: String
+    let pluginID: String
+    let title: String
+    let description: String
+    let iconName: String
+    let iconTint: Color
+    let settingsCards: [PluginSettingsCard]
+    let permissionCards: [PluginPermissionCard]
+    let shortcutItems: [ShortcutSettingsItem]
+    let hasCustomConfiguration: Bool
+}
+
+struct PluginConfigurationViewItem: Identifiable {
+    let id: String
+    let content: AnyView
 }
 
 struct PluginPermissionCard: Identifiable {

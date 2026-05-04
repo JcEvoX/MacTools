@@ -49,8 +49,8 @@ final class MenuBarStatusItemController: NSObject {
             onOpenSettings: { [weak self] in
                 self?.windowRouter.showSettings()
             },
-            onOpenDiskCleanDetails: { [weak self] in
-                self?.windowRouter.showDiskCleanDetails()
+            onPresentDiskCleanConfiguration: { [weak self] in
+                self?.pluginHost.presentPluginConfiguration(pluginID: "disk-clean")
             },
             onAllPanelsClosed: { [weak self] in
                 self?.removeDismissMonitorsIfNeeded()

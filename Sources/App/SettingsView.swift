@@ -13,10 +13,10 @@ struct SettingsView: View {
                     Label("通用", systemImage: "gearshape")
                 }
 
-            ShortcutSettingsView(pluginHost: pluginHost)
-                .tag(SettingsDestination.shortcuts)
+            PluginConfigurationSettingsView(pluginHost: pluginHost)
+                .tag(SettingsDestination.pluginConfiguration)
                 .tabItem {
-                    Label("快捷键", systemImage: "keyboard")
+                    Label("功能配置", systemImage: "slider.horizontal.3")
                 }
 
             AboutSettingsView(appUpdater: appUpdater)
@@ -25,8 +25,8 @@ struct SettingsView: View {
                     Label("关于", systemImage: "info.circle")
                 }
         }
-        .frame(width: 580)
-        .frame(minHeight: 420)
+        .frame(width: 720)
+        .frame(minHeight: 480)
     }
 }
 
@@ -78,62 +78,6 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
-            if !pluginHost.permissionCards.isEmpty {
-                Section {
-                    ForEach(pluginHost.permissionCards) { card in
-                        PermissionSettingsRow(
-                            card: card,
-                            statusColor: statusColor(for: card.statusTone),
-                            onAction: {
-                                pluginHost.performPermissionAction(
-                                    pluginID: card.pluginID,
-                                    permissionID: card.permissionID
-                                )
-                            }
-                        )
-                    }
-                } header: {
-                    Text("授权")
-                }
-            }
-
-            ForEach(pluginHost.settingsCards) { card in
-                Section {
-                    LabeledContent("当前状态") {
-                        Label {
-                            Text(card.statusText)
-                        } icon: {
-                            Image(systemName: card.statusSystemImage)
-                                .foregroundStyle(statusColor(for: card.statusTone))
-                        }
-                    }
-
-                    Text(card.description)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let footnote = card.footnote {
-                        Text(footnote)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let buttonTitle = card.buttonTitle, let actionID = card.actionID {
-                        HStack {
-                            Spacer()
-
-                            Button(buttonTitle) {
-                                pluginHost.performSettingsAction(pluginID: card.pluginID, actionID: actionID)
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                    }
-                } header: {
-                    Text(card.title)
-                }
-            }
-
             Section {
                 FeatureManagementTableView(
                     items: pluginHost.featureManagementItems,
@@ -146,7 +90,7 @@ struct GeneralSettingsView: View {
                 )
                 .frame(height: featureManagementListHeight)
             } header: {
-                Text("功能")
+                Text("功能列表")
             }
         }
         .formStyle(.grouped)
@@ -155,19 +99,362 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private func statusColor(for tone: PluginStatusTone) -> Color {
-        switch tone {
-        case .neutral:
-            return .secondary
-        case .positive:
-            return .green
-        case .caution:
-            return .orange
+    private var featureManagementListHeight: CGFloat {
+        FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
+    }
+}
+
+private struct PluginConfigurationSettingsView: View {
+    @ObservedObject var pluginHost: PluginHost
+
+    var body: some View {
+        HStack(spacing: 0) {
+            PluginConfigurationSidebar(
+                items: pluginHost.pluginConfigurationItems,
+                selectedID: $pluginHost.selectedPluginConfigurationID
+            )
+            .frame(width: 210)
+
+            Divider()
+
+            PluginConfigurationDetailPane(
+                pluginHost: pluginHost,
+                item: selectedItem
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            pluginHost.refreshAll()
         }
     }
 
-    private var featureManagementListHeight: CGFloat {
-        FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
+    private var selectedItem: PluginConfigurationItem? {
+        guard let selectedID = pluginHost.selectedPluginConfigurationID else {
+            return pluginHost.pluginConfigurationItems.first
+        }
+
+        return pluginHost.pluginConfigurationItems.first(where: { $0.id == selectedID })
+            ?? pluginHost.pluginConfigurationItems.first
+    }
+}
+
+private struct PluginConfigurationSidebar: View {
+    let items: [PluginConfigurationItem]
+    @Binding var selectedID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("功能")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(items) { item in
+                        Button {
+                            selectedID = item.id
+                        } label: {
+                            PluginConfigurationSidebarRow(
+                                item: item,
+                                isSelected: selectedID == item.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 14)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+private struct PluginConfigurationSidebarRow: View {
+    let item: PluginConfigurationItem
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.iconName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isSelected ? Color.accentColor : item.iconTint)
+                .frame(width: 18, height: 18)
+
+            Text(item.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .help(item.title)
+    }
+}
+
+private struct PluginConfigurationDetailPane: View {
+    @ObservedObject var pluginHost: PluginHost
+    let item: PluginConfigurationItem?
+
+    var body: some View {
+        Group {
+            if let item {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        PluginConfigurationHeader(item: item)
+
+                        if !item.settingsCards.isEmpty {
+                            PluginSettingsCardSection(
+                                pluginHost: pluginHost,
+                                cards: item.settingsCards
+                            )
+                        }
+
+                        if !item.permissionCards.isEmpty {
+                            PluginPermissionCardSection(
+                                pluginHost: pluginHost,
+                                cards: item.permissionCards
+                            )
+                        }
+
+                        if !item.shortcutItems.isEmpty {
+                            PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
+                        }
+
+                        if item.hasCustomConfiguration {
+                            pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                        }
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            } else {
+                ContentUnavailableView(
+                    "暂无可配置功能",
+                    systemImage: "slider.horizontal.3",
+                    description: Text("当插件提供权限、快捷键或自定义设置后，会显示在这里。")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+}
+
+private struct PluginConfigurationHeader: View {
+    let item: PluginConfigurationItem
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(item.iconTint.opacity(0.14))
+
+                Image(systemName: item.iconName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(item.iconTint)
+            }
+            .frame(width: 42, height: 42)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.system(size: 20, weight: .semibold))
+
+                Text(item.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.bottom, 2)
+    }
+}
+
+private struct PluginSettingsCardSection: View {
+    @ObservedObject var pluginHost: PluginHost
+    let cards: [PluginSettingsCard]
+
+    var body: some View {
+        PluginConfigurationSection(title: "设置", systemImage: "switch.2") {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                    PluginSettingsCardRow(
+                        card: card,
+                        statusColor: statusColor(for: card.statusTone),
+                        onAction: {
+                            if let actionID = card.actionID {
+                                pluginHost.performSettingsAction(pluginID: card.pluginID, actionID: actionID)
+                            }
+                        }
+                    )
+
+                    if index < cards.count - 1 {
+                        SettingsSectionDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PluginSettingsCardRow: View {
+    let card: PluginSettingsCard
+    let statusColor: Color
+    let onAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.title)
+                        .font(.system(size: 14, weight: .semibold))
+
+                    Text(card.description)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Label {
+                    Text(card.statusText)
+                        .lineLimit(1)
+                } icon: {
+                    Image(systemName: card.statusSystemImage)
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(statusColor)
+            }
+
+            if let footnote = card.footnote {
+                Text(footnote)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let buttonTitle = card.buttonTitle, card.actionID != nil {
+                HStack {
+                    Spacer()
+
+                    Button(buttonTitle, action: onAction)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(16)
+    }
+}
+
+private struct PluginPermissionCardSection: View {
+    @ObservedObject var pluginHost: PluginHost
+    let cards: [PluginPermissionCard]
+
+    var body: some View {
+        PluginConfigurationSection(title: "权限", systemImage: "lock.shield") {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                    PermissionSettingsRow(
+                        card: card,
+                        statusColor: statusColor(for: card.statusTone),
+                        onAction: {
+                            pluginHost.performPermissionAction(
+                                pluginID: card.pluginID,
+                                permissionID: card.permissionID
+                            )
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+
+                    if index < cards.count - 1 {
+                        SettingsSectionDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PluginShortcutSection: View {
+    @ObservedObject var pluginHost: PluginHost
+    let items: [ShortcutSettingsItem]
+
+    var body: some View {
+        PluginConfigurationSection(title: "快捷键", systemImage: "command") {
+            VStack(alignment: .leading, spacing: 0) {
+                ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+            }
+        }
+    }
+}
+
+private struct PluginConfigurationSection<Content: View>: View {
+    let title: String
+    let systemImage: String
+    let content: Content
+
+    init(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+        }
+    }
+}
+
+private struct SettingsSectionDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(height: 1)
+            .padding(.horizontal, 16)
+    }
+}
+
+private func statusColor(for tone: PluginStatusTone) -> Color {
+    switch tone {
+    case .neutral:
+        return .secondary
+    case .positive:
+        return .green
+    case .caution:
+        return .orange
     }
 }
 

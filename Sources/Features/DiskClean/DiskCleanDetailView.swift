@@ -2,18 +2,35 @@ import SwiftUI
 
 struct DiskCleanDetailView: View {
     @ObservedObject var controller: DiskCleanController
+    private let showsHeader: Bool
+    private let contentPadding: CGFloat
+    private let minimumContentHeight: CGFloat
+
+    init(
+        controller: DiskCleanController,
+        showsHeader: Bool = true,
+        contentPadding: CGFloat = 20,
+        minimumContentHeight: CGFloat = 420
+    ) {
+        self.controller = controller
+        self.showsHeader = showsHeader
+        self.contentPadding = contentPadding
+        self.minimumContentHeight = minimumContentHeight
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            header
+            if showsHeader {
+                header
+            }
             choiceControls
             actionBar
             scanLog
             statusSummary
             candidateList
         }
-        .padding(20)
-        .frame(minWidth: 680, minHeight: 480, alignment: .topLeading)
+        .padding(contentPadding)
+        .frame(maxWidth: .infinity, minHeight: minimumContentHeight, alignment: .topLeading)
     }
 
     private var snapshot: DiskCleanControllerSnapshot {
@@ -197,7 +214,7 @@ struct DiskCleanDetailView: View {
                 }
             }
         } else {
-            Spacer()
+            EmptyView()
         }
     }
 

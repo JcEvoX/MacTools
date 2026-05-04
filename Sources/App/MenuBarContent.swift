@@ -324,7 +324,7 @@ struct MenuBarContent: View {
     @ObservedObject var pluginHost: PluginHost
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
-    let onOpenDiskCleanDetails: () -> Void
+    let onPresentDiskCleanConfiguration: () -> Void
     @State private var deferredPanelSwitchAction: DeferredPanelSwitchAction?
     @State private var deferredActionInvocation: DeferredActionInvocation?
 
@@ -457,7 +457,7 @@ struct MenuBarContent: View {
     }
 
     private func presentDiskCleanDetails() {
-        onOpenDiskCleanDetails()
+        onPresentDiskCleanConfiguration()
     }
 
     private func syncSecondaryPanelWindow() {

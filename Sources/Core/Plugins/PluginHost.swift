@@ -39,16 +39,19 @@ final class PluginHost: ObservableObject {
 
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
+    private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
     @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
+    @Published private(set) var pluginConfigurationItems: [PluginConfigurationItem] = []
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     @Published private(set) var settingsCards: [PluginSettingsCard] = []
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var settingsPresentationRequestCount = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
+    @Published var selectedPluginConfigurationID: String?
 
     convenience init() {
         self.init(
@@ -266,6 +269,16 @@ final class PluginHost: ObservableObject {
         applyShortcutCustomization(.inheritDefault, for: descriptor)
     }
 
+    func presentPluginConfiguration(pluginID: String) {
+        guard pluginConfigurationItems.contains(where: { $0.id == pluginID }) else {
+            return
+        }
+
+        selectedSettingsDestination = .pluginConfiguration
+        selectedPluginConfigurationID = pluginID
+        settingsPresentationRequestCount += 1
+    }
+
     func clearShortcutError(for shortcutID: String) {
         guard shortcutErrors.removeValue(forKey: shortcutID) != nil else {
             return
@@ -371,6 +384,39 @@ final class PluginHost: ObservableObject {
             )
         )
         componentViewCache[itemID] = item
+        return item
+    }
+
+    func pluginConfigurationViewItem(for pluginID: String) -> PluginConfigurationViewItem {
+        if let cachedItem = configurationViewCache[pluginID] {
+            return cachedItem
+        }
+
+        let configurations = corePluginsForCallbacks()
+            .filter { $0.metadata.id == pluginID }
+            .compactMap(\.configuration)
+
+        let context = PluginConfigurationContext(pluginID: pluginID)
+        let content: AnyView
+
+        switch configurations.count {
+        case 0:
+            content = AnyView(EmptyView())
+        case 1:
+            content = configurations[0].makeView(context)
+        default:
+            let views = configurations.map { $0.makeView(context) }
+            content = AnyView(
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(Array(views.enumerated()), id: \.offset) { entry in
+                        entry.element
+                    }
+                }
+            )
+        }
+
+        let item = PluginConfigurationViewItem(id: pluginID, content: content)
+        configurationViewCache[pluginID] = item
         return item
     }
 
@@ -505,7 +551,7 @@ final class PluginHost: ObservableObject {
                     id: "\(plugin.metadata.id).permission.\(requirement.id)",
                     pluginID: plugin.metadata.id,
                     permissionID: requirement.id,
-                    title: "\(plugin.metadata.title) · \(requirement.title)",
+                    title: requirement.title,
                     description: requirement.description,
                     statusText: state.statusText ?? (state.isGranted ? "已授权" : "未授权"),
                     statusSystemImage: state.statusSystemImage ?? (state.isGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"),
@@ -537,8 +583,51 @@ final class PluginHost: ObservableObject {
             )
         }
 
+        pluginConfigurationItems = buildPluginConfigurationItems(
+            settingsCards: settingsCards,
+            permissionCards: permissionCards,
+            shortcutItems: shortcutItems
+        )
+        trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
+        syncSelectedPluginConfigurationID()
+
         hasActivePlugin = plugins.contains(where: { $0.panelState.isOn })
             || componentPlugins.contains(where: { $0.componentState.isActive })
+    }
+
+    private func buildPluginConfigurationItems(
+        settingsCards: [PluginSettingsCard],
+        permissionCards: [PluginPermissionCard],
+        shortcutItems: [ShortcutSettingsItem]
+    ) -> [PluginConfigurationItem] {
+        orderedPluginDescriptors().compactMap { descriptor in
+            let pluginID = descriptor.metadata.id
+            let matchingSettingsCards = settingsCards.filter { $0.pluginID == pluginID }
+            let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
+            let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
+            let configurations = corePlugins(for: descriptor).compactMap(\.configuration)
+            let hasConfigurationSurface = !matchingSettingsCards.isEmpty
+                || !matchingPermissionCards.isEmpty
+                || !matchingShortcutItems.isEmpty
+                || !configurations.isEmpty
+
+            guard hasConfigurationSurface else {
+                return nil
+            }
+
+            return PluginConfigurationItem(
+                id: pluginID,
+                pluginID: pluginID,
+                title: descriptor.metadata.title,
+                description: configurations.first?.description ?? descriptor.metadata.defaultDescription,
+                iconName: descriptor.metadata.iconName,
+                iconTint: descriptor.metadata.iconTint,
+                settingsCards: matchingSettingsCards,
+                permissionCards: matchingPermissionCards,
+                shortcutItems: matchingShortcutItems,
+                hasCustomConfiguration: !configurations.isEmpty
+            )
+        }
     }
 
     private func shortcutDescriptors() -> [ShortcutDescriptor] {
@@ -580,18 +669,22 @@ final class PluginHost: ObservableObject {
 
     private func orderedCorePlugins() -> [any PluginCore] {
         orderedPluginDescriptors().flatMap { descriptor -> [any PluginCore] in
-            var plugins: [any PluginCore] = []
-
-            if let featurePlugin = descriptor.featurePlugin {
-                plugins.append(featurePlugin)
-            }
-
-            if let componentPlugin = descriptor.componentPlugin {
-                plugins.append(componentPlugin)
-            }
-
-            return plugins
+            corePlugins(for: descriptor)
         }
+    }
+
+    private func corePlugins(for descriptor: PluginDescriptor) -> [any PluginCore] {
+        var plugins: [any PluginCore] = []
+
+        if let featurePlugin = descriptor.featurePlugin {
+            plugins.append(featurePlugin)
+        }
+
+        if let componentPlugin = descriptor.componentPlugin {
+            plugins.append(componentPlugin)
+        }
+
+        return plugins
     }
 
     private func corePluginsForCallbacks() -> [any PluginCore] {
@@ -639,6 +732,22 @@ final class PluginHost: ObservableObject {
 
     private func trimComponentViewCache(keeping visibleComponentIDs: Set<String>) {
         componentViewCache = componentViewCache.filter { visibleComponentIDs.contains($0.key) }
+    }
+
+    private func trimConfigurationViewCache(keeping configurationPluginIDs: Set<String>) {
+        configurationViewCache = configurationViewCache.filter {
+            configurationPluginIDs.contains($0.key)
+        }
+    }
+
+    private func syncSelectedPluginConfigurationID() {
+        let availableIDs = Set(pluginConfigurationItems.map(\.id))
+
+        if let selectedPluginConfigurationID, availableIDs.contains(selectedPluginConfigurationID) {
+            return
+        }
+
+        selectedPluginConfigurationID = pluginConfigurationItems.first?.id
     }
 
     private func shortcutDescriptor(for shortcutID: String) -> ShortcutDescriptor? {
@@ -753,8 +862,7 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        selectedSettingsDestination = .general
-        settingsPresentationRequestCount += 1
+        presentPluginConfiguration(pluginID: pluginID)
     }
 
     private func permissionActionTitle(

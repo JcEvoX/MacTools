@@ -27,6 +27,11 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         XCTAssertEqual(host.componentItems.first?.span.width, 4)
         XCTAssertEqual(host.componentItems.first?.span.height, 3)
         XCTAssertEqual(host.permissionCards.map(\.permissionID), ["calendar-events", "calendar-automation"])
+        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["calendar"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.permissionCards.map(\.permissionID), [
+            "calendar-events",
+            "calendar-automation"
+        ])
     }
 
     func testCalendarPermissionActionRequestsEventAccess() async {

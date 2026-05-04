@@ -6,6 +6,7 @@ protocol PluginCore: AnyObject {
     var permissionRequirements: [PluginPermissionRequirement] { get }
     var settingsSections: [PluginSettingsSection] { get }
     var shortcutDefinitions: [PluginShortcutDefinition] { get }
+    var configuration: PluginConfiguration? { get }
     var onStateChange: (() -> Void)? { get set }
     var requestPermissionGuidance: ((String) -> Void)? { get set }
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)? { get set }
@@ -28,6 +29,12 @@ protocol FeaturePlugin: PluginCore {
 extension FeaturePlugin {
     var metadata: PluginMetadata {
         manifest.metadata
+    }
+}
+
+extension PluginCore {
+    var configuration: PluginConfiguration? {
+        nil
     }
 }
 

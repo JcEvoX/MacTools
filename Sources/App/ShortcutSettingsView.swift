@@ -65,7 +65,6 @@ final class ShortcutCaptureController: ObservableObject {
 
 struct ShortcutSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
-    @StateObject private var captureController = ShortcutCaptureController()
 
     var body: some View {
         ScrollView {
@@ -90,34 +89,7 @@ struct ShortcutSettingsView: View {
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                 )
 
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(pluginHost.shortcutItems.enumerated()), id: \.element.id) { index, item in
-                        ShortcutSettingsRow(
-                            item: item,
-                            isRecording: captureController.recordingShortcutID == item.id,
-                            onConfigure: {
-                                pluginHost.clearShortcutError(for: item.id)
-                                captureController.toggleRecording(for: item.id) { binding in
-                                    pluginHost.setShortcutBinding(binding, for: item.id)
-                                }
-                            },
-                            onClear: {
-                                captureController.stopRecording()
-                                pluginHost.clearShortcutError(for: item.id)
-                                pluginHost.clearShortcut(for: item.id)
-                            },
-                            onReset: {
-                                captureController.stopRecording()
-                                pluginHost.clearShortcutError(for: item.id)
-                                pluginHost.resetShortcut(for: item.id)
-                            }
-                        )
-
-                        if index < pluginHost.shortcutItems.count - 1 {
-                            ShortcutSettingsDivider()
-                        }
-                    }
-                }
+                ShortcutSettingsRowsView(pluginHost: pluginHost, items: pluginHost.shortcutItems)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(Color(nsColor: .controlBackgroundColor))
@@ -126,15 +98,47 @@ struct ShortcutSettingsView: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                 )
-
-                Label("点击编辑图标后，按下包含至少一个修饰键（⌘、⌥、CTRL、⇧）的组合键来设置快捷键。按 ESC 可取消本次录制。", systemImage: "info.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+struct ShortcutSettingsRowsView: View {
+    @ObservedObject var pluginHost: PluginHost
+    let items: [ShortcutSettingsItem]
+    @StateObject private var captureController = ShortcutCaptureController()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                ShortcutSettingsRow(
+                    item: item,
+                    isRecording: captureController.recordingShortcutID == item.id,
+                    onConfigure: {
+                        pluginHost.clearShortcutError(for: item.id)
+                        captureController.toggleRecording(for: item.id) { binding in
+                            pluginHost.setShortcutBinding(binding, for: item.id)
+                        }
+                    },
+                    onClear: {
+                        captureController.stopRecording()
+                        pluginHost.clearShortcutError(for: item.id)
+                        pluginHost.clearShortcut(for: item.id)
+                    },
+                    onReset: {
+                        captureController.stopRecording()
+                        pluginHost.clearShortcutError(for: item.id)
+                        pluginHost.resetShortcut(for: item.id)
+                    }
+                )
+
+                if index < items.count - 1 {
+                    ShortcutSettingsDivider()
+                }
+            }
+        }
         .onDisappear {
             captureController.stopRecording()
         }

@@ -81,6 +81,81 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.permissionCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.settingsCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.shortcutItems.map(\.pluginID), ["component"])
+        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.settingsCards.map(\.id), ["component.settings"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.permissionCards.map(\.permissionID), ["accessibility"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.shortcutItems.map(\.pluginID), ["component"])
+    }
+
+    func testPluginsWithoutConfigurationSurfaceAreHiddenFromConfigurationList() {
+        let featurePlugin = MockFeaturePlugin(id: "feature")
+        let componentPlugin = MockComponentPlugin(id: "component")
+        let host = makeHost(
+            plugins: [featurePlugin],
+            componentPlugins: [componentPlugin]
+        )
+
+        XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
+        XCTAssertNil(host.selectedPluginConfigurationID)
+    }
+
+    func testConfigurationListUsesSharedPluginOrderAndSelectsFirstItem() {
+        let first = MockComponentPlugin(
+            id: "first",
+            order: 1,
+            permissionRequirements: [
+                PluginPermissionRequirement(
+                    id: "first-permission",
+                    kind: .accessibility,
+                    title: "辅助功能",
+                    description: "需要辅助功能权限。"
+                )
+            ]
+        )
+        let second = MockComponentPlugin(
+            id: "second",
+            order: 2,
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "second-shortcut",
+                    title: "快捷键",
+                    description: "触发动作。",
+                    actionID: "shortcut-action",
+                    scope: .whilePluginActive,
+                    defaultBinding: nil,
+                    isRequired: false
+                )
+            ]
+        )
+        let host = makeHost(componentPlugins: [first, second])
+
+        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["first", "second"])
+        XCTAssertEqual(host.selectedPluginConfigurationID, "first")
+
+        host.moveFeatureManagementItem(id: "second", toOffset: 0)
+
+        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["second", "first"])
+        XCTAssertEqual(host.selectedPluginConfigurationID, "first")
+    }
+
+    func testCustomPluginConfigurationContributesConfigurationItemAndCachesView() {
+        let configurationCounter = ConfigurationRenderCounter()
+        let componentPlugin = MockComponentPlugin(
+            id: "component",
+            configuration: PluginConfiguration(description: "自定义配置") { context in
+                configurationCounter.makeView(context: context)
+            }
+        )
+        let host = makeHost(componentPlugins: [componentPlugin])
+
+        XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
+        XCTAssertEqual(host.pluginConfigurationItems.first?.description, "自定义配置")
+        XCTAssertEqual(host.pluginConfigurationItems.first?.hasCustomConfiguration, true)
+
+        _ = host.pluginConfigurationViewItem(for: "component")
+        _ = host.pluginConfigurationViewItem(for: "component")
+
+        XCTAssertEqual(configurationCounter.callCount, 1)
     }
 
     func testComponentActiveStateContributesToHasActivePlugin() {
@@ -148,6 +223,7 @@ private final class MockComponentPlugin: ComponentPlugin {
     let permissionRequirements: [PluginPermissionRequirement]
     let settingsSections: [PluginSettingsSection]
     let shortcutDefinitions: [PluginShortcutDefinition]
+    let configuration: PluginConfiguration?
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -161,7 +237,8 @@ private final class MockComponentPlugin: ComponentPlugin {
         isActive: Bool = false,
         permissionRequirements: [PluginPermissionRequirement] = [],
         settingsSections: [PluginSettingsSection] = [],
-        shortcutDefinitions: [PluginShortcutDefinition] = []
+        shortcutDefinitions: [PluginShortcutDefinition] = [],
+        configuration: PluginConfiguration? = nil
     ) {
         self.metadata = PluginMetadata(
             id: id,
@@ -176,6 +253,7 @@ private final class MockComponentPlugin: ComponentPlugin {
         self.permissionRequirements = permissionRequirements
         self.settingsSections = settingsSections
         self.shortcutDefinitions = shortcutDefinitions
+        self.configuration = configuration
     }
 
     var componentState: PluginComponentState {
@@ -202,6 +280,16 @@ private final class MockComponentPlugin: ComponentPlugin {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class ConfigurationRenderCounter {
+    private(set) var callCount = 0
+
+    func makeView(context: PluginConfigurationContext) -> AnyView {
+        callCount += 1
+        return AnyView(Text(context.pluginID))
+    }
 }
 
 @MainActor
