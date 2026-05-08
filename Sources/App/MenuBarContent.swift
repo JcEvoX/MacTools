@@ -307,6 +307,8 @@ final class HoverSecondaryPanelCoordinator: ObservableObject {
 struct MenuBarContent: View {
     static let diskCleanWindowID = "disk-clean"
     static let diskCleanOpenDetailsActionID = DiskCleanPlugin.ControlID.openDetails
+    static let launchControlWindowID = "launch-control"
+    static let launchControlOpenManagerActionID = LaunchControlPlugin.ControlID.openManager
 
     private struct DeferredPanelSwitchAction {
         let pluginID: String
@@ -325,6 +327,7 @@ struct MenuBarContent: View {
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
+    let onPresentLaunchControlConfiguration: () -> Void
     @State private var deferredPanelSwitchAction: DeferredPanelSwitchAction?
     @State private var deferredActionInvocation: DeferredActionInvocation?
 
@@ -418,6 +421,12 @@ struct MenuBarContent: View {
             return
         }
 
+        if isLaunchControlOpenManagerAction(pluginID: item.id, controlID: controlID) {
+            presentLaunchControlManager()
+            onDismiss()
+            return
+        }
+
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -443,6 +452,11 @@ struct MenuBarContent: View {
             return
         }
 
+        if isLaunchControlOpenManagerAction(pluginID: deferred.pluginID, controlID: deferred.controlID) {
+            presentLaunchControlManager()
+            return
+        }
+
         pluginHost.invokePanelAction(
             controlID: deferred.controlID,
             for: deferred.pluginID
@@ -453,8 +467,16 @@ struct MenuBarContent: View {
         pluginID == Self.diskCleanWindowID && controlID == Self.diskCleanOpenDetailsActionID
     }
 
+    private func isLaunchControlOpenManagerAction(pluginID: String, controlID: String) -> Bool {
+        pluginID == Self.launchControlWindowID && controlID == Self.launchControlOpenManagerActionID
+    }
+
     private func presentDiskCleanDetails() {
         onPresentDiskCleanConfiguration()
+    }
+
+    private func presentLaunchControlManager() {
+        onPresentLaunchControlConfiguration()
     }
 
     private func syncSecondaryPanelWindow() {

@@ -25,12 +25,13 @@ final class AppWindowRouter {
 
     private func makeSettingsWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 720),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "设置"
+        window.minSize = NSSize(width: 860, height: 560)
         window.contentView = NSHostingView(
             rootView: SettingsView(pluginHost: pluginHost, appUpdater: appUpdater)
         )

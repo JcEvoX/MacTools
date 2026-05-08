@@ -52,6 +52,9 @@ final class MenuBarStatusItemController: NSObject {
             onPresentDiskCleanConfiguration: { [weak self] in
                 self?.pluginHost.presentPluginConfiguration(pluginID: "disk-clean")
             },
+            onPresentLaunchControlConfiguration: { [weak self] in
+                self?.pluginHost.presentPluginConfiguration(pluginID: "launch-control")
+            },
             onAllPanelsClosed: { [weak self] in
                 self?.removeDismissMonitorsIfNeeded()
             }

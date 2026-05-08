@@ -61,6 +61,7 @@ final class PluginHost: ObservableObject {
                 HideNotchPlugin(),
                 KeepAwakePlugin(),
                 DiskCleanFeature.shared.makePlugin(),
+                LaunchControlFeature.shared.makePlugin(),
                 PhysicalCleanModePlugin()
             ],
             componentPlugins: [

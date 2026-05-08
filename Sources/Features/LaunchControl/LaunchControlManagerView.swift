@@ -1,0 +1,722 @@
+import SwiftUI
+
+struct LaunchControlManagerView: View {
+    @ObservedObject var controller: LaunchControlController
+
+    @State private var scopeFilter: LaunchControlFilter = .user
+    @State private var originFilter: LaunchControlOriginFilter = .all
+    @State private var stateFilter: LaunchControlStateFilter = .all
+    @State private var searchText = ""
+    @State private var pendingAction: LaunchControlPendingAction?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            summaryHeader
+            toolbar
+
+            if let message = controller.snapshot.errorMessage {
+                statusBanner(message: message, systemImage: "exclamationmark.triangle.fill", color: .orange)
+            } else if let message = controller.snapshot.operationMessage {
+                statusBanner(message: message, systemImage: "checkmark.circle.fill", color: .green)
+            }
+
+            HStack(alignment: .top, spacing: 0) {
+                itemList
+                    .frame(minWidth: 280, idealWidth: 330, maxWidth: 360)
+
+                Divider()
+
+                detailPane
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(minHeight: 500)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            scanActivity
+        }
+        .onAppear {
+            if controller.snapshot.items.isEmpty {
+                controller.refresh()
+            }
+        }
+        .confirmationDialog(
+            pendingAction?.confirmationTitle ?? "确认操作",
+            isPresented: Binding(
+                get: { pendingAction != nil },
+                set: { if !$0 { pendingAction = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingAction {
+                Button(pendingAction.buttonTitle, role: pendingAction.role) {
+                    perform(pendingAction)
+                    self.pendingAction = nil
+                }
+            }
+            Button("取消", role: .cancel) {
+                pendingAction = nil
+            }
+        } message: {
+            if let pendingAction {
+                Text(pendingAction.message)
+            }
+        }
+    }
+
+    private var summaryHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            metric("总数", value: controller.snapshot.items.count, color: .primary)
+            metric("关注", value: controller.snapshot.items.filter(\.isFavorite).count, color: .yellow)
+            metric("运行中", value: controller.snapshot.items.filter { $0.state == .running }.count, color: .green)
+            metric("用户创建", value: controller.snapshot.items.filter { $0.origin == .userCreated }.count, color: .orange)
+            metric("应用创建", value: controller.snapshot.items.filter { $0.origin == .thirdParty }.count, color: .blue)
+            metric("异常", value: controller.snapshot.items.filter { $0.state == .failed }.count, color: .red)
+
+            Spacer()
+
+            if let target = controller.snapshot.currentScanTarget {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.72)
+                    Text(URL(fileURLWithPath: target).lastPathComponent.isEmpty ? target : URL(fileURLWithPath: target).lastPathComponent)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: 260, alignment: .trailing)
+            }
+        }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 10) {
+            Picker("范围", selection: $scopeFilter) {
+                ForEach(LaunchControlFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 112)
+
+            Picker("来源", selection: $originFilter) {
+                ForEach(LaunchControlOriginFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 112)
+
+            Picker("状态", selection: $stateFilter) {
+                ForEach(LaunchControlStateFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 112)
+
+            TextField("搜索 label、命令或路径", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 180, idealWidth: 260, maxWidth: 320)
+
+            Spacer()
+
+            Button {
+                originFilter = originFilter == .favorite ? .all : .favorite
+            } label: {
+                Label("关注", systemImage: originFilter == .favorite ? "star.fill" : "star")
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                controller.refresh()
+            } label: {
+                Label(controller.snapshot.isRefreshing ? "刷新中" : "刷新", systemImage: "arrow.clockwise")
+            }
+            .disabled(controller.snapshot.isRefreshing)
+        }
+    }
+
+    private var itemList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("启动项")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Text("\(filteredItems.count) / \(controller.snapshot.items.count)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            List(selection: selectedItemBinding) {
+                ForEach(filteredItems) { item in
+                    LaunchControlItemRow(
+                        item: item,
+                        onFavoriteToggle: {
+                            controller.setFavorite(!item.isFavorite, for: item)
+                        }
+                    )
+                        .tag(item.id)
+                }
+            }
+            .listStyle(.inset)
+            .overlay {
+                if controller.snapshot.isRefreshing && controller.snapshot.items.isEmpty {
+                    ProgressView("正在扫描")
+                        .controlSize(.small)
+                } else if filteredItems.isEmpty {
+                    ContentUnavailableView("没有匹配项目", systemImage: "magnifyingglass")
+                }
+            }
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private var detailPane: some View {
+        Group {
+            if let item = selectedItem {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        detailHeader(item)
+                        actionBar(item)
+                        keyFields(item)
+                        rawPlist(item)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(16)
+                }
+            } else {
+                placeholder
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var placeholder: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "list.bullet.rectangle")
+                .font(.system(size: 30, weight: .regular))
+                .foregroundStyle(.secondary)
+            Text(controller.snapshot.isRefreshing ? "正在读取启动项" : "选择一个启动项")
+                .font(.system(size: 15, weight: .semibold))
+            Text(controller.snapshot.isRefreshing ? "左侧列表会随扫描进度逐步更新" : "查看 plist 字段、运行状态和可用操作")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    @ViewBuilder
+    private var scanActivity: some View {
+        if controller.snapshot.isRefreshing || !controller.snapshot.scanLogEntries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("扫描进度")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    if controller.snapshot.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.72)
+                    }
+                }
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(controller.snapshot.scanLogEntries.enumerated()), id: \.offset) { index, entry in
+                                Text(entry)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(index)
+                            }
+                        }
+                    }
+                    .frame(height: 88)
+                    .onChange(of: controller.snapshot.scanLogEntries.count) {
+                        if let lastIndex = controller.snapshot.scanLogEntries.indices.last {
+                            proxy.scrollTo(lastIndex, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var filteredItems: [LaunchControlItem] {
+        controller.snapshot.items.filter { item in
+            let scopeMatches = scopeFilter.scope.map { $0 == item.scope } ?? true
+            let originMatches = originFilter.matches(item)
+            let stateMatches = stateFilter.matches(item.state)
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let searchMatches: Bool
+            if query.isEmpty {
+                searchMatches = true
+            } else {
+                let haystack = [
+                    item.label,
+                    item.commandText,
+                    item.plistURL.path,
+                    item.origin.title,
+                    item.triggerSummary
+                ].joined(separator: "\n")
+                searchMatches = haystack.localizedCaseInsensitiveContains(query)
+            }
+            return scopeMatches && originMatches && stateMatches && searchMatches
+        }
+    }
+
+    private var selectedItem: LaunchControlItem? {
+        if let selectedID = controller.snapshot.selectedItemID,
+           let visibleItem = filteredItems.first(where: { $0.id == selectedID }) {
+            return visibleItem
+        }
+
+        return filteredItems.first ?? controller.snapshot.selectedItem
+    }
+
+    private var selectedItemBinding: Binding<String?> {
+        Binding(
+            get: { selectedItem?.id },
+            set: { controller.selectItem(id: $0) }
+        )
+    }
+
+    private func detailHeader(_ item: LaunchControlItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: item.origin == .system ? "lock.shield" : "powerplug")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(item.origin == .system ? Color.secondary : Color.orange)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.label)
+                        .font(.system(size: 20, weight: .semibold))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    Text(item.plistURL.path)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    controller.setFavorite(!item.isFavorite, for: item)
+                } label: {
+                    Image(systemName: item.isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(item.isFavorite ? "取消关注" : "关注启动项")
+            }
+
+            FlowLayout(spacing: 8, rowSpacing: 6) {
+                badge(item.scope.title, color: .blue)
+                badge(item.origin.title, color: item.origin == .system ? .gray : .orange)
+                badge(item.statusText, color: item.state == .failed ? .red : .green)
+                if !item.canManage {
+                    badge("只读", color: .gray)
+                }
+            }
+        }
+    }
+
+    private func actionBar(_ item: LaunchControlItem) -> some View {
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            Button {
+                controller.setFavorite(!item.isFavorite, for: item)
+            } label: {
+                Label(item.isFavorite ? "取消关注" : "关注", systemImage: item.isFavorite ? "star.slash" : "star")
+            }
+
+            Button {
+                controller.openInFinder(item)
+            } label: {
+                Label("在 Finder 中显示", systemImage: "finder")
+            }
+
+            if item.canManage {
+                Button {
+                    pendingAction = .bootstrap(item)
+                } label: {
+                    Label("加载", systemImage: "tray.and.arrow.down")
+                }
+                .disabled(item.isLoaded)
+
+                Button {
+                    pendingAction = .bootout(item)
+                } label: {
+                    Label("卸载", systemImage: "tray.and.arrow.up")
+                }
+                .disabled(!item.isLoaded)
+
+                Button {
+                    pendingAction = item.isDisabled ? .enable(item) : .disable(item)
+                } label: {
+                    Label(item.isDisabled ? "启用" : "禁用", systemImage: item.isDisabled ? "checkmark.circle" : "nosign")
+                }
+
+                Button {
+                    pendingAction = item.state == .running ? .stop(item) : .start(item)
+                } label: {
+                    Label(item.state == .running ? "停止" : "启动", systemImage: item.state == .running ? "stop.circle" : "play.circle")
+                }
+                .disabled(item.isDisabled)
+
+                Button {
+                    pendingAction = .restart(item)
+                } label: {
+                    Label("重启", systemImage: "arrow.clockwise.circle")
+                }
+                .disabled(item.isDisabled)
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func keyFields(_ item: LaunchControlItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("关键字段")
+                .font(.system(size: 14, weight: .semibold))
+
+            fieldRow("ProgramArguments", value: item.commandText, help: "启动时执行的命令与参数。")
+            fieldRow("RunAtLoad", value: item.runAtLoad ? "true" : "false", help: "加载 LaunchAgent 后是否立即运行一次。")
+            fieldRow("KeepAlive", value: item.keepAliveDescription ?? "未设置", help: "进程退出后是否按条件自动拉起。")
+            fieldRow("StartInterval", value: item.startInterval.map { "\($0) 秒" } ?? "未设置", help: "按固定秒数间隔触发。")
+            fieldRow("StartCalendarInterval", value: item.startCalendarDescription ?? "未设置", help: "按日历时间触发。")
+            fieldRow("触发摘要", value: item.triggerSummary, help: "根据常见字段生成的可读说明。")
+        }
+    }
+
+    private func rawPlist(_ item: LaunchControlItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("原始 plist")
+                .font(.system(size: 14, weight: .semibold))
+
+            ScrollView(.horizontal) {
+                Text(item.rawPlist.isEmpty ? "无法以 UTF-8 显示原始内容" : item.rawPlist)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+            }
+            .frame(minHeight: 180, maxHeight: 260)
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func fieldRow(_ title: String, value: String, help: String) -> some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 4) {
+            GridRow {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 138, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(value)
+                        .font(.system(size: 13))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    Text(help)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func statusBanner(message: String, systemImage: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(color)
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(10)
+        .background(color.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func metric(_ title: String, value: Int, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func badge(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func perform(_ action: LaunchControlPendingAction) {
+        switch action {
+        case let .bootstrap(item):
+            controller.bootstrap(item)
+        case let .bootout(item):
+            controller.bootout(item)
+        case let .enable(item):
+            controller.enable(item)
+        case let .disable(item):
+            controller.disable(item)
+        case let .start(item):
+            controller.start(item)
+        case let .stop(item):
+            controller.stop(item)
+        case let .restart(item):
+            controller.restart(item)
+        }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat
+    var rowSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let rows = rows(proposal: proposal, subviews: subviews)
+        return CGSize(
+            width: proposal.width ?? rows.map(\.width).max() ?? 0,
+            height: rows.last.map { $0.y + $0.height } ?? 0
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        for row in rows(proposal: ProposedViewSize(width: bounds.width, height: proposal.height), subviews: subviews) {
+            for item in row.items {
+                subviews[item.index].place(
+                    at: CGPoint(x: bounds.minX + item.x, y: bounds.minY + row.y),
+                    proposal: ProposedViewSize(item.size)
+                )
+            }
+        }
+    }
+
+    private func rows(proposal: ProposedViewSize, subviews: Subviews) -> [FlowRow] {
+        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
+        var rows: [FlowRow] = []
+        var currentItems: [FlowItem] = []
+        var currentWidth: CGFloat = 0
+        var currentHeight: CGFloat = 0
+        var y: CGFloat = 0
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let nextWidth = currentItems.isEmpty ? size.width : currentWidth + spacing + size.width
+            if nextWidth > maxWidth, !currentItems.isEmpty {
+                rows.append(FlowRow(items: currentItems, y: y, width: currentWidth, height: currentHeight))
+                y += currentHeight + rowSpacing
+                currentItems = []
+                currentWidth = 0
+                currentHeight = 0
+            }
+
+            let x = currentItems.isEmpty ? 0 : currentWidth + spacing
+            currentItems.append(FlowItem(index: index, x: x, size: size))
+            currentWidth = currentItems.isEmpty ? size.width : x + size.width
+            currentHeight = max(currentHeight, size.height)
+        }
+
+        if !currentItems.isEmpty {
+            rows.append(FlowRow(items: currentItems, y: y, width: currentWidth, height: currentHeight))
+        }
+
+        return rows
+    }
+}
+
+private struct FlowRow {
+    let items: [FlowItem]
+    let y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+}
+
+private struct FlowItem {
+    let index: Int
+    let x: CGFloat
+    let size: CGSize
+}
+
+private struct LaunchControlItemRow: View {
+    let item: LaunchControlItem
+    let onFavoriteToggle: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(item.label)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    if item.origin == .userCreated {
+                        Text("用户")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Text(item.commandText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text("\(item.scope.title) · \(item.statusText)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+
+            Button(action: onFavoriteToggle) {
+                Image(systemName: item.isFavorite ? "star.fill" : "star")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
+            .help(item.isFavorite ? "取消关注" : "关注启动项")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var statusColor: Color {
+        switch item.state {
+        case .running:
+            return .green
+        case .failed:
+            return .red
+        case .disabled:
+            return .gray
+        case .loaded:
+            return .blue
+        case .unloaded,
+             .unknown:
+            return .secondary
+        }
+    }
+}
+
+private enum LaunchControlPendingAction: Identifiable {
+    case bootstrap(LaunchControlItem)
+    case bootout(LaunchControlItem)
+    case enable(LaunchControlItem)
+    case disable(LaunchControlItem)
+    case start(LaunchControlItem)
+    case stop(LaunchControlItem)
+    case restart(LaunchControlItem)
+
+    var id: String {
+        "\(actionName)-\(item.id)"
+    }
+
+    var item: LaunchControlItem {
+        switch self {
+        case let .bootstrap(item),
+             let .bootout(item),
+             let .enable(item),
+             let .disable(item),
+             let .start(item),
+             let .stop(item),
+             let .restart(item):
+            return item
+        }
+    }
+
+    var actionName: String {
+        switch self {
+        case .bootstrap:
+            return "加载"
+        case .bootout:
+            return "卸载"
+        case .enable:
+            return "启用"
+        case .disable:
+            return "禁用"
+        case .start:
+            return "启动"
+        case .stop:
+            return "停止"
+        case .restart:
+            return "重启"
+        }
+    }
+
+    var buttonTitle: String {
+        "\(actionName) \(item.label)"
+    }
+
+    var confirmationTitle: String {
+        "确认\(actionName)启动项？"
+    }
+
+    var message: String {
+        "\(item.label)\n\(item.plistURL.path)\n\n此操作会调用 launchctl \(actionName)。用户级 LaunchAgent 通常可以恢复，但禁用、卸载或停止可能影响后台任务。"
+    }
+
+    var role: ButtonRole? {
+        switch self {
+        case .bootout,
+             .disable,
+             .stop:
+            return .destructive
+        case .bootstrap,
+             .enable,
+             .start,
+             .restart:
+            return nil
+        }
+    }
+}

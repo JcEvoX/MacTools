@@ -25,8 +25,7 @@ struct SettingsView: View {
                     Label("关于", systemImage: "info.circle")
                 }
         }
-        .frame(width: 720)
-        .frame(minHeight: 480)
+        .frame(minWidth: 720, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
     }
 }
 

@@ -17,6 +17,7 @@ final class MenuBarPanelPresenter: NSObject {
         onDismiss: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
         onPresentDiskCleanConfiguration: @escaping () -> Void,
+        onPresentLaunchControlConfiguration: @escaping () -> Void,
         onAllPanelsClosed: @escaping () -> Void
     ) {
         self.pluginHost = pluginHost
@@ -28,7 +29,8 @@ final class MenuBarPanelPresenter: NSObject {
                 pluginHost: pluginHost,
                 onDismiss: onDismiss,
                 onOpenSettings: onOpenSettings,
-                onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration
+                onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
+                onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
             )
         )
         self.componentHostingController = NSHostingController(
