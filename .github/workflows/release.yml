@@ -405,6 +405,38 @@ jobs:
             gh release create "$TAG" "$DMG_PATH#${PROJECT_NAME}.dmg" "$SHA256_PATH#${PROJECT_NAME}.sha256" "${RELEASE_ARGS[@]}"
           fi
 
+      - name: Open Homebrew Cask update PR
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+        run: |
+          if [[ "$PRERELEASE" == "true" ]]; then
+            echo "Skipping Homebrew Cask update for prerelease ${TAG}."
+            exit 0
+          fi
+
+          if [[ -z "$HOMEBREW_GITHUB_API_TOKEN" ]]; then
+            echo "Skipping Homebrew Cask update because HOMEBREW_GITHUB_API_TOKEN is not configured."
+            exit 0
+          fi
+
+          SHA256="$(awk '{ print $1; exit }' "$SHA256_PATH")"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${PROJECT_NAME}.dmg"
+
+          brew update --quiet
+          brew tap homebrew/cask
+          if ! brew info --cask mactools >/dev/null 2>&1; then
+            echo "Skipping Homebrew Cask update because mactools is not available in Homebrew/homebrew-cask yet."
+            echo "Submit homebrew/Casks/mactools.rb first, then future stable releases will open update PRs automatically."
+            exit 0
+          fi
+
+          brew bump-cask-pr \
+            --version "$VERSION" \
+            --sha256 "$SHA256" \
+            --url "$DOWNLOAD_URL" \
+            --no-browse \
+            mactools
+
       - name: Commit appcast to main
         run: |
           cp docs/appcast.xml "$RUNNER_TEMP/appcast.xml"
