@@ -41,6 +41,7 @@
 ## 安装
 
 ```bash
+brew tap ggbond268/mactools
 brew install --cask mactools
 ```
 
