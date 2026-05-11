@@ -106,6 +106,34 @@ enum MenuBarIconMediaKind: String, Codable, Equatable {
     case animation
 }
 
+enum MenuBarIconBuiltInAnimationGroup: String, CaseIterable, Identifiable {
+    case featured
+    case animals
+    case motion
+    case objects
+    case scenes
+    case symbols
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .featured:
+            return "精选"
+        case .animals:
+            return "动物"
+        case .motion:
+            return "运动"
+        case .objects:
+            return "物件"
+        case .scenes:
+            return "场景"
+        case .symbols:
+            return "图形"
+        }
+    }
+}
+
 struct MenuBarIconRecentItem: Identifiable, Codable, Equatable {
     let id: UUID
     var fileName: String
@@ -148,6 +176,7 @@ struct MenuBarIconRecentItem: Identifiable, Codable, Equatable {
 struct MenuBarIconBuiltInAnimation: Identifiable, Equatable {
     let id: String
     let displayName: String
+    let group: MenuBarIconBuiltInAnimationGroup
     let frameResourceNames: [String]
     let frameResourceExtension: String
     let resourceSubdirectory: String
@@ -159,42 +188,158 @@ struct MenuBarIconBuiltInAnimation: Identifiable, Equatable {
         }
     }
 
+    private static func zeroBasedFrameResourceNames(prefix: String, count: Int) -> [String] {
+        (0..<count).map { index in
+            String(format: "%@-frame-%03d", prefix, index)
+        }
+    }
+
+    private static func runCatAssetAnimations() -> [MenuBarIconBuiltInAnimation] {
+        let assets: [(id: String, displayName: String, group: MenuBarIconBuiltInAnimationGroup, frameCount: Int)] = [
+            (id: "all-runners", displayName: "全员奔跑", group: .motion, frameCount: 5),
+            (id: "bird", displayName: "小鸟", group: .animals, frameCount: 5),
+            (id: "bonfire", displayName: "篝火", group: .scenes, frameCount: 5),
+            (id: "butterfly", displayName: "蝴蝶", group: .animals, frameCount: 5),
+            (id: "cat-b", displayName: "RunCat 猫 B", group: .animals, frameCount: 5),
+            (id: "cat-c", displayName: "RunCat 猫 C", group: .animals, frameCount: 5),
+            (id: "cat-tail", displayName: "猫尾巴", group: .animals, frameCount: 5),
+            (id: "chameleon", displayName: "变色龙", group: .animals, frameCount: 5),
+            (id: "cheetah", displayName: "猎豹", group: .animals, frameCount: 5),
+            (id: "chicken", displayName: "小鸡", group: .animals, frameCount: 5),
+            (id: "city", displayName: "城市", group: .scenes, frameCount: 10),
+            (id: "coffee", displayName: "咖啡", group: .objects, frameCount: 10),
+            (id: "cogwheel", displayName: "齿轮", group: .objects, frameCount: 5),
+            (id: "cradle", displayName: "摇篮", group: .objects, frameCount: 5),
+            (id: "dinosaur", displayName: "恐龙", group: .animals, frameCount: 7),
+            (id: "dog", displayName: "小狗", group: .animals, frameCount: 5),
+            (id: "dogeza", displayName: "伏地", group: .motion, frameCount: 8),
+            (id: "dolphin", displayName: "海豚", group: .animals, frameCount: 5),
+            (id: "dots", displayName: "圆点", group: .symbols, frameCount: 10),
+            (id: "dragon", displayName: "龙", group: .animals, frameCount: 5),
+            (id: "drop", displayName: "水滴", group: .symbols, frameCount: 5),
+            (id: "earth", displayName: "地球", group: .scenes, frameCount: 15),
+            (id: "engine", displayName: "发动机", group: .objects, frameCount: 10),
+            (id: "entaku", displayName: "圆桌", group: .objects, frameCount: 9),
+            (id: "factory", displayName: "工厂", group: .scenes, frameCount: 16),
+            (id: "fishman", displayName: "鱼人", group: .animals, frameCount: 5),
+            (id: "flash-cat", displayName: "闪电猫", group: .featured, frameCount: 5),
+            (id: "fox", displayName: "狐狸", group: .animals, frameCount: 5),
+            (id: "frog", displayName: "青蛙", group: .animals, frameCount: 5),
+            (id: "frypan", displayName: "煎锅", group: .objects, frameCount: 5),
+            (id: "ghost", displayName: "幽灵", group: .symbols, frameCount: 5),
+            (id: "golden-cat", displayName: "金猫", group: .featured, frameCount: 10),
+            (id: "greyhound", displayName: "灵缇", group: .animals, frameCount: 14),
+            (id: "hamster-wheel", displayName: "转轮", group: .motion, frameCount: 5),
+            (id: "hedgehog", displayName: "刺猬", group: .animals, frameCount: 5),
+            (id: "horse", displayName: "马", group: .animals, frameCount: 5),
+            (id: "human", displayName: "跑步人", group: .motion, frameCount: 5),
+            (id: "jack-o-lantern", displayName: "南瓜灯", group: .objects, frameCount: 5),
+            (id: "maneki-neko", displayName: "招财猫", group: .featured, frameCount: 15),
+            (id: "metal-cluster-cat", displayName: "金属猫", group: .featured, frameCount: 10),
+            (id: "mochi", displayName: "麻薯", group: .objects, frameCount: 5),
+            (id: "mock-nyan-cat", displayName: "彩虹猫", group: .featured, frameCount: 5),
+            (id: "mouse", displayName: "小鼠", group: .animals, frameCount: 5),
+            (id: "octopus", displayName: "章鱼", group: .animals, frameCount: 5),
+            (id: "otter", displayName: "水獭", group: .animals, frameCount: 8),
+            (id: "owl", displayName: "猫头鹰", group: .animals, frameCount: 5),
+            (id: "parrot", displayName: "鹦鹉", group: .animals, frameCount: 10),
+            (id: "party-people", displayName: "派对人群", group: .motion, frameCount: 14),
+            (id: "pendulum", displayName: "钟摆", group: .objects, frameCount: 5),
+            (id: "penguin", displayName: "企鹅", group: .animals, frameCount: 5),
+            (id: "penguin2", displayName: "企鹅 2", group: .animals, frameCount: 5),
+            (id: "pig", displayName: "小猪", group: .animals, frameCount: 5),
+            (id: "pulse", displayName: "脉冲", group: .symbols, frameCount: 5),
+            (id: "puppy", displayName: "幼犬", group: .animals, frameCount: 5),
+            (id: "push-up", displayName: "俯卧撑", group: .motion, frameCount: 5),
+            (id: "rabbit", displayName: "兔子", group: .animals, frameCount: 5),
+            (id: "reactor", displayName: "反应堆", group: .objects, frameCount: 5),
+            (id: "reindeer-sleigh", displayName: "雪橇", group: .scenes, frameCount: 5),
+            (id: "rocket", displayName: "火箭", group: .objects, frameCount: 5),
+            (id: "rotating-sushi", displayName: "旋转寿司", group: .objects, frameCount: 6),
+            (id: "rubber-duck", displayName: "小黄鸭", group: .objects, frameCount: 5),
+            (id: "sausage", displayName: "香肠", group: .objects, frameCount: 5),
+            (id: "self-made", displayName: "自制", group: .symbols, frameCount: 5),
+            (id: "sheep", displayName: "绵羊", group: .animals, frameCount: 5),
+            (id: "sine-curve", displayName: "正弦曲线", group: .symbols, frameCount: 5),
+            (id: "sit-up", displayName: "仰卧起坐", group: .motion, frameCount: 5),
+            (id: "slime", displayName: "史莱姆", group: .symbols, frameCount: 5),
+            (id: "snowman", displayName: "雪人", group: .scenes, frameCount: 5),
+            (id: "sparkler", displayName: "烟花棒", group: .objects, frameCount: 5),
+            (id: "squirrel", displayName: "松鼠", group: .animals, frameCount: 5),
+            (id: "steam-locomotive", displayName: "蒸汽火车", group: .objects, frameCount: 10),
+            (id: "sushi", displayName: "寿司", group: .objects, frameCount: 16),
+            (id: "tapioca-drink", displayName: "珍珠奶茶", group: .objects, frameCount: 5),
+            (id: "terrier", displayName: "梗犬", group: .animals, frameCount: 5),
+            (id: "triforce", displayName: "三角徽记", group: .symbols, frameCount: 9),
+            (id: "uhooi", displayName: "Uhooi", group: .symbols, frameCount: 10),
+            (id: "welsh-corgi", displayName: "柯基", group: .animals, frameCount: 7),
+            (id: "whale", displayName: "鲸鱼", group: .animals, frameCount: 5),
+            (id: "wind-chime", displayName: "风铃", group: .objects, frameCount: 5)
+        ]
+
+        return assets.map { asset in
+            MenuBarIconBuiltInAnimation(
+                id: "runcat-\(asset.id)",
+                displayName: asset.displayName,
+                group: asset.group,
+                frameResourceNames: Self.zeroBasedFrameResourceNames(prefix: asset.id, count: asset.frameCount),
+                frameResourceExtension: "png",
+                resourceSubdirectory: "BuiltinMenuBarAnimations/RunCatAssets/\(asset.id)",
+                frameDuration: 0.1
+            )
+        }
+    }
+
     static let all: [MenuBarIconBuiltInAnimation] = [
-        MenuBarIconBuiltInAnimation(
-            id: "runcat",
-            displayName: "RunCat",
-            frameResourceNames: ["cat0", "cat1", "cat2", "cat3", "cat4"],
-            frameResourceExtension: "png",
-            resourceSubdirectory: "BuiltinMenuBarAnimations/RunCat",
-            frameDuration: 0.2
-        ),
         MenuBarIconBuiltInAnimation(
             id: "running-left",
             displayName: "奔跑狗狗",
+            group: .featured,
             frameResourceNames: Self.numberedFrameResourceNames(prefix: "runningLeft", count: 52),
             frameResourceExtension: "png",
             resourceSubdirectory: "BuiltinMenuBarAnimations/RunningLeft",
-            frameDuration: 1.0 / 12.0
+            frameDuration: 1.0 / 24.0
+        ),
+        MenuBarIconBuiltInAnimation(
+            id: "runcat",
+            displayName: "RunCat",
+            group: .featured,
+            frameResourceNames: ["cat0", "cat1", "cat2", "cat3", "cat4"],
+            frameResourceExtension: "png",
+            resourceSubdirectory: "BuiltinMenuBarAnimations/RunCat",
+            frameDuration: 0.1
         )
-    ]
+    ] + Self.runCatAssetAnimations()
 
     func loadFrames(bundle: Bundle = .main) -> [NSImage] {
         frameResourceNames.compactMap { resourceName in
-            let url = bundle.url(
-                forResource: resourceName,
-                withExtension: frameResourceExtension,
-                subdirectory: resourceSubdirectory
-            ) ?? bundle.url(
-                forResource: resourceName,
-                withExtension: frameResourceExtension
-            )
-
-            guard let url else {
-                return nil
-            }
-
-            return NSImage(contentsOf: url)
+            loadFrame(resourceName: resourceName, bundle: bundle)
         }
+    }
+
+    func loadFirstFrame(bundle: Bundle = .main) -> NSImage? {
+        guard let resourceName = frameResourceNames.first else {
+            return nil
+        }
+
+        return loadFrame(resourceName: resourceName, bundle: bundle)
+    }
+
+    private func loadFrame(resourceName: String, bundle: Bundle) -> NSImage? {
+        let url = bundle.url(
+            forResource: resourceName,
+            withExtension: frameResourceExtension,
+            subdirectory: resourceSubdirectory
+        ) ?? bundle.url(
+            forResource: resourceName,
+            withExtension: frameResourceExtension
+        )
+
+        guard let url else {
+            return nil
+        }
+
+        return NSImage(contentsOf: url)
     }
 }
 
@@ -601,6 +746,9 @@ final class MenuBarIconSettings: ObservableObject {
         self.fileManager = fileManager
         self.rootDirectory = rootDirectory ?? Self.defaultRootDirectory(fileManager: fileManager)
         self.storedState = Self.loadState(userDefaults: userDefaults)
+        self.storedState.lightAdjustment = .default
+        self.storedState.darkAdjustment = .default
+        self.storedState.backgroundRemovalOptions = .default
         pruneMissingRecentItems()
     }
 
@@ -653,38 +801,6 @@ final class MenuBarIconSettings: ObservableObject {
         storedState.lightIconFileName != nil || storedState.darkIconFileName != nil
     }
 
-    var backgroundRemovalOptions: MenuBarIconBackgroundRemovalOptions {
-        get { storedState.backgroundRemovalOptions }
-        set {
-            guard storedState.backgroundRemovalOptions != newValue else {
-                return
-            }
-
-            storedState.backgroundRemovalOptions = normalizedBackgroundRemovalOptions(newValue)
-            persist()
-        }
-    }
-
-    func adjustment(for appearance: MenuBarIconAppearance) -> MenuBarIconAdjustment {
-        switch appearance {
-        case .light:
-            return storedState.lightAdjustment
-        case .dark:
-            return storedState.darkAdjustment
-        }
-    }
-
-    func setAdjustment(_ adjustment: MenuBarIconAdjustment, for appearance: MenuBarIconAppearance) {
-        switch appearance {
-        case .light:
-            storedState.lightAdjustment = normalizedAdjustment(adjustment)
-        case .dark:
-            storedState.darkAdjustment = normalizedAdjustment(adjustment)
-        }
-
-        persist()
-    }
-
     func importIcon(from sourceURL: URL, for appearance: MenuBarIconAppearance) {
         clearError()
 
@@ -692,12 +808,16 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = "无法读取所选图片。"
             return
         }
+        let processedImage = MenuBarIconBackgroundRemover.removingBackground(
+            from: sourceImage,
+            options: .default
+        ) ?? sourceImage
 
         let displayName = sourceURL.deletingPathExtension().lastPathComponent
         let recentFileName = "recent-\(UUID().uuidString).png"
         let recentURL = recentsDirectory.appendingPathComponent(recentFileName)
 
-        guard saveOriginalImage(sourceImage, to: recentURL) else {
+        guard saveOriginalImage(processedImage, to: recentURL) else {
             lastErrorMessage = "无法保存所选图片。"
             return
         }
@@ -713,7 +833,7 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        setAdjustment(.default, for: appearance)
+        resetAdjustment(for: appearance)
         setIconFileName(recentFileName, for: appearance)
         persist()
     }
@@ -740,7 +860,7 @@ final class MenuBarIconSettings: ObservableObject {
         let processedFrames = sourceFrames.map { frame in
             MenuBarIconBackgroundRemover.removingBackground(
                 from: frame,
-                options: backgroundRemovalOptions
+                options: .default
             ) ?? frame
         }
 
@@ -761,7 +881,7 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        setAdjustment(.default, for: appearance)
+        resetAdjustment(for: appearance)
         setIconFileName(recentItem.fileName, for: appearance)
         persist()
     }
@@ -796,7 +916,7 @@ final class MenuBarIconSettings: ObservableObject {
         )
 
         storeRecentItem(recentItem)
-        setAdjustment(.default, for: appearance)
+        resetAdjustment(for: appearance)
         setIconFileName(recentItem.fileName, for: appearance)
         persist()
     }
@@ -810,7 +930,7 @@ final class MenuBarIconSettings: ObservableObject {
         }
 
         setIconFileName(item.fileName, for: appearance)
-        setAdjustment(.default, for: appearance)
+        resetAdjustment(for: appearance)
         persist()
     }
 
@@ -888,7 +1008,7 @@ final class MenuBarIconSettings: ObservableObject {
 
     func previewImage(for builtInAnimation: MenuBarIconBuiltInAnimation) -> NSImage {
         guard
-            let sourceImage = builtInAnimation.loadFrames().first,
+            let sourceImage = builtInAnimation.loadFirstFrame(),
             let image = MenuBarIconProcessing.renderedImage(from: sourceImage, adjustment: .default)
         else {
             return Self.defaultImage()
@@ -962,7 +1082,6 @@ final class MenuBarIconSettings: ObservableObject {
         appearance: MenuBarIconAppearance
     ) -> [NSImage] {
         let frameFileNames = item.mediaKind == .animation ? item.frameFileNames : [item.fileName]
-        let adjustment = adjustment(for: adjustmentAppearance(for: appearance))
         return frameFileNames.compactMap { fileName in
             let url = recentsDirectory.appendingPathComponent(fileName)
             guard let sourceImage = NSImage(contentsOf: url) else {
@@ -971,7 +1090,7 @@ final class MenuBarIconSettings: ObservableObject {
 
             let image = MenuBarIconProcessing.renderedImage(
                 from: sourceImage,
-                adjustment: adjustment
+                adjustment: .default
             ) ?? sourceImage
             image.size = Self.iconPointSize
             return image
@@ -991,14 +1110,6 @@ final class MenuBarIconSettings: ObservableObject {
         }
     }
 
-    private func adjustmentAppearance(for appearance: MenuBarIconAppearance) -> MenuBarIconAppearance {
-        guard let selection = iconSelection(for: appearance) else {
-            return appearance
-        }
-
-        return selection.appearance
-    }
-
     private func storeRecentItem(_ recentItem: MenuBarIconRecentItem) {
         storedState.recentItems.removeAll { item in
             item.fileName == recentItem.fileName || item.displayName == recentItem.displayName
@@ -1013,6 +1124,15 @@ final class MenuBarIconSettings: ObservableObject {
             storedState.lightIconFileName = fileName
         case .dark:
             storedState.darkIconFileName = fileName
+        }
+    }
+
+    private func resetAdjustment(for appearance: MenuBarIconAppearance) {
+        switch appearance {
+        case .light:
+            storedState.lightAdjustment = .default
+        case .dark:
+            storedState.darkAdjustment = .default
         }
     }
 
@@ -1052,23 +1172,6 @@ final class MenuBarIconSettings: ObservableObject {
             lastErrorMessage = "无法保存动画图标。"
             return false
         }
-    }
-
-    private func normalizedAdjustment(_ adjustment: MenuBarIconAdjustment) -> MenuBarIconAdjustment {
-        MenuBarIconAdjustment(
-            scale: min(max(adjustment.scale, 0.6), 2),
-            offsetX: min(max(adjustment.offsetX, -8), 8),
-            offsetY: min(max(adjustment.offsetY, -8), 8)
-        )
-    }
-
-    private func normalizedBackgroundRemovalOptions(
-        _ options: MenuBarIconBackgroundRemovalOptions
-    ) -> MenuBarIconBackgroundRemovalOptions {
-        MenuBarIconBackgroundRemovalOptions(
-            isEnabled: options.isEnabled,
-            tolerance: min(max(options.tolerance, 0.04), 0.4)
-        )
     }
 
     private func resolvedAppearance(from appearance: NSAppearance?) -> MenuBarIconAppearance {
