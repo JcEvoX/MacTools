@@ -405,37 +405,82 @@ jobs:
             gh release create "$TAG" "$DMG_PATH#${PROJECT_NAME}.dmg" "$SHA256_PATH#${PROJECT_NAME}.sha256" "${RELEASE_ARGS[@]}"
           fi
 
-      - name: Open Homebrew Cask update PR
+      - name: Open Homebrew tap update PR
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: |
+          TAP_REPOSITORY="ggbond268/homebrew-mactools"
+
           if [[ "$PRERELEASE" == "true" ]]; then
-            echo "Skipping Homebrew Cask update for prerelease ${TAG}."
+            echo "Skipping Homebrew tap update for prerelease ${TAG}."
             exit 0
           fi
 
           if [[ -z "$HOMEBREW_GITHUB_API_TOKEN" ]]; then
-            echo "Skipping Homebrew Cask update because HOMEBREW_GITHUB_API_TOKEN is not configured."
+            echo "Skipping Homebrew tap update because HOMEBREW_GITHUB_API_TOKEN is not configured."
             exit 0
           fi
+
+          export GH_TOKEN="$HOMEBREW_GITHUB_API_TOKEN"
 
           SHA256="$(awk '{ print $1; exit }' "$SHA256_PATH")"
           DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${PROJECT_NAME}.dmg"
+          TAP_DIR="$(mktemp -d)"
+          BRANCH="update-mactools-${VERSION}"
 
-          brew update --quiet
-          brew tap homebrew/cask
-          if ! brew info --cask mactools >/dev/null 2>&1; then
-            echo "Skipping Homebrew Cask update because mactools is not available in Homebrew/homebrew-cask yet."
-            echo "Submit homebrew/Casks/mactools.rb first, then future stable releases will open update PRs automatically."
+          gh repo clone "$TAP_REPOSITORY" "$TAP_DIR"
+          cd "$TAP_DIR"
+          gh auth setup-git
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+
+          mkdir -p Casks
+          ruby -e 'File.write("Casks/mactools.rb", <<~CASK)
+            cask "mactools" do
+              version "#{ENV.fetch("VERSION")}"
+              sha256 "#{ENV.fetch("SHA256")}"
+
+              url "#{ENV.fetch("DOWNLOAD_URL")}"
+              name "MacTools"
+              desc "Menu bar toolbox"
+              homepage "https://github.com/#{ENV.fetch("GITHUB_REPOSITORY")}"
+
+              livecheck do
+                url :url
+                strategy :github_latest
+              end
+
+              auto_updates true
+              depends_on macos: ">= :sonoma"
+
+              app "MacTools.app"
+            end
+          CASK'
+
+          brew style Casks/mactools.rb
+
+          if git diff --quiet -- Casks/mactools.rb; then
+            echo "Homebrew tap cask is already up to date."
             exit 0
           fi
 
-          brew bump-cask-pr \
-            --version "$VERSION" \
-            --sha256 "$SHA256" \
-            --url "$DOWNLOAD_URL" \
-            --no-browse \
-            mactools
+          git add Casks/mactools.rb
+          git commit -m "Update mactools to ${VERSION}"
+          git push --force-with-lease origin "$BRANCH"
+
+          existing_pr="$(gh pr list --repo "$TAP_REPOSITORY" --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            echo "Homebrew tap update PR already exists: #${existing_pr}"
+          else
+            gh pr create \
+              --repo "$TAP_REPOSITORY" \
+              --base main \
+              --head "$BRANCH" \
+              --title "Update mactools to ${VERSION}" \
+              --body "Updates the MacTools cask for ${TAG}."
+          fi
 
       - name: Commit appcast to main
         run: |

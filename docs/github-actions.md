@@ -20,7 +20,7 @@
 | `ASC_API_KEY_ID` | App Store Connect API Key ID。 |
 | `ASC_API_ISSUER_ID` | App Store Connect Issuer ID。 |
 | `SPARKLE_PRIVATE_KEY` | Sparkle EdDSA 私钥，必须与 `project.yml` 中的 `SPARKLE_PUBLIC_ED_KEY` 配对。 |
-| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，用于稳定版发布后自动向 `Homebrew/homebrew-cask` 提交 cask 更新 PR；未配置时跳过 Homebrew 同步。 |
+| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，用于稳定版发布后自动向 `ggbond268/homebrew-mactools` 提交 cask 更新 PR；未配置时跳过 Homebrew 同步。 |
 
 不要把 `LocalConfig.xcconfig`、`.p12`、`.p8`、Sparkle 私钥、证书密码或 Apple ID 写入仓库。
 
@@ -83,7 +83,7 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 
 也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `project.yml`。
 
-稳定版发布成功创建 GitHub Release 后，Release 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时调用 `brew bump-cask-pr`，用刚生成的 DMG URL 和 SHA-256 向 `Homebrew/homebrew-cask` 打开更新 PR。预发布版本会跳过 Homebrew 同步；未配置该 secret 时也会跳过，不影响发布。
+稳定版发布成功创建 GitHub Release 后，Release 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时用刚生成的 DMG URL 和 SHA-256 更新 `ggbond268/homebrew-mactools` 中的 `Casks/mactools.rb`，并打开更新 PR。预发布版本会跳过 Homebrew 同步；未配置该 secret 时也会跳过，不影响发布。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。
 
