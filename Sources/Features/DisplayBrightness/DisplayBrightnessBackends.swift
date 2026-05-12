@@ -64,7 +64,7 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
         for displays: [DisplayInfo],
         previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend] {
-        let arm64Services = resolveArm64Services(displays)
+        var arm64Services: [CGDirectDisplayID: CFTypeRef]?
         var result: [CGDirectDisplayID: any DisplayBrightnessBackend] = [:]
 
         for display in displays {
@@ -75,7 +75,7 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
             }
 
             if let backend = reuse(previous[display.id], kind: .ddc, display: display)
-                ?? ddcFactory(display, arm64Services[display.id]) {
+                ?? ddcFactory(display, resolvedArm64Service(for: display, in: displays, cache: &arm64Services)) {
                 result[display.id] = backend
                 continue
             }
@@ -93,6 +93,18 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
         }
 
         return result
+    }
+
+    private func resolvedArm64Service(
+        for display: DisplayInfo,
+        in displays: [DisplayInfo],
+        cache arm64Services: inout [CGDirectDisplayID: CFTypeRef]?
+    ) -> CFTypeRef? {
+        if arm64Services == nil {
+            arm64Services = resolveArm64Services(displays)
+        }
+
+        return arm64Services?[display.id]
     }
 
     private func reuse(

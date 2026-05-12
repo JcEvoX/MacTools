@@ -314,25 +314,64 @@ final class Arm64DDCTransport: DDCBrightnessTransport, @unchecked Sendable {
 }
 
 enum Arm64DDCServiceMatcher {
-    private struct CandidateService {
+    struct CandidateService {
         let service: CFTypeRef
         let name: String?
         let vendorNumber: UInt32?
         let serialNumber: UInt32?
         let location: String?
+        let ioDisplayLocation: String?
+        let edidUUID: String?
+        let serviceLocation: Int
+
+        init(
+            service: CFTypeRef,
+            name: String? = nil,
+            vendorNumber: UInt32? = nil,
+            serialNumber: UInt32? = nil,
+            location: String? = nil,
+            ioDisplayLocation: String? = nil,
+            edidUUID: String? = nil,
+            serviceLocation: Int = 0
+        ) {
+            self.service = service
+            self.name = name
+            self.vendorNumber = vendorNumber
+            self.serialNumber = serialNumber
+            self.location = location
+            self.ioDisplayLocation = ioDisplayLocation
+            self.edidUUID = edidUUID
+            self.serviceLocation = serviceLocation
+        }
     }
 
     static func resolveServices(for displays: [DisplayInfo]) -> [CGDirectDisplayID: CFTypeRef] {
-        var candidates = discoverCandidates()
-        var matches: [CGDirectDisplayID: CFTypeRef] = [:]
+        resolveServices(for: displays, candidates: discoverCandidates())
+    }
 
-        for display in displays where !display.isBuiltin {
-            guard let matchIndex = bestMatchIndex(for: display, candidates: candidates) else {
+    static func resolveServices(
+        for displays: [DisplayInfo],
+        candidates: [CandidateService]
+    ) -> [CGDirectDisplayID: CFTypeRef] {
+        let scoredMatches = scoredCandidateMatches(
+            for: displays.filter { !$0.isBuiltin },
+            candidates: candidates
+        )
+        var matches: [CGDirectDisplayID: CFTypeRef] = [:]
+        var usedDisplayIDs: Set<CGDirectDisplayID> = []
+        var usedCandidateIndexes: Set<Int> = []
+
+        for match in scoredMatches {
+            guard
+                !usedDisplayIDs.contains(match.display.id),
+                !usedCandidateIndexes.contains(match.candidateIndex)
+            else {
                 continue
             }
 
-            let candidate = candidates.remove(at: matchIndex)
-            matches[display.id] = candidate.service
+            matches[match.display.id] = match.candidate.service
+            usedDisplayIDs.insert(match.display.id)
+            usedCandidateIndexes.insert(match.candidateIndex)
         }
 
         return matches
@@ -353,6 +392,7 @@ enum Arm64DDCServiceMatcher {
         }
 
         var result: [CandidateService] = []
+        var serviceLocation = 0
 
         while case let service = IOIteratorNext(iterator), service != 0 {
             defer {
@@ -377,13 +417,23 @@ enum Arm64DDCServiceMatcher {
             ) as? [String: Any]
             let productAttributes = attributes?["ProductAttributes"] as? [String: Any]
 
+            serviceLocation += 1
             result.append(
                 CandidateService(
                     service: avService,
                     name: productAttributes?["ProductName"] as? String,
-                    vendorNumber: productAttributes?["ManufacturerID"] as? UInt32,
-                    serialNumber: productAttributes?["SerialNumber"] as? UInt32,
-                    location: location
+                    vendorNumber: numericValue(productAttributes?["ManufacturerID"]),
+                    serialNumber: numericValue(productAttributes?["SerialNumber"]),
+                    location: location,
+                    ioDisplayLocation: searchedProperty(
+                        key: kIODisplayLocationKey,
+                        service: service
+                    ) as? String,
+                    edidUUID: searchedProperty(
+                        key: "EDID UUID",
+                        service: service
+                    ) as? String,
+                    serviceLocation: serviceLocation
                 )
             )
         }
@@ -391,40 +441,210 @@ enum Arm64DDCServiceMatcher {
         return result
     }
 
-    private static func bestMatchIndex(
-        for display: DisplayInfo,
+    private struct ScoredCandidateMatch {
+        let display: DisplayInfo
+        let candidateIndex: Int
+        let candidate: CandidateService
+        let score: Int
+    }
+
+    private static func scoredCandidateMatches(
+        for displays: [DisplayInfo],
         candidates: [CandidateService]
-    ) -> Int? {
-        var bestIndex: Int?
-        var bestScore = Int.min
+    ) -> [ScoredCandidateMatch] {
+        var scoredMatches: [ScoredCandidateMatch] = []
 
-        for index in candidates.indices {
-            let candidate = candidates[index]
-            var score = 0
+        for display in displays {
+            for index in candidates.indices {
+                let candidate = candidates[index]
+                let score = matchScore(display: display, candidate: candidate)
+                guard score >= 2 else {
+                    continue
+                }
 
-            if let serialNumber = display.serialNumber, serialNumber != 0, serialNumber == candidate.serialNumber {
-                score += 10
-            }
-
-            if display.vendorNumber == candidate.vendorNumber {
-                score += 3
-            }
-
-            if let name = candidate.name, name.localizedCaseInsensitiveCompare(display.name) == .orderedSame {
-                score += 2
-            }
-
-            if let location = candidate.location, location.localizedCaseInsensitiveContains("external") {
-                score += 1
-            }
-
-            if score > bestScore {
-                bestScore = score
-                bestIndex = index
+                scoredMatches.append(
+                    ScoredCandidateMatch(
+                        display: display,
+                        candidateIndex: index,
+                        candidate: candidate,
+                        score: score
+                    )
+                )
             }
         }
 
-        return bestScore > 0 ? bestIndex : nil
+        return scoredMatches.sorted {
+            if $0.score == $1.score {
+                if $0.display.id == $1.display.id {
+                    return $0.candidate.serviceLocation < $1.candidate.serviceLocation
+                }
+
+                return $0.display.id < $1.display.id
+            }
+
+            return $0.score > $1.score
+        }
+    }
+
+    private static func matchScore(display: DisplayInfo, candidate: CandidateService) -> Int {
+        var score = 0
+
+        if let displayLocation = displayInfoDictionary(for: display.id)?[kIODisplayLocationKey] as? String,
+           let candidateLocation = candidate.ioDisplayLocation,
+           !displayLocation.isEmpty,
+           displayLocation == candidateLocation {
+            score += 12
+        }
+
+        score += edidMatchScore(displayID: display.id, edidUUID: candidate.edidUUID)
+
+        if let serialNumber = display.serialNumber, serialNumber != 0, serialNumber == candidate.serialNumber {
+            score += 4
+        }
+
+        if let vendorNumber = display.vendorNumber,
+           let candidateVendorNumber = candidate.vendorNumber,
+           vendorNumber == candidateVendorNumber {
+            score += 3
+        }
+
+        if let name = candidate.name,
+           normalizedDisplayName(name) == normalizedDisplayName(display.name) {
+            score += 2
+        }
+
+        if let location = candidate.location, location.localizedCaseInsensitiveContains("external") {
+            score += 1
+        }
+
+        return score
+    }
+
+    private static func edidMatchScore(displayID: CGDirectDisplayID, edidUUID: String?) -> Int {
+        guard
+            let edidUUID,
+            !edidUUID.isEmpty,
+            let dictionary = displayInfoDictionary(for: displayID)
+        else {
+            return 0
+        }
+
+        var score = 0
+        let uppercaseUUID = edidUUID.uppercased()
+
+        if let vendorID = dictionary[kDisplayVendorID] as? Int64,
+           uuidToken(UInt16(clamping: vendorID), byteSwapped: false).map({ uppercaseUUID.hasPrefix($0) }) == true {
+            score += 1
+        }
+
+        if let productID = dictionary[kDisplayProductID] as? Int64,
+           let token = uuidToken(UInt16(clamping: productID), byteSwapped: true),
+           uppercaseUUID.contains(token) {
+            score += 1
+        }
+
+        if let week = dictionary[kDisplayWeekOfManufacture] as? Int64,
+           let year = dictionary[kDisplayYearOfManufacture] as? Int64,
+           let token = manufactureDateToken(week: week, year: year),
+           uppercaseUUID.contains(token) {
+            score += 1
+        }
+
+        if let horizontalSize = dictionary[kDisplayHorizontalImageSize] as? Int64,
+           let verticalSize = dictionary[kDisplayVerticalImageSize] as? Int64,
+           let token = imageSizeToken(horizontal: horizontalSize, vertical: verticalSize),
+           uppercaseUUID.contains(token) {
+            score += 1
+        }
+
+        return score
+    }
+
+    private static func uuidToken(_ value: UInt16, byteSwapped: Bool) -> String? {
+        if value == 0 {
+            return nil
+        }
+
+        let normalizedValue = byteSwapped ? value.byteSwapped : value
+        return String(format: "%04X", normalizedValue)
+    }
+
+    private static func manufactureDateToken(week: Int64, year: Int64) -> String? {
+        let normalizedWeek = UInt8(clamping: week)
+        let normalizedYear = UInt8(clamping: year - 1990)
+        guard normalizedWeek != 0 || normalizedYear != 0 else {
+            return nil
+        }
+
+        return String(format: "%02X%02X", normalizedWeek, normalizedYear)
+    }
+
+    private static func imageSizeToken(horizontal: Int64, vertical: Int64) -> String? {
+        let normalizedHorizontal = UInt8(clamping: horizontal / 10)
+        let normalizedVertical = UInt8(clamping: vertical / 10)
+        guard normalizedHorizontal != 0 || normalizedVertical != 0 else {
+            return nil
+        }
+
+        return String(format: "%02X%02X", normalizedHorizontal, normalizedVertical)
+    }
+
+    private static func normalizedDisplayName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func numericValue(_ value: Any?) -> UInt32? {
+        switch value {
+        case let value as UInt32:
+            return value == 0 ? nil : value
+        case let value as UInt64:
+            guard value <= UInt64(UInt32.max) else {
+                return nil
+            }
+
+            return value == 0 ? nil : UInt32(value)
+        case let value as Int:
+            guard value > 0, value <= Int(UInt32.max) else {
+                return nil
+            }
+
+            return UInt32(value)
+        case let value as String:
+            let normalizedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return UInt32(normalizedValue) ?? eisaManufacturerID(normalizedValue)
+        default:
+            return nil
+        }
+    }
+
+    private static func eisaManufacturerID(_ value: String) -> UInt32? {
+        let characters = Array(value.uppercased())
+        guard characters.count == 3 else {
+            return nil
+        }
+
+        var encodedValue: UInt32 = 0
+        for character in characters {
+            guard
+                let scalar = character.unicodeScalars.first,
+                scalar.value >= 65,
+                scalar.value <= 90
+            else {
+                return nil
+            }
+
+            encodedValue = (encodedValue << 5) | UInt32(scalar.value - 64)
+        }
+
+        return encodedValue == 0 ? nil : encodedValue
+    }
+
+    private static func displayInfoDictionary(for displayID: CGDirectDisplayID) -> NSDictionary? {
+        guard let createInfoDictionary = PrivateDDCBridge.coreDisplayCreateInfoDictionary else {
+            return nil
+        }
+
+        return createInfoDictionary(displayID)?.takeRetainedValue() as NSDictionary?
     }
 
     private static func searchedProperty(key: String, service: io_service_t) -> AnyObject? {
@@ -438,7 +658,47 @@ enum Arm64DDCServiceMatcher {
     }
 }
 
+private extension UInt16 {
+    init(clamping value: Int64) {
+        if value < 0 {
+            self = 0
+        } else if value > Int64(UInt16.max) {
+            self = UInt16.max
+        } else {
+            self = UInt16(value)
+        }
+    }
+}
+
+private extension UInt8 {
+    init(clamping value: Int64) {
+        if value < 0 {
+            self = 0
+        } else if value > Int64(UInt8.max) {
+            self = UInt8.max
+        } else {
+            self = UInt8(value)
+        }
+    }
+}
+
+private extension UInt32 {
+    init(clamping value: Int) {
+        if value < 0 {
+            self = 0
+        } else if value > Int(UInt32.max) {
+            self = UInt32.max
+        } else {
+            self = UInt32(value)
+        }
+    }
+}
+
 private enum PrivateDDCBridge {
+    typealias CoreDisplayCreateInfoDictionaryFunction = @convention(c) (
+        CGDirectDisplayID
+    ) -> Unmanaged<CFDictionary>?
+
     private typealias CreateWithServiceFunction = @convention(c) (
         CFAllocator?,
         io_service_t
@@ -466,6 +726,9 @@ private enum PrivateDDCBridge {
     private static let read: ReadI2CFunction? = loadSymbol("IOAVServiceReadI2C")
     private static let write: WriteI2CFunction? = loadSymbol("IOAVServiceWriteI2C")
     private static let cgsServiceForDisplay: CGSServiceFunction? = loadSymbol("CGSServiceForDisplayNumber")
+    static let coreDisplayCreateInfoDictionary: CoreDisplayCreateInfoDictionaryFunction? = loadSymbol(
+        "CoreDisplay_DisplayCreateInfoDictionary"
+    )
 
     static func createService(for displayID: CGDirectDisplayID) -> CFTypeRef? {
         guard let cgsServiceForDisplay, let createWithService else {

@@ -196,6 +196,120 @@ final class DisplayBrightnessControllerTests: XCTestCase {
         XCTAssertEqual(backends[display.id]?.kind, .ddc)
     }
 
+    func testBackendBuilderSkipsArm64ServiceScanWhenExistingDDCBackendCanBeReused() {
+        let display = makeTestDisplay(id: 12, name: "Reusable Display")
+        let previousBackend = TestBrightnessBackend(kind: .ddc, display: display, brightness: 0.7)
+        var arm64ResolveCount = 0
+        let builder = SystemDisplayBrightnessBackendBuilder(
+            displayProvider: StubDisplayProvider(displays: [display]),
+            resolveArm64Services: { _ in
+                arm64ResolveCount += 1
+                return [:]
+            },
+            appleFactory: { _ in nil },
+            ddcFactory: { _, _ in
+                XCTFail("Expected reusable DDC backend")
+                return nil
+            }
+        )
+
+        let backends = builder.backends(for: [display], previous: [display.id: previousBackend])
+
+        XCTAssertTrue(backends[display.id] === previousBackend)
+        XCTAssertEqual(arm64ResolveCount, 0)
+    }
+
+    func testBackendBuilderResolvesArm64ServicesOnlyWhenCreatingNewDDCBackend() {
+        let display = makeTestDisplay(id: 13, name: "New DDC Display")
+        let newBackend = TestBrightnessBackend(kind: .ddc, display: display, brightness: 0.7)
+        var arm64ResolveCount = 0
+        var receivedService: CFTypeRef?
+        let service = "matched-service" as CFString
+        let builder = SystemDisplayBrightnessBackendBuilder(
+            displayProvider: StubDisplayProvider(displays: [display]),
+            resolveArm64Services: { displays in
+                arm64ResolveCount += 1
+                XCTAssertEqual(displays.map(\.id), [display.id])
+                return [display.id: service]
+            },
+            appleFactory: { _ in nil },
+            ddcFactory: { _, matchedService in
+                receivedService = matchedService
+                return newBackend
+            }
+        )
+
+        let backends = builder.backends(for: [display], previous: [:])
+
+        XCTAssertTrue(backends[display.id] === newBackend)
+        XCTAssertEqual(arm64ResolveCount, 1)
+        XCTAssertTrue(receivedService === service)
+    }
+
+    func testArm64ServiceMatcherIgnoresLowConfidenceExternalOnlyMatches() {
+        let firstDisplay = makeTestDisplay(id: 21, name: "DELL U2720QM")
+        let secondDisplay = makeTestDisplay(id: 22, name: "DELL U3225QE", isMain: true)
+        let firstService = "first-service" as CFString
+        let secondService = "second-service" as CFString
+
+        let matches = Arm64DDCServiceMatcher.resolveServices(
+            for: [firstDisplay, secondDisplay],
+            candidates: [
+                .init(service: firstService, location: "External", serviceLocation: 1),
+                .init(service: secondService, location: "External", serviceLocation: 2)
+            ]
+        )
+
+        XCTAssertTrue(matches.isEmpty)
+    }
+
+    func testArm64ServiceMatcherUsesStrongSerialMatchesForDistinctDisplays() {
+        let firstDisplay = makeTestDisplay(
+            id: 31,
+            name: "DELL U2720QM",
+            serialNumber: 1001
+        )
+        let secondDisplay = makeTestDisplay(
+            id: 32,
+            name: "DELL U3225QE",
+            isMain: true,
+            serialNumber: 2002
+        )
+        let firstService = "first-service" as CFString
+        let secondService = "second-service" as CFString
+
+        let matches = Arm64DDCServiceMatcher.resolveServices(
+            for: [firstDisplay, secondDisplay],
+            candidates: [
+                .init(service: secondService, serialNumber: 2002, location: "External", serviceLocation: 1),
+                .init(service: firstService, serialNumber: 1001, location: "External", serviceLocation: 2)
+            ]
+        )
+
+        XCTAssertTrue(matches[firstDisplay.id] === firstService)
+        XCTAssertTrue(matches[secondDisplay.id] === secondService)
+    }
+
+    func testArm64ServiceMatcherCanUseVendorAndNameWhenSerialIsMissing() {
+        let display = makeTestDisplay(
+            id: 41,
+            name: "DELL U3225QE",
+            vendorNumber: 4268
+        )
+        let matchedService = "matched-service" as CFString
+        let otherService = "other-service" as CFString
+
+        let matches = Arm64DDCServiceMatcher.resolveServices(
+            for: [display],
+            candidates: [
+                .init(service: otherService, name: "DELL U2720QM", vendorNumber: 4268, location: "External"),
+                .init(service: matchedService, name: "DELL U3225QE", vendorNumber: 4268, location: "External")
+            ]
+        )
+
+        XCTAssertTrue(matches[display.id] === matchedService)
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1,
         pollIntervalNanoseconds: UInt64 = 10_000_000,
