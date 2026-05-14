@@ -92,12 +92,23 @@ final class StubBrightnessBackendBuilder: DisplayBrightnessBackendBuilding {
         [DisplayInfo],
         [CGDirectDisplayID: any DisplayBrightnessBackend]
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend]
+    typealias FallbackHandler = (
+        any DisplayBrightnessBackend,
+        DisplayInfo,
+        [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)?
 
     var handler: BuildHandler
+    var fallbackHandler: FallbackHandler
     private(set) var calls: [[DisplayInfo]] = []
+    private(set) var fallbackCalls: [(DisplayBrightnessBackendKind, DisplayInfo)] = []
 
-    init(handler: @escaping BuildHandler = { _, _ in [:] }) {
+    init(
+        handler: @escaping BuildHandler = { _, _ in [:] },
+        fallbackHandler: @escaping FallbackHandler = { _, _, _ in nil }
+    ) {
         self.handler = handler
+        self.fallbackHandler = fallbackHandler
     }
 
     func backends(
@@ -106,6 +117,15 @@ final class StubBrightnessBackendBuilder: DisplayBrightnessBackendBuilding {
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend] {
         calls.append(displays)
         return handler(displays, previous)
+    }
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        fallbackCalls.append((failedBackend.kind, display))
+        return fallbackHandler(failedBackend, display, previous)
     }
 }
 

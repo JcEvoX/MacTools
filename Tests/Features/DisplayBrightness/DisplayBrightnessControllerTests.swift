@@ -119,6 +119,46 @@ final class DisplayBrightnessControllerTests: XCTestCase {
         XCTAssertEqual(snapshot.errorMessage, "调节失败：DDC 写入失败")
     }
 
+    func testWriteFailureFallsBackToSoftwareBackendWithoutShowingError() async {
+        let display = makeTestDisplay(id: 9, name: "U27N3R")
+        let provider = StubDisplayProvider(displays: [display])
+        let ddcBackend = TestBrightnessBackend(kind: .ddc, display: display, brightness: 0.6)
+        let gammaBackend = TestBrightnessBackend(kind: .gamma, display: display, brightness: 1)
+        ddcBackend.enqueueWriteError(DisplayBrightnessControllerError.failed(message: "U27N3R DDC 写入失败"))
+        let builder = StubBrightnessBackendBuilder(
+            handler: { _, _ in [display.id: ddcBackend] },
+            fallbackHandler: { failedBackend, fallbackDisplay, _ in
+                XCTAssertEqual(failedBackend.kind, .ddc)
+                XCTAssertEqual(fallbackDisplay.id, display.id)
+                return gammaBackend
+            }
+        )
+
+        let controller = DisplayBrightnessController(
+            displayProvider: provider,
+            backendBuilder: builder,
+            shortWriteDelay: 0.01,
+            minimumWriteInterval: 0
+        )
+        controller.refresh()
+
+        controller.setBrightness(0.25, for: display.id, phase: .ended)
+
+        await waitUntil {
+            gammaBackend.writeCount == 1
+                && controller.snapshot().displays.first?.isPendingWrite == false
+        }
+
+        let snapshot = controller.snapshot()
+        XCTAssertEqual(ddcBackend.recordedWrites, [0.25])
+        XCTAssertEqual(gammaBackend.recordedWrites, [0.25])
+        XCTAssertEqual(gammaBackend.readCount, 1)
+        XCTAssertEqual(ddcBackend.cleanupCount, 1)
+        XCTAssertEqual(snapshot.displays.first?.brightness, 0.25)
+        XCTAssertNil(snapshot.errorMessage)
+        XCTAssertEqual(builder.fallbackCalls.map(\.0), [.ddc])
+    }
+
     func testInFlightWritesRemainSerialAndFlushLatestValue() async {
         let display = makeTestDisplay(id: 1, name: "Studio Display")
         let provider = StubDisplayProvider(displays: [display])

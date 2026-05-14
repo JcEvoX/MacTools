@@ -74,4 +74,20 @@ protocol DisplayBrightnessBackendBuilding {
         for displays: [DisplayInfo],
         previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
     ) -> [CGDirectDisplayID: any DisplayBrightnessBackend]
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)?
+}
+
+extension DisplayBrightnessBackendBuilding {
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        nil
+    }
 }

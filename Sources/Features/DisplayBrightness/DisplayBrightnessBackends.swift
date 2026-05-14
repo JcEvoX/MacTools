@@ -8,11 +8,24 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
     typealias DDCBackendFactory = (DisplayInfo, CFTypeRef?) -> (any DisplayBrightnessBackend)?
     typealias SoftwareBackendFactory = (DisplayInfo) -> (any DisplayBrightnessBackend)?
 
-    private enum BackendCandidate {
+    private enum BackendCandidate: Equatable {
         case appleNative
         case ddc
         case gamma
         case shade
+
+        init(kind: DisplayBrightnessBackendKind) {
+            switch kind {
+            case .appleNative:
+                self = .appleNative
+            case .ddc:
+                self = .ddc
+            case .gamma:
+                self = .gamma
+            case .shade:
+                self = .shade
+            }
+        }
     }
 
     private let resolveArm64Services: Arm64ServiceResolver
@@ -93,6 +106,34 @@ final class SystemDisplayBrightnessBackendBuilder: DisplayBrightnessBackendBuild
         }
 
         return result
+    }
+
+    func fallbackBackend(
+        after failedBackend: any DisplayBrightnessBackend,
+        for display: DisplayInfo,
+        previous: [CGDirectDisplayID: any DisplayBrightnessBackend]
+    ) -> (any DisplayBrightnessBackend)? {
+        let candidates = backendCandidates(for: display)
+        guard let failedIndex = candidates.firstIndex(of: BackendCandidate(kind: failedBackend.kind)) else {
+            return nil
+        }
+
+        var arm64Services: [CGDirectDisplayID: CFTypeRef]?
+        for candidate in candidates.dropFirst(failedIndex + 1) {
+            guard let backend = makeBackend(
+                candidate,
+                for: display,
+                in: [display],
+                previous: previous.filter { $0.key != display.id },
+                cache: &arm64Services
+            ) else {
+                continue
+            }
+
+            return backend
+        }
+
+        return nil
     }
 
     private func backendCandidates(for display: DisplayInfo) -> [BackendCandidate] {

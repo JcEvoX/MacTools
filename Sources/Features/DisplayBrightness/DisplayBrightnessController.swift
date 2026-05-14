@@ -151,6 +151,7 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             lastErrorMessage = DisplayBrightnessControllerError.displayUnavailable(
                 displayID: displayID
             ).localizedDescription
+            onStateChange?()
             return
         }
 
@@ -263,15 +264,29 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
             }
             lastErrorMessage = nil
         case .failure(let error):
-            if managedDisplay.pendingBrightness == nil {
-                managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
-            }
-
             let localizedDescription = error.localizedDescription
-            lastErrorMessage = "调节失败：\(localizedDescription)"
             logger.error(
                 "write failed for \(displayName, privacy: .public): \(localizedDescription, privacy: .public)"
             )
+
+            if let fallbackBackend = fallbackBackend(for: displayID, failedBackend: managedDisplay.backend) {
+                logger.info(
+                    "retrying brightness write for \(displayName, privacy: .public) with \(String(describing: fallbackBackend.kind), privacy: .public) fallback"
+                )
+                let retryBrightness = managedDisplay.pendingBrightness ?? targetValue
+                managedDisplay.backend.cleanup()
+                managedDisplay.backend = fallbackBackend
+                managedDisplay.pendingBrightness = retryBrightness
+                managedDisplay.pendingReadbackAfterWrite = true
+                managedDisplay.currentBrightness = retryBrightness
+                lastErrorMessage = nil
+            } else {
+                if managedDisplay.pendingBrightness == nil {
+                    managedDisplay.currentBrightness = managedDisplay.lastCommittedBrightness
+                }
+
+                lastErrorMessage = "调节失败：\(localizedDescription)"
+            }
         }
 
         managedDisplays[displayID] = managedDisplay
@@ -280,6 +295,24 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         if managedDisplay.pendingBrightness != nil {
             scheduleWrite(for: displayID, delay: 0)
         }
+    }
+
+    private func fallbackBackend(
+        for displayID: CGDirectDisplayID,
+        failedBackend: any DisplayBrightnessBackend
+    ) -> (any DisplayBrightnessBackend)? {
+        guard let managedDisplay = managedDisplays[displayID] else {
+            return nil
+        }
+
+        let previousBackends = Dictionary(
+            uniqueKeysWithValues: managedDisplays.map { ($0.key, $0.value.backend) }
+        )
+        return backendBuilder.fallbackBackend(
+            after: failedBackend,
+            for: managedDisplay.display,
+            previous: previousBackends
+        )
     }
 
     private func cleanupDisconnectedDisplays(keeping displayIDs: Set<CGDirectDisplayID>) {
