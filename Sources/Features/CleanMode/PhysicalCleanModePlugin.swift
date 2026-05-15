@@ -5,7 +5,7 @@ import OSLog
 import SwiftUI
 
 @MainActor
-final class PhysicalCleanModePlugin: FeaturePlugin {
+final class PhysicalCleanModePlugin: FeaturePlugin, AccessibilityPermissionRefreshing {
     private enum DefaultsKey {
         static let legacyEnabledState = "feature.cleanModeEnabled"
     }
@@ -281,5 +281,11 @@ final class PhysicalCleanModePlugin: FeaturePlugin {
 
     private func notifyChange() {
         onStateChange?()
+    }
+
+    // MARK: - AccessibilityPermissionRefreshing
+
+    func refreshAccessibilityPermission() {
+        refresh()
     }
 }

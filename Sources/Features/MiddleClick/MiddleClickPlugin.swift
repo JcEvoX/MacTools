@@ -12,7 +12,7 @@ import SwiftUI
 ///
 /// 需要辅助功能（Accessibility）权限才能向其他应用发送鼠标事件。
 @MainActor
-final class MiddleClickPlugin: FeaturePlugin {
+final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing {
 
     // MARK: - IDs
 
@@ -93,18 +93,7 @@ final class MiddleClickPlugin: FeaturePlugin {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
-        let previous = isAccessibilityGranted
-        isAccessibilityGranted = AccessibilityCheck.isTrusted()
-
-        // 权限被撤销时，自动停止会话
-        if previous && !isAccessibilityGranted {
-            stopSession()
-            userDefaults.set(false, forKey: DefaultsKey.isEnabled)
-        }
-
-        if previous != isAccessibilityGranted {
-            onStateChange?()
-        }
+        refreshAccessibilityPermission()
     }
 
     func handlePanelAction(_ action: PluginPanelAction) {
@@ -195,5 +184,28 @@ final class MiddleClickPlugin: FeaturePlugin {
         session?.deactivate()
         session = nil
         logger.info("三指中键已停用")
+    }
+
+    // MARK: - AccessibilityPermissionRefreshing
+
+    func refreshAccessibilityPermission() {
+        let previous = isAccessibilityGranted
+        isAccessibilityGranted = AccessibilityCheck.isTrusted()
+
+        if previous && !isAccessibilityGranted {
+            // 权限被撤销：停止 session，清除持久化
+            stopSession()
+            userDefaults.set(false, forKey: DefaultsKey.isEnabled)
+        } else if !previous && isAccessibilityGranted {
+            // 权限新授予：清除错误，按需恢复 session
+            lastErrorMessage = nil
+            if userDefaults.bool(forKey: DefaultsKey.isEnabled) {
+                startSession()
+            }
+        }
+
+        if previous != isAccessibilityGranted {
+            onStateChange?()
+        }
     }
 }
