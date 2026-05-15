@@ -475,17 +475,25 @@ jobs:
           git commit -m "Update mactools to ${VERSION}"
           git push --force-with-lease origin "$BRANCH"
 
-          existing_pr="$(gh pr list --repo "$TAP_REPOSITORY" --head "$BRANCH" --json number --jq '.[0].number // empty')"
-          if [[ -n "$existing_pr" ]]; then
-            echo "Homebrew tap update PR already exists: #${existing_pr}"
+          pr_number="$(gh pr list --repo "$TAP_REPOSITORY" --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [[ -n "$pr_number" ]]; then
+            echo "Homebrew tap update PR already exists: #${pr_number}"
           else
-            gh pr create \
+            pr_url="$(gh pr create \
               --repo "$TAP_REPOSITORY" \
               --base main \
               --head "$BRANCH" \
               --title "Update mactools to ${VERSION}" \
-              --body "Updates the MacTools cask for ${TAG}."
+              --body "Updates the MacTools cask for ${TAG}.")"
+            pr_number="${pr_url##*/}"
+            echo "Created Homebrew tap update PR: #${pr_number}"
           fi
+
+          gh pr merge "$pr_number" \
+            --repo "$TAP_REPOSITORY" \
+            --squash \
+            --delete-branch \
+            --subject "Update mactools to ${VERSION}"
 
       - name: Commit appcast to main
         run: |
