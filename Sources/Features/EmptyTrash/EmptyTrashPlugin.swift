@@ -24,7 +24,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
     private var itemCount: Int = 0
     private var isEmptying = false
     private var lastErrorMessage: String?
-    private var refreshTimer: DispatchSourceTimer?
     private var trashObservers: [NSObjectProtocol] = []
 
     var panelState: PluginPanelState {
@@ -46,7 +45,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
     func refresh() {
         Task { @MainActor in
             scheduleCountRefresh()
-            setupRefreshTimer()
             setupTrashNotificationObservers()
         }
     }
@@ -85,20 +83,6 @@ final class EmptyTrashPlugin: FeaturePlugin {
                 }
             }
         }
-    }
-
-    @MainActor
-    private func setupRefreshTimer() {
-        guard refreshTimer == nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 5, repeating: 5)
-        timer.setEventHandler { [weak self] in
-            Task { @MainActor in
-                self?.scheduleCountRefresh()
-            }
-        }
-        timer.resume()
-        refreshTimer = timer
     }
 
     @MainActor
