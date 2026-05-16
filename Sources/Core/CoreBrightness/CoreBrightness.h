@@ -6,18 +6,16 @@
 #include <Foundation/Foundation.h>
 
 typedef struct {
-    int mode;    // 0 = off, 1 = scheduled (sunset to sunrise), 2 = always on
     BOOL active; // whether night shift is currently reducing blue light
-    float strength; // 0.0 (less warm) to 1.0 (more warm)
+    BOOL enabled;
+    BOOL sunSchedulePermitted;
+    int mode; // 0 = off, 1 = scheduled (sunset to sunrise), 2 = always on
     struct {
         int hour;
         int minute;
-    } scheduledStart;
-    struct {
-        int hour;
-        int minute;
-    } scheduledEnd;
-    int locationType;
+    } scheduledStart, scheduledEnd;
+    unsigned long long disableFlags;
+    BOOL available;
 } CBBlueLightStatus;
 
 @interface CBBlueLightClient : NSObject
