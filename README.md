@@ -7,13 +7,30 @@
 
 ## 截图
 
-| 菜单栏功能面板                                                                      | 组件仪表盘                                                                                           |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| <img src="docs/assets/screenshots/menu-panel.png" width="320" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="320" alt="日历与系统状态组件面板"> |
-
-| 设置与功能                                                                                | 关于与更新                                                                              |
-| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| <img src="docs/assets/screenshots/settings-general.png" width="420" alt="设置与功能页面"> | <img src="docs/assets/screenshots/settings-about.png" width="420" alt="关于与更新页面"> |
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <strong>菜单栏功能面板</strong><br>
+        <img src="docs/assets/screenshots/menu-panel.png" width="320" alt="菜单栏功能面板">
+      </td>
+      <td align="center">
+        <strong>组件仪表盘</strong><br>
+        <img src="docs/assets/screenshots/component-dashboard.png" width="320" alt="日历与系统状态组件面板">
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <strong>设置与功能</strong><br>
+        <img src="docs/assets/screenshots/settings-general.png" width="420" alt="设置与功能页面">
+      </td>
+      <td align="center">
+        <strong>关于与更新</strong><br>
+        <img src="docs/assets/screenshots/settings-about.png" width="420" alt="关于与更新页面">
+      </td>
+    </tr>
+  </table>
+</div>
 
 ## 功能
 
