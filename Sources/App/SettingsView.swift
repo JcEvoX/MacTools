@@ -596,8 +596,7 @@ private struct AboutUpdateCard: View {
                     await viewModel.performPrimaryAction()
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(AboutUpdatePrimaryButtonStyle())
             .disabled(viewModel.isPrimaryButtonDisabled)
 
             Text(statusText ?? " ")
@@ -619,6 +618,30 @@ private struct AboutUpdateCard: View {
         default:
             return viewModel.statusDetail ?? viewModel.statusHeadline
         }
+    }
+}
+
+private struct AboutUpdatePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13))
+            .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.82))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(minWidth: 92)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(buttonBackgroundColor(isPressed: configuration.isPressed))
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+
+    private func buttonBackgroundColor(isPressed: Bool) -> Color {
+        let baseOpacity: CGFloat = isEnabled ? 1 : 0.45
+        let pressedOpacity: CGFloat = isEnabled ? 0.82 : baseOpacity
+        return Color.accentColor.opacity(isPressed ? pressedOpacity : baseOpacity)
     }
 }
 
