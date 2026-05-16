@@ -63,6 +63,7 @@ final class PluginHost: ObservableObject {
             plugins: [
                 AppearancePlugin(),
                 DisplayBrightnessPlugin(),
+                DisplayTrueColorPlugin(),
                 DisplayResolutionPlugin(),
                 HideNotchPlugin(),
                 HideDockPlugin(),

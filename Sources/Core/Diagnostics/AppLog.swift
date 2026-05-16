@@ -18,6 +18,7 @@ enum AppLog {
     static let displayBrightnessPlugin = Logger(subsystem: subsystem, category: "DisplayBrightnessPlugin")
     static let displayBrightnessController = Logger(subsystem: subsystem, category: "DisplayBrightnessController")
     static let displayBrightnessBackend = Logger(subsystem: subsystem, category: "DisplayBrightnessBackend")
+    static let displayTrueColorPlugin = Logger(subsystem: subsystem, category: "DisplayTrueColorPlugin")
     static let hideNotchController = Logger(subsystem: subsystem, category: "HideNotchController")
     static let hideNotchWallpaperManager = Logger(subsystem: subsystem, category: "HideNotchWallpaperManager")
     static let hideNotchOverlayManager = Logger(subsystem: subsystem, category: "HideNotchOverlayManager")
