@@ -62,6 +62,7 @@ final class PluginHost: ObservableObject {
         self.init(
             plugins: [
                 AppearancePlugin(),
+                NightShiftPlugin(),
                 DisplayBrightnessPlugin(),
                 DisplayTrueColorPlugin(),
                 DisplayResolutionPlugin(),

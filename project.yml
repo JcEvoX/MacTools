@@ -37,8 +37,8 @@ targets:
         INFOPLIST_FILE: Configs/MacTools-Info.plist
         CODE_SIGN_ENTITLEMENTS: Configs/MacTools.entitlements
         SPARKLE_PUBLIC_ED_KEY: YS4ioWunyQC5rP/YQdDbG9panyqCKNyBd0iPTUqIFY0=
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport
-        OTHER_LDFLAGS: -framework MultitouchSupport -F /System/Library/PrivateFrameworks
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport $(SRCROOT)/Sources/Core/CoreBrightness
+        OTHER_LDFLAGS: -framework MultitouchSupport -framework CoreBrightness -F /System/Library/PrivateFrameworks
 
   MacToolsTests:
     type: bundle.unit-test
@@ -52,7 +52,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactoolsTests
         GENERATE_INFOPLIST_FILE: YES
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport $(SRCROOT)/Sources/Core/CoreBrightness
 
 schemes:
   MacTools:
