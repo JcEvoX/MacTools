@@ -79,48 +79,19 @@ struct PluginConfiguration {
     }
 }
 
-struct PluginManifest: Identifiable {
-    let id: String
-    let title: String
-    let iconName: String
-    let iconTint: Color
+struct PluginPrimaryPanelDescriptor {
     let controlStyle: PluginControlStyle
     let menuActionBehavior: PluginMenuActionBehavior
-    let order: Int
-    let defaultDescription: String
     let buttonTitle: String?
 
     init(
-        id: String,
-        title: String,
-        iconName: String,
-        iconTint: Color,
         controlStyle: PluginControlStyle,
         menuActionBehavior: PluginMenuActionBehavior,
-        order: Int,
-        defaultDescription: String,
         buttonTitle: String? = nil
     ) {
-        self.id = id
-        self.title = title
-        self.iconName = iconName
-        self.iconTint = iconTint
         self.controlStyle = controlStyle
         self.menuActionBehavior = menuActionBehavior
-        self.order = order
-        self.defaultDescription = defaultDescription
         self.buttonTitle = buttonTitle
-    }
-
-    var metadata: PluginMetadata {
-        PluginMetadata(
-            id: id,
-            title: title,
-            iconName: iconName,
-            iconTint: iconTint,
-            order: order,
-            defaultDescription: defaultDescription
-        )
     }
 }
 

@@ -6,21 +6,7 @@ import SwiftUI
 final class PluginHost: ObservableObject {
     private struct PluginDescriptor {
         let metadata: PluginMetadata
-        var featurePlugin: (any FeaturePlugin)?
-        var componentPlugin: (any ComponentPlugin)?
-
-        var presentation: PluginFeaturePresentation {
-            switch (featurePlugin, componentPlugin) {
-            case (.some, .some):
-                return .featureAndComponentPanel
-            case (.some, .none):
-                return .featurePanel
-            case (.none, .some):
-                return .componentPanel
-            case (.none, .none):
-                return .featurePanel
-            }
-        }
+        let plugin: any MacToolsPlugin
     }
 
     private struct ShortcutDescriptor {
@@ -28,11 +14,10 @@ final class PluginHost: ObservableObject {
         let pluginID: String
         let pluginTitle: String
         let definition: PluginShortcutDefinition
-        let plugin: any PluginCore
+        let plugin: any MacToolsPlugin
     }
 
-    private let plugins: [any FeaturePlugin]
-    private let componentPlugins: [any ComponentPlugin]
+    private let plugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
     private let globalShortcutManager: GlobalShortcutManager
@@ -60,27 +45,7 @@ final class PluginHost: ObservableObject {
 
     convenience init() {
         self.init(
-            plugins: [
-                AppearancePlugin(),
-                NightShiftPlugin(),
-                DisplayBrightnessPlugin(),
-                DisplayTrueColorPlugin(),
-                DisplayResolutionPlugin(),
-                HideNotchPlugin(),
-                HideDockPlugin(),
-                KeepAwakePlugin(),
-                MiddleClickPlugin(),
-                DiskCleanFeature.shared.makePlugin(),
-                LaunchControlFeature.shared.makePlugin(),
-                EjectDiskPlugin(),
-                EmptyTrashPlugin(),
-                PhysicalCleanModePlugin(),
-                ClipboardClearPlugin()
-            ],
-            componentPlugins: [
-                SystemStatusPlugin(),
-                CalendarPlugin()
-            ],
+            plugins: BuiltInPluginRegistry().makePlugins(),
             shortcutStore: ShortcutStore(),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
             globalShortcutManager: GlobalShortcutManager(),
@@ -90,8 +55,7 @@ final class PluginHost: ObservableObject {
     }
 
     init(
-        plugins: [any FeaturePlugin],
-        componentPlugins: [any ComponentPlugin] = [],
+        plugins: [any MacToolsPlugin],
         shortcutStore: ShortcutStore,
         pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
         globalShortcutManager: GlobalShortcutManager,
@@ -100,13 +64,6 @@ final class PluginHost: ObservableObject {
         displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) {
         self.plugins = plugins.sorted {
-            if $0.manifest.order == $1.manifest.order {
-                return $0.manifest.title.localizedCompare($1.manifest.title) == .orderedAscending
-            }
-
-            return $0.manifest.order < $1.manifest.order
-        }
-        self.componentPlugins = componentPlugins.sorted {
             if $0.metadata.order == $1.metadata.order {
                 return $0.metadata.title.localizedCompare($1.metadata.title) == .orderedAscending
             }
@@ -120,7 +77,7 @@ final class PluginHost: ObservableObject {
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
 
-        for plugin in corePluginsForCallbacks() {
+        for plugin in self.plugins {
             let pluginID = plugin.metadata.id
 
             plugin.onStateChange = { [weak self] in
@@ -155,7 +112,7 @@ final class PluginHost: ObservableObject {
 
     func refreshAll() {
         handlePluginAction {
-            for plugin in corePluginsForCallbacks() {
+            for plugin in plugins {
                 plugin.refresh()
             }
         }
@@ -178,7 +135,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.setSwitch(isOn))
+            plugin.handleAction(.setSwitch(isOn))
         }
     }
 
@@ -188,7 +145,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.setDisclosureExpanded(isExpanded))
+            plugin.handleAction(.setDisclosureExpanded(isExpanded))
         }
     }
 
@@ -202,7 +159,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.setSelection(controlID: controlID, optionID: optionID))
+            plugin.handleAction(.setSelection(controlID: controlID, optionID: optionID))
         }
     }
 
@@ -216,7 +173,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(
+            plugin.handleAction(
                 .setNavigationSelection(controlID: controlID, optionID: optionID)
             )
         }
@@ -231,7 +188,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.clearNavigationSelection(controlID: controlID))
+            plugin.handleAction(.clearNavigationSelection(controlID: controlID))
         }
     }
 
@@ -245,7 +202,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.setDate(controlID: controlID, value: date))
+            plugin.handleAction(.setDate(controlID: controlID, value: date))
         }
     }
 
@@ -260,7 +217,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.setSlider(controlID: controlID, value: value, phase: phase))
+            plugin.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
         }
     }
 
@@ -270,7 +227,7 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePanelAction(.invokeAction(controlID: controlID))
+            plugin.handleAction(.invokeAction(controlID: controlID))
         }
     }
 
@@ -430,7 +387,7 @@ final class PluginHost: ObservableObject {
             return cachedItem
         }
 
-        guard let plugin = componentPlugin(for: itemID) else {
+        guard let componentPanel = componentPanel(for: itemID) else {
             let item = PluginComponentViewItem(id: itemID, content: AnyView(EmptyView()))
             componentViewCache[itemID] = item
             return item
@@ -438,7 +395,7 @@ final class PluginHost: ObservableObject {
 
         let item = PluginComponentViewItem(
             id: itemID,
-            content: plugin.makeComponentView(
+            content: componentPanel.makeView(
                 context: PluginComponentContext(
                     pluginID: itemID,
                     dismiss: dismiss,
@@ -455,7 +412,7 @@ final class PluginHost: ObservableObject {
             return cachedItem
         }
 
-        let configurations = corePluginsForCallbacks()
+        let configurations = plugins
             .filter { $0.metadata.id == pluginID }
             .compactMap(\.configuration)
 
@@ -487,43 +444,53 @@ final class PluginHost: ObservableObject {
         componentViewCache.removeAll()
     }
 
-    private func plugin(for pluginID: String) -> (any FeaturePlugin)? {
-        plugins.first(where: { $0.manifest.id == pluginID })
+    private func plugin(for pluginID: String) -> (any PluginPrimaryPanel)? {
+        plugins.first(where: { $0.metadata.id == pluginID })?.primaryPanel
     }
 
-    private func componentPlugin(for pluginID: String) -> (any ComponentPlugin)? {
-        componentPlugins.first(where: { $0.metadata.id == pluginID })
+    private func componentPanel(for pluginID: String) -> (any PluginComponentPanel)? {
+        plugins.first(where: { $0.metadata.id == pluginID })?.componentPanel
     }
 
-    private func corePlugin(for pluginID: String) -> (any PluginCore)? {
-        plugin(for: pluginID) ?? componentPlugin(for: pluginID)
+    private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
+        plugins.first(where: { $0.metadata.id == pluginID })
     }
 
     private func rebuildDerivedState() {
         let orderedPlugins = orderedPlugins()
-        let orderedComponentPlugins = orderedComponentPlugins()
         let orderedDescriptors = orderedPluginDescriptors()
         let panelStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedPlugins.map { plugin in
-                (plugin.manifest.id, plugin.panelState)
+            uniqueKeysWithValues: orderedPlugins.compactMap { plugin -> (String, PluginPanelState)? in
+                guard let primaryPanel = plugin.primaryPanel else {
+                    return nil
+                }
+
+                return (plugin.metadata.id, primaryPanel.primaryPanelState)
             }
         )
         let componentStatesByID = Dictionary(
-            uniqueKeysWithValues: orderedComponentPlugins.map { plugin in
-                (plugin.metadata.id, plugin.componentState)
+            uniqueKeysWithValues: orderedPlugins.compactMap { plugin -> (String, PluginComponentState)? in
+                guard let componentPanel = plugin.componentPanel else {
+                    return nil
+                }
+
+                return (plugin.metadata.id, componentPanel.componentPanelState)
             }
         )
 
         panelItems = orderedPlugins.compactMap { plugin in
-            let manifest = plugin.manifest
-            guard let state = panelStatesByID[manifest.id] else {
+            let metadata = plugin.metadata
+            guard
+                let primaryPanel = plugin.primaryPanel,
+                let state = panelStatesByID[metadata.id]
+            else {
                 return nil
             }
 
             guard
                 state.isVisible,
                 pluginDisplayPreferencesStore.isVisible(
-                    manifest.id,
+                    metadata.id,
                     defaultPluginIDs: defaultPluginIDs
                 )
             else {
@@ -531,29 +498,33 @@ final class PluginHost: ObservableObject {
             }
 
             let description = state.errorMessage ?? state.subtitle
+            let descriptor = primaryPanel.primaryPanelDescriptor
 
             return PluginPanelItem(
-                id: manifest.id,
-                title: manifest.title,
-                iconName: manifest.iconName,
-                iconTint: manifest.iconTint,
-                controlStyle: manifest.controlStyle,
-                menuActionBehavior: manifest.menuActionBehavior,
-                description: description.isEmpty ? manifest.defaultDescription : description,
-                helpText: description.isEmpty ? manifest.defaultDescription : description,
+                id: metadata.id,
+                title: metadata.title,
+                iconName: metadata.iconName,
+                iconTint: metadata.iconTint,
+                controlStyle: descriptor.controlStyle,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                description: description.isEmpty ? metadata.defaultDescription : description,
+                helpText: description.isEmpty ? metadata.defaultDescription : description,
                 descriptionTone: state.errorMessage == nil ? .secondary : .error,
                 isOn: state.isOn,
                 isExpanded: state.isExpanded,
                 isEnabled: state.isEnabled,
                 detail: state.detail,
-                buttonActionID: manifest.controlStyle == .button ? "execute" : nil,
-                buttonTitle: manifest.buttonTitle
+                buttonActionID: descriptor.controlStyle == .button ? "execute" : nil,
+                buttonTitle: descriptor.buttonTitle
             )
         }
 
-        componentItems = orderedComponentPlugins.compactMap { plugin in
+        componentItems = orderedPlugins.compactMap { plugin in
             let metadata = plugin.metadata
-            guard let state = componentStatesByID[metadata.id] else {
+            guard
+                let componentPanel = plugin.componentPanel,
+                let state = componentStatesByID[metadata.id]
+            else {
                 return nil
             }
 
@@ -577,7 +548,7 @@ final class PluginHost: ObservableObject {
                 description: description.isEmpty ? metadata.defaultDescription : description,
                 helpText: description.isEmpty ? metadata.defaultDescription : description,
                 descriptionTone: state.errorMessage == nil ? .secondary : .error,
-                span: plugin.componentDescriptor.span,
+                span: componentPanel.descriptor.span,
                 isActive: state.isActive,
                 isEnabled: state.isEnabled
             )
@@ -597,9 +568,9 @@ final class PluginHost: ObservableObject {
                     metadata.id,
                     defaultPluginIDs: defaultPluginIDs
                 ),
-                isActive: descriptor.featurePlugin.flatMap { panelStatesByID[$0.manifest.id] }?.isOn == true
-                    || descriptor.componentPlugin.flatMap { componentStatesByID[$0.metadata.id] }?.isActive == true,
-                presentation: descriptor.presentation
+                isActive: panelStatesByID[metadata.id]?.isOn == true
+                    || componentStatesByID[metadata.id]?.isActive == true,
+                presentation: presentation(for: descriptor.plugin)
             )
         }
 
@@ -717,7 +688,7 @@ final class PluginHost: ObservableObject {
     private func refreshDisplayTopologyNow() {
         displayTopologyRefreshTask = nil
         handlePluginAction {
-            for plugin in corePluginsForCallbacks() {
+            for plugin in plugins {
                 if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
                     displayTopologyRefreshing.refreshDisplayTopology()
                 }
@@ -727,7 +698,7 @@ final class PluginHost: ObservableObject {
 
     private func refreshAccessibilityPermissionNow() {
         handlePluginAction {
-            for plugin in corePluginsForCallbacks() {
+            for plugin in plugins {
                 if let accessibilityRefreshing = plugin as? AccessibilityPermissionRefreshing {
                     accessibilityRefreshing.refreshAccessibilityPermission()
                 }
@@ -745,7 +716,7 @@ final class PluginHost: ObservableObject {
             let matchingSettingsCards = settingsCards.filter { $0.pluginID == pluginID }
             let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
             let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
-            let configurations = corePlugins(for: descriptor).compactMap(\.configuration)
+            let configurations = [descriptor.plugin].compactMap(\.configuration)
             let hasConfigurationSurface = !matchingSettingsCards.isEmpty
                 || !matchingPermissionCards.isEmpty
                 || !matchingShortcutItems.isEmpty
@@ -795,43 +766,14 @@ final class PluginHost: ObservableObject {
         pluginDisplayPreferencesStore.orderedPluginIDs(defaultPluginIDs: defaultPluginIDs)
     }
 
-    private func orderedPlugins() -> [any FeaturePlugin] {
-        let pluginsByID = Dictionary(uniqueKeysWithValues: plugins.map { ($0.manifest.id, $0) })
+    private func orderedPlugins() -> [any MacToolsPlugin] {
+        let pluginsByID = Dictionary(uniqueKeysWithValues: plugins.map { ($0.metadata.id, $0) })
 
         return orderedPluginIDs().compactMap { pluginsByID[$0] }
     }
 
-    private func orderedComponentPlugins() -> [any ComponentPlugin] {
-        let pluginsByID = Dictionary(uniqueKeysWithValues: componentPlugins.map { ($0.metadata.id, $0) })
-
-        return orderedPluginIDs().compactMap { pluginsByID[$0] }
-    }
-
-    private func orderedCorePlugins() -> [any PluginCore] {
-        orderedPluginDescriptors().flatMap { descriptor -> [any PluginCore] in
-            corePlugins(for: descriptor)
-        }
-    }
-
-    private func corePlugins(for descriptor: PluginDescriptor) -> [any PluginCore] {
-        var plugins: [any PluginCore] = []
-
-        if let featurePlugin = descriptor.featurePlugin {
-            plugins.append(featurePlugin)
-        }
-
-        if let componentPlugin = descriptor.componentPlugin {
-            plugins.append(componentPlugin)
-        }
-
-        return plugins
-    }
-
-    private func corePluginsForCallbacks() -> [any PluginCore] {
-        var plugins: [any PluginCore] = []
-        plugins.append(contentsOf: self.plugins)
-        plugins.append(contentsOf: componentPlugins)
-        return plugins
+    private func orderedCorePlugins() -> [any MacToolsPlugin] {
+        orderedPluginDescriptors().map(\.plugin)
     }
 
     private func orderedPluginDescriptors() -> [PluginDescriptor] {
@@ -843,30 +785,27 @@ final class PluginHost: ObservableObject {
     }
 
     private func defaultPluginDescriptors() -> [PluginDescriptor] {
-        var descriptorsByID: [String: PluginDescriptor] = [:]
+        plugins
+            .map { PluginDescriptor(metadata: $0.metadata, plugin: $0) }
+            .sorted { lhs, rhs in
+                if lhs.metadata.order == rhs.metadata.order {
+                    return lhs.metadata.title.localizedCompare(rhs.metadata.title) == .orderedAscending
+                }
 
-        for plugin in plugins {
-            let metadata = plugin.metadata
-            var descriptor = descriptorsByID[metadata.id]
-                ?? PluginDescriptor(metadata: metadata, featurePlugin: nil, componentPlugin: nil)
-            descriptor.featurePlugin = plugin
-            descriptorsByID[metadata.id] = descriptor
-        }
-
-        for plugin in componentPlugins {
-            let metadata = plugin.metadata
-            var descriptor = descriptorsByID[metadata.id]
-                ?? PluginDescriptor(metadata: metadata, featurePlugin: nil, componentPlugin: nil)
-            descriptor.componentPlugin = plugin
-            descriptorsByID[metadata.id] = descriptor
-        }
-
-        return descriptorsByID.values.sorted { lhs, rhs in
-            if lhs.metadata.order == rhs.metadata.order {
-                return lhs.metadata.title.localizedCompare(rhs.metadata.title) == .orderedAscending
+                return lhs.metadata.order < rhs.metadata.order
             }
+    }
 
-            return lhs.metadata.order < rhs.metadata.order
+    private func presentation(for plugin: any MacToolsPlugin) -> PluginFeaturePresentation {
+        switch (plugin.primaryPanel, plugin.componentPanel) {
+        case (.some, .some):
+            return .featureAndComponentPanel
+        case (.some, .none):
+            return .featurePanel
+        case (.none, .some):
+            return .componentPanel
+        case (.none, .none):
+            return .featurePanel
         }
     }
 
@@ -996,7 +935,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func requestPermissionGuidance(forPluginID pluginID: String, permissionID: String) {
-        guard corePluginsForCallbacks().contains(where: { plugin in
+        guard plugins.contains(where: { plugin in
             plugin.metadata.id == pluginID
                 && plugin.permissionRequirements.contains(where: { $0.id == permissionID })
         }) else {

@@ -19,7 +19,7 @@ final class PluginHostSliderActionTests: XCTestCase {
         host.setPanelSliderValue(
             0.78,
             controlID: "display.2.brightness",
-            for: plugin.manifest.id,
+            for: plugin.metadata.id,
             phase: .ended
         )
 
@@ -43,16 +43,19 @@ final class PluginHostSliderActionTests: XCTestCase {
 }
 
 @MainActor
-private final class MockSliderPlugin: FeaturePlugin {
-    let manifest = PluginManifest(
+private final class MockSliderPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata = PluginMetadata(
         id: "mock-slider",
         title: "Mock Slider",
         iconName: "sun.max",
         iconTint: Color(nsColor: .systemYellow),
-        controlStyle: .disclosure,
-        menuActionBehavior: .keepPresented,
         order: 1,
         defaultDescription: "Mock slider plugin"
+    )
+
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .disclosure,
+        menuActionBehavior: .keepPresented
     )
 
     var onStateChange: (() -> Void)?
@@ -60,7 +63,7 @@ private final class MockSliderPlugin: FeaturePlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var receivedActions: [PluginPanelAction] = []
 
-    var panelState: PluginPanelState {
+    var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: "Mock",
             isOn: false,
@@ -78,7 +81,7 @@ private final class MockSliderPlugin: FeaturePlugin {
 
     func refresh() {}
 
-    func handlePanelAction(_ action: PluginPanelAction) {
+    func handleAction(_ action: PluginPanelAction) {
         receivedActions.append(action)
     }
 

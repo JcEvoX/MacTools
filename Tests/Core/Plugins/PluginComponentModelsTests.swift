@@ -19,22 +19,32 @@ final class PluginComponentModelsTests: XCTestCase {
         XCTAssertNil(PluginComponentSpan(width: 1, height: 0))
     }
 
-    func testPluginMetadataDerivesFromFeatureManifest() {
-        let manifest = PluginManifest(
+    func testPluginMetadataCarriesStableIdentityAndDisplayFields() {
+        let metadata = PluginMetadata(
             id: "mock-feature",
             title: "Mock Feature",
             iconName: "sparkles",
             iconTint: Color(nsColor: .systemPurple),
-            controlStyle: .switch,
-            menuActionBehavior: .keepPresented,
             order: 42,
             defaultDescription: "Feature description"
         )
 
-        XCTAssertEqual(manifest.metadata.id, manifest.id)
-        XCTAssertEqual(manifest.metadata.title, manifest.title)
-        XCTAssertEqual(manifest.metadata.iconName, manifest.iconName)
-        XCTAssertEqual(manifest.metadata.order, manifest.order)
-        XCTAssertEqual(manifest.metadata.defaultDescription, manifest.defaultDescription)
+        XCTAssertEqual(metadata.id, "mock-feature")
+        XCTAssertEqual(metadata.title, "Mock Feature")
+        XCTAssertEqual(metadata.iconName, "sparkles")
+        XCTAssertEqual(metadata.order, 42)
+        XCTAssertEqual(metadata.defaultDescription, "Feature description")
+    }
+
+    func testPrimaryPanelDescriptorCarriesPanelSpecificFields() {
+        let descriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: "Run"
+        )
+
+        XCTAssertEqual(descriptor.controlStyle, .button)
+        XCTAssertEqual(descriptor.menuActionBehavior, .dismissBeforeHandling)
+        XCTAssertEqual(descriptor.buttonTitle, "Run")
     }
 }

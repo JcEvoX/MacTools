@@ -20,7 +20,7 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         XCTAssertFalse(host.featureManagementItems[0].isActive)
         XCTAssertFalse(host.panelItems[0].isExpanded)
 
-        host.setDisclosureExpanded(true, for: plugin.manifest.id)
+        host.setDisclosureExpanded(true, for: plugin.metadata.id)
 
         XCTAssertTrue(host.panelItems[0].isExpanded)
         XCTAssertFalse(host.featureManagementItems[0].isActive)
@@ -36,18 +36,18 @@ final class PluginHostDisclosureStateTests: XCTestCase {
         case .error:
             break
         case .secondary:
-            XCTFail("Expected .error when panelState.errorMessage is non-nil")
+            XCTFail("Expected .error when state.errorMessage is non-nil")
         }
     }
 
     func testRebuildReadsPanelStateOncePerPlugin() {
         let plugin = MockDisclosurePlugin()
         let host = makeHost(plugin: plugin)
-        plugin.panelStateReadCount = 0
+        plugin.stateReadCount = 0
 
-        host.setDisclosureExpanded(true, for: plugin.manifest.id)
+        host.setDisclosureExpanded(true, for: plugin.metadata.id)
 
-        XCTAssertEqual(plugin.panelStateReadCount, 1)
+        XCTAssertEqual(plugin.stateReadCount, 1)
     }
 
     private func makeHost(plugin: MockDisclosurePlugin) -> PluginHost {
@@ -64,16 +64,19 @@ final class PluginHostDisclosureStateTests: XCTestCase {
 }
 
 @MainActor
-private final class MockDisclosurePlugin: FeaturePlugin {
-    let manifest = PluginManifest(
+private final class MockDisclosurePlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata = PluginMetadata(
         id: "mock-disclosure",
         title: "Mock Disclosure",
         iconName: "display",
         iconTint: Color(nsColor: .systemBlue),
-        controlStyle: .disclosure,
-        menuActionBehavior: .keepPresented,
         order: 1,
         defaultDescription: "Mock plugin"
+    )
+
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .disclosure,
+        menuActionBehavior: .keepPresented
     )
 
     var onStateChange: (() -> Void)?
@@ -81,10 +84,10 @@ private final class MockDisclosurePlugin: FeaturePlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var isExpanded = false
     var errorMessage: String?
-    var panelStateReadCount = 0
+    var stateReadCount = 0
 
-    var panelState: PluginPanelState {
-        panelStateReadCount += 1
+    var primaryPanelState: PluginPanelState {
+        stateReadCount += 1
         return PluginPanelState(
             subtitle: "Mock plugin",
             isOn: false,
@@ -102,7 +105,7 @@ private final class MockDisclosurePlugin: FeaturePlugin {
 
     func refresh() {}
 
-    func handlePanelAction(_ action: PluginPanelAction) {
+    func handleAction(_ action: PluginPanelAction) {
         if case let .setDisclosureExpanded(value) = action {
             isExpanded = value
             onStateChange?()

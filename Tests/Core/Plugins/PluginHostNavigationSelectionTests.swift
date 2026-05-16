@@ -19,7 +19,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         host.setPanelNavigationSelectionValue(
             "display-2",
             controlID: "display-navigation",
-            for: plugin.manifest.id
+            for: plugin.metadata.id
         )
 
         XCTAssertEqual(
@@ -44,7 +44,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
 
-        host.invokePanelAction(controlID: "open-system-settings", for: plugin.manifest.id)
+        host.invokePanelAction(controlID: "open-system-settings", for: plugin.metadata.id)
 
         XCTAssertEqual(
             plugin.receivedActions,
@@ -66,16 +66,19 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
 }
 
 @MainActor
-private final class MockNavigationPlugin: FeaturePlugin {
-    let manifest = PluginManifest(
+private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata = PluginMetadata(
         id: "mock-navigation",
         title: "Mock Navigation",
         iconName: "display",
         iconTint: Color(nsColor: .systemBlue),
-        controlStyle: .disclosure,
-        menuActionBehavior: .keepPresented,
         order: 1,
         defaultDescription: "Mock navigation plugin"
+    )
+
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .disclosure,
+        menuActionBehavior: .keepPresented
     )
 
     var onStateChange: (() -> Void)?
@@ -83,7 +86,7 @@ private final class MockNavigationPlugin: FeaturePlugin {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var receivedActions: [PluginPanelAction] = []
 
-    var panelState: PluginPanelState {
+    var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: "Mock",
             isOn: false,
@@ -101,7 +104,7 @@ private final class MockNavigationPlugin: FeaturePlugin {
 
     func refresh() {}
 
-    func handlePanelAction(_ action: PluginPanelAction) {
+    func handleAction(_ action: PluginPanelAction) {
         receivedActions.append(action)
     }
 

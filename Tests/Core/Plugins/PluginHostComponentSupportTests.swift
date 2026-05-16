@@ -12,9 +12,9 @@ final class PluginHostComponentSupportTests: XCTestCase {
         super.tearDown()
     }
 
-    func testComponentPluginOnlyAppearsInComponentItems() {
-        let componentPlugin = MockComponentPlugin(id: "component")
-        let host = makeHost(componentPlugins: [componentPlugin])
+    func testComponentPanelPluginOnlyAppearsInComponentItems() {
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         XCTAssertTrue(host.panelItems.isEmpty)
         XCTAssertEqual(host.componentItems.map(\.id), ["component"])
@@ -22,8 +22,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testComponentVisibilityUsesSharedDisplayPreferences() {
-        let componentPlugin = MockComponentPlugin(id: "component")
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         host.setFeatureVisibility(false, for: "component")
 
@@ -32,9 +32,9 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testComponentOrderUsesSharedDisplayPreferences() {
-        let first = MockComponentPlugin(id: "first", order: 1)
-        let second = MockComponentPlugin(id: "second", order: 2)
-        let host = makeHost(componentPlugins: [first, second])
+        let first = MockComponentPanelPlugin(id: "first", order: 1)
+        let second = MockComponentPanelPlugin(id: "second", order: 2)
+        let host = makeHost(plugins: [first, second])
 
         host.moveFeatureManagementItem(id: "second", toOffset: 0)
 
@@ -43,7 +43,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testComponentOnlyPluginContributesSettingsPermissionsAndShortcuts() {
-        let componentPlugin = MockComponentPlugin(
+        let componentPanelPlugin = MockComponentPanelPlugin(
             id: "component",
             permissionRequirements: [
                 PluginPermissionRequirement(
@@ -76,7 +76,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
                 )
             ]
         )
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         XCTAssertEqual(host.permissionCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.settingsCards.map(\.pluginID), ["component"])
@@ -88,11 +88,10 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testPluginsWithoutConfigurationSurfaceAreHiddenFromConfigurationList() {
-        let featurePlugin = MockFeaturePlugin(id: "feature")
-        let componentPlugin = MockComponentPlugin(id: "component")
+        let primaryPanelPlugin = MockPrimaryPanelPlugin(id: "feature")
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
         let host = makeHost(
-            plugins: [featurePlugin],
-            componentPlugins: [componentPlugin]
+            plugins: [primaryPanelPlugin, componentPanelPlugin]
         )
 
         XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
@@ -100,7 +99,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testConfigurationListUsesSharedPluginOrderAndSelectsFirstItem() {
-        let first = MockComponentPlugin(
+        let first = MockComponentPanelPlugin(
             id: "first",
             order: 1,
             permissionRequirements: [
@@ -112,7 +111,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
                 )
             ]
         )
-        let second = MockComponentPlugin(
+        let second = MockComponentPanelPlugin(
             id: "second",
             order: 2,
             shortcutDefinitions: [
@@ -127,7 +126,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
                 )
             ]
         )
-        let host = makeHost(componentPlugins: [first, second])
+        let host = makeHost(plugins: [first, second])
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["first", "second"])
         XCTAssertEqual(host.selectedPluginConfigurationID, "first")
@@ -140,13 +139,13 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
     func testCustomPluginConfigurationContributesConfigurationItemAndCachesView() {
         let configurationCounter = ConfigurationRenderCounter()
-        let componentPlugin = MockComponentPlugin(
+        let componentPanelPlugin = MockComponentPanelPlugin(
             id: "component",
             configuration: PluginConfiguration(description: "自定义配置") { context in
                 configurationCounter.makeView(context: context)
             }
         )
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
         XCTAssertEqual(host.pluginConfigurationItems.first?.description, "自定义配置")
@@ -159,29 +158,29 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     func testComponentActiveStateContributesToHasActivePlugin() {
-        let componentPlugin = MockComponentPlugin(id: "component", isActive: true)
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component", isActive: true)
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         XCTAssertTrue(host.hasActivePlugin)
         XCTAssertEqual(host.featureManagementItems.first?.isActive, true)
     }
 
     func testComponentViewsAreCachedForFastPanelPresentation() {
-        let componentPlugin = MockComponentPlugin(id: "component")
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         let first = host.componentViewItem(for: "component", dismiss: {})
         let second = host.componentViewItem(for: "component", dismiss: {})
 
         XCTAssertEqual(first.id, "component")
         XCTAssertEqual(second.id, "component")
-        XCTAssertEqual(componentPlugin.makeComponentViewCallCount, 1)
+        XCTAssertEqual(componentPanelPlugin.makeViewCallCount, 1)
     }
 
     func testDiscardComponentViewsReleasesCachedComponentContent() {
-        let first = MockComponentPlugin(id: "first", order: 1)
-        let second = MockComponentPlugin(id: "second", order: 2)
-        let host = makeHost(componentPlugins: [first, second])
+        let first = MockComponentPanelPlugin(id: "first", order: 1)
+        let second = MockComponentPanelPlugin(id: "second", order: 2)
+        let host = makeHost(plugins: [first, second])
 
         _ = host.componentViewItem(for: "first", dismiss: {})
         _ = host.componentViewItem(for: "second", dismiss: {})
@@ -189,31 +188,40 @@ final class PluginHostComponentSupportTests: XCTestCase {
         _ = host.componentViewItem(for: "first", dismiss: {})
         _ = host.componentViewItem(for: "second", dismiss: {})
 
-        XCTAssertEqual(first.makeComponentViewCallCount, 2)
-        XCTAssertEqual(second.makeComponentViewCallCount, 2)
+        XCTAssertEqual(first.makeViewCallCount, 2)
+        XCTAssertEqual(second.makeViewCallCount, 2)
     }
 
     func testComponentContextCarriesPanelVisibility() {
-        let componentPlugin = MockComponentPlugin(id: "component")
-        let host = makeHost(componentPlugins: [componentPlugin])
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
 
         _ = host.componentViewItem(for: "component", dismiss: {}, isPanelVisible: false)
 
-        XCTAssertEqual(componentPlugin.receivedPanelVisibilityValues, [false])
+        XCTAssertEqual(componentPanelPlugin.receivedPanelVisibilityValues, [false])
     }
 
-    func testFeaturePluginStillAppearsOnlyInPanelItems() {
-        let featurePlugin = MockFeaturePlugin(id: "feature")
-        let host = makeHost(plugins: [featurePlugin])
+    func testPrimaryPanelPluginAppearsOnlyInPanelItems() {
+        let primaryPanelPlugin = MockPrimaryPanelPlugin(id: "feature")
+        let host = makeHost(plugins: [primaryPanelPlugin])
 
         XCTAssertEqual(host.panelItems.map(\.id), ["feature"])
         XCTAssertTrue(host.componentItems.isEmpty)
         XCTAssertEqual(host.featureManagementItems.map(\.presentation), [.featurePanel])
     }
 
+    func testPluginCanContributeFeatureAndComponentPanels() {
+        let plugin = MockCombinedPlugin(id: "combined")
+        let host = makeHost(plugins: [plugin])
+
+        XCTAssertEqual(host.panelItems.map(\.id), ["combined"])
+        XCTAssertEqual(host.componentItems.map(\.id), ["combined"])
+        XCTAssertEqual(host.featureManagementItems.map(\.presentation), [.featureAndComponentPanel])
+    }
+
     func testDisplayConfigurationChangeRefreshesOnlyDisplayTopologyPlugins() async throws {
         let displayPlugin = MockDisplayTopologyPlugin(id: "display")
-        let regularPlugin = MockFeaturePlugin(id: "feature")
+        let regularPlugin = MockPrimaryPanelPlugin(id: "feature")
         let observer = MockDisplayConfigurationObserver()
         let host = makeHost(
             plugins: [displayPlugin, regularPlugin],
@@ -253,8 +261,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
     }
 
     private func makeHost(
-        plugins: [any FeaturePlugin] = [],
-        componentPlugins: [any ComponentPlugin] = [],
+        plugins: [any MacToolsPlugin] = [],
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180)
     ) -> PluginHost {
@@ -263,7 +270,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         return PluginHost(
             plugins: plugins,
-            componentPlugins: componentPlugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
@@ -283,9 +289,9 @@ private final class MockDisplayConfigurationObserver: DisplayConfigurationObserv
 }
 
 @MainActor
-private final class MockComponentPlugin: ComponentPlugin {
+private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel {
     let metadata: PluginMetadata
-    let componentDescriptor: PluginComponentDescriptor
+    let descriptor: PluginComponentDescriptor
     let permissionRequirements: [PluginPermissionRequirement]
     let settingsSections: [PluginSettingsSection]
     let shortcutDefinitions: [PluginShortcutDefinition]
@@ -294,7 +300,7 @@ private final class MockComponentPlugin: ComponentPlugin {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private let isActive: Bool
-    private(set) var makeComponentViewCallCount = 0
+    private(set) var makeViewCallCount = 0
     private(set) var receivedPanelVisibilityValues: [Bool] = []
 
     init(
@@ -315,7 +321,7 @@ private final class MockComponentPlugin: ComponentPlugin {
             order: order,
             defaultDescription: "Component \(id)"
         )
-        self.componentDescriptor = PluginComponentDescriptor(span: span)
+        self.descriptor = PluginComponentDescriptor(span: span)
         self.isActive = isActive
         self.permissionRequirements = permissionRequirements
         self.settingsSections = settingsSections
@@ -323,7 +329,7 @@ private final class MockComponentPlugin: ComponentPlugin {
         self.configuration = configuration
     }
 
-    var componentState: PluginComponentState {
+    var componentPanelState: PluginComponentState {
         PluginComponentState(
             subtitle: "Component subtitle",
             isActive: isActive,
@@ -333,8 +339,8 @@ private final class MockComponentPlugin: ComponentPlugin {
         )
     }
 
-    func makeComponentView(context: PluginComponentContext) -> AnyView {
-        makeComponentViewCallCount += 1
+    func makeView(context: PluginComponentContext) -> AnyView {
+        makeViewCallCount += 1
         receivedPanelVisibilityValues.append(context.isPanelVisible)
         return AnyView(Text(context.pluginID))
     }
@@ -361,27 +367,30 @@ private final class ConfigurationRenderCounter {
 }
 
 @MainActor
-private final class MockFeaturePlugin: FeaturePlugin {
-    let manifest: PluginManifest
+private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var refreshCallCount = 0
 
-    init(id: String) {
-        self.manifest = PluginManifest(
+    init(id: String, order: Int = 1) {
+        self.metadata = PluginMetadata(
             id: id,
             title: id,
             iconName: "sparkles",
             iconTint: Color(nsColor: .systemBlue),
-            controlStyle: .switch,
-            menuActionBehavior: .keepPresented,
-            order: 1,
+            order: order,
             defaultDescription: "Feature \(id)"
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .switch,
+            menuActionBehavior: .keepPresented
         )
     }
 
-    var panelState: PluginPanelState {
+    var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: "Feature subtitle",
             isOn: false,
@@ -400,7 +409,7 @@ private final class MockFeaturePlugin: FeaturePlugin {
     func refresh() {
         refreshCallCount += 1
     }
-    func handlePanelAction(_ action: PluginPanelAction) {}
+    func handleAction(_ action: PluginPanelAction) {}
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
@@ -412,8 +421,61 @@ private final class MockFeaturePlugin: FeaturePlugin {
 }
 
 @MainActor
-private final class MockDisplayTopologyPlugin: FeaturePlugin, DisplayTopologyRefreshing {
-    let manifest: PluginManifest
+private final class MockCombinedPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .switch,
+        menuActionBehavior: .keepPresented
+    )
+    let descriptor = PluginComponentDescriptor(span: .oneByOne)
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    init(id: String) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemPurple),
+            order: 1,
+            defaultDescription: "Combined \(id)"
+        )
+    }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: "Combined subtitle",
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var componentPanelState: PluginComponentState {
+        PluginComponentState(
+            subtitle: "Combined component subtitle",
+            isActive: false,
+            isEnabled: true,
+            isVisible: true,
+            errorMessage: nil
+        )
+    }
+
+    func makeView(context: PluginComponentContext) -> AnyView {
+        AnyView(Text(context.pluginID))
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
+}
+
+@MainActor
+private final class MockDisplayTopologyPlugin: MacToolsPlugin, PluginPrimaryPanel, DisplayTopologyRefreshing {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -421,19 +483,21 @@ private final class MockDisplayTopologyPlugin: FeaturePlugin, DisplayTopologyRef
     var refreshDisplayTopologyCallCount = 0
 
     init(id: String) {
-        self.manifest = PluginManifest(
+        self.metadata = PluginMetadata(
             id: id,
             title: id,
             iconName: "display",
             iconTint: Color(nsColor: .systemBlue),
-            controlStyle: .disclosure,
-            menuActionBehavior: .keepPresented,
             order: 1,
             defaultDescription: "Display \(id)"
         )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .disclosure,
+            menuActionBehavior: .keepPresented
+        )
     }
 
-    var panelState: PluginPanelState {
+    var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: "Display subtitle \(refreshDisplayTopologyCallCount)",
             isOn: false,
@@ -457,7 +521,7 @@ private final class MockDisplayTopologyPlugin: FeaturePlugin, DisplayTopologyRef
         refreshDisplayTopologyCallCount += 1
     }
 
-    func handlePanelAction(_ action: PluginPanelAction) {}
+    func handleAction(_ action: PluginPanelAction) {}
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
