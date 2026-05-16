@@ -73,6 +73,7 @@ final class PluginHost: ObservableObject {
                 DiskCleanFeature.shared.makePlugin(),
                 LaunchControlFeature.shared.makePlugin(),
                 EjectDiskPlugin(),
+                EmptyTrashPlugin(),
                 PhysicalCleanModePlugin(),
                 ClipboardClearPlugin()
             ],

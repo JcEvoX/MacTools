@@ -24,6 +24,7 @@ enum AppLog {
     static let hideNotchOverlayManager = Logger(subsystem: subsystem, category: "HideNotchOverlayManager")
     static let hideDockPlugin = Logger(subsystem: subsystem, category: "HideDockPlugin")
     static let ejectDiskPlugin = Logger(subsystem: subsystem, category: "EjectDiskPlugin")
+    static let emptyTrashPlugin = Logger(subsystem: subsystem, category: "EmptyTrashPlugin")
     static let nightShiftPlugin = Logger(subsystem: subsystem, category: "NightShiftPlugin")
 
     static var isVerboseLoggingEnabled: Bool {
