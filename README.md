@@ -92,8 +92,4 @@ xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -de
 贡献、测试和发布流程请参考 [CONTRIBUTING.md](CONTRIBUTING.md)。
 GitHub Actions 自动构建与发布配置请参考 [docs/github-actions.md](docs/github-actions.md)。
 
-第三方素材许可说明见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。
-
-## 致谢
-
-- [MiddleClick](https://github.com/artginzburg/MiddleClick)：模拟鼠标中键功能的核心思路参考自此项目，感谢作者及历代贡献者的开源工作。
+第三方素材、依赖与实现参考说明见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。

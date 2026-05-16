@@ -6,7 +6,7 @@ import OSLog
 
 /// 管理触控板多点触控设备回调，检测到指定手指数后通过 CGEvent tap 把系统左键事件原地改为中键。
 ///
-/// 工作原理（与 MiddleClick tapToClick=true 路径一致）：
+/// 工作原理（行为思路参考 MiddleClick 的 tap-to-click 模式）：
 /// - 多点触控回调维护 `threeDown` 标志（三指正在触碰 → true）。
 /// - CGEvent tap 在主线程拦截 `leftMouseDown/Up`，三指期间将其原地改为 `otherMouseDown/Up`。
 /// - 系统"轻点点按"产生的左键事件被转换，永不传递给应用，不额外合成事件，不会双击。
@@ -46,7 +46,6 @@ final class MiddleClickSession: @unchecked Sendable {
     // MARK: - 多点触控回调
     //
     // 只维护 threeDown 标志，不做手势识别。
-    // 与 MiddleClick 的 state.threeDown 赋值逻辑完全一致。
 
     private let touchCallback: MTFrameCallbackFunction = { _, data, nFingers, _, _ in
         guard let session = MiddleClickSession.activeSession else { return }

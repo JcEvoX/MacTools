@@ -1,13 +1,13 @@
-Third-party notices
-===================
+第三方说明
+==========
 
-RunCat menu bar animation frames are adapted from Kyome22/menubar_runcat.
+本目录用于记录 MacTools 使用到的第三方素材、依赖和实现参考。以下链接用于来源追踪与致谢，不表示全部项目都作为第三方组件被打包。
 
-- Source: https://github.com/Kyome22/menubar_runcat
-- License: Apache License 2.0
-- Copied assets:
-  - `Sources/Resources/BuiltinMenuBarAnimations/RunCat/cat0.png` through `cat4.png`
-  - `Sources/Resources/BuiltinMenuBarAnimations/RunCatAssets/`
-
-The full Apache License 2.0 text for menubar_runcat is included in
-`menubar_runcat-LICENSE.txt`.
+- [Kyome22/menubar_runcat](https://github.com/Kyome22/menubar_runcat)
+- [sparkle-project/Sparkle](https://github.com/sparkle-project/Sparkle)
+- [LunarBar-app/LunarBar](https://github.com/LunarBar-app/LunarBar)
+- [MonitorControl/MonitorControl](https://github.com/MonitorControl/MonitorControl)
+- [artginzburg/MiddleClick](https://github.com/artginzburg/MiddleClick)
+- [orchetect/MenuBarExtraAccess](https://github.com/orchetect/MenuBarExtraAccess)
+- [auramagi/everypinch](https://github.com/auramagi/everypinch)
+- [asmagill/hs._asm.undocumented.touchdevice](https://github.com/asmagill/hs._asm.undocumented.touchdevice)

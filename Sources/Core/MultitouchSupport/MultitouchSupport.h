@@ -1,7 +1,7 @@
 // References:
-//   https://github.com/artginzburg/MiddleClick
 //   https://github.com/auramagi/everypinch
 //   https://github.com/asmagill/hs._asm.undocumented.touchdevice
+// License notes are tracked in Sources/Resources/ThirdPartyNotices.
 
 #include <Cocoa/Cocoa.h>
 #include <CoreFoundation/CoreFoundation.h>
