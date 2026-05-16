@@ -69,6 +69,7 @@ final class PluginHost: ObservableObject {
                 MiddleClickPlugin(),
                 DiskCleanFeature.shared.makePlugin(),
                 LaunchControlFeature.shared.makePlugin(),
+                EjectDiskPlugin(),
                 PhysicalCleanModePlugin()
             ],
             componentPlugins: [
@@ -539,7 +540,9 @@ final class PluginHost: ObservableObject {
                 isOn: state.isOn,
                 isExpanded: state.isExpanded,
                 isEnabled: state.isEnabled,
-                detail: state.detail
+                detail: state.detail,
+                buttonActionID: manifest.controlStyle == .button ? "execute" : nil,
+                buttonTitle: manifest.buttonTitle
             )
         }
 

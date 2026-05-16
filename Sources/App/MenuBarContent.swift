@@ -711,6 +711,7 @@ struct FeatureRowView: View {
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
     @State private var isHovered = false
+    @State private var didPushDisabledCursor = false
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -729,6 +730,50 @@ struct FeatureRowView: View {
                 .disabled(!item.isEnabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+            case .button:
+                HStack(alignment: .center, spacing: FeatureRowLayout.rowSpacing) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: FeatureRowLayout.iconCornerRadius, style: .continuous)
+                            .fill(Color.primary.opacity(0.08))
+
+                        Image(systemName: item.iconName)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+
+                        Text(item.description)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(item.helpText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        if let actionID = item.buttonActionID {
+                            onActionInvoke(actionID, item.menuActionBehavior)
+                        }
+                    } label: {
+                        Text(item.buttonTitle ?? "操作")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 45, minHeight: 21)
+                            .background(item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor))
+                            .cornerRadius(15)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!item.isEnabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+
             }
 
             if let detail = detailToDisplay {
@@ -755,7 +800,16 @@ struct FeatureRowView: View {
                 .fill(item.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous))
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            updateCursorForDisabledState(hovering: hovering)
+        }
+        .onChange(of: item.isEnabled) { _, _ in
+            updateCursorForDisabledState(hovering: isHovered)
+        }
+        .onDisappear {
+            resetDisabledCursorIfNeeded()
+        }
         .help(item.helpText)
     }
 
@@ -797,6 +851,11 @@ struct FeatureRowView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: FeatureRowLayout.chevronSize, height: FeatureRowLayout.chevronSize)
+            case .button:
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: FeatureRowLayout.chevronSize, height: FeatureRowLayout.chevronSize)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -813,6 +872,24 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private func updateCursorForDisabledState(hovering: Bool) {
+        if !item.isEnabled && hovering {
+            if !didPushDisabledCursor {
+                NSCursor.operationNotAllowed.push()
+                didPushDisabledCursor = true
+            }
+        } else {
+            resetDisabledCursorIfNeeded()
+        }
+    }
+
+    private func resetDisabledCursorIfNeeded() {
+        if didPushDisabledCursor {
+            NSCursor.pop()
+            didPushDisabledCursor = false
+        }
     }
 }
 

@@ -13,6 +13,7 @@ struct PluginMetadata: Identifiable {
 enum PluginControlStyle {
     case `switch`
     case disclosure
+    case button
 }
 
 enum PluginPanelAction: Equatable {
@@ -87,6 +88,29 @@ struct PluginManifest: Identifiable {
     let menuActionBehavior: PluginMenuActionBehavior
     let order: Int
     let defaultDescription: String
+    let buttonTitle: String?
+
+    init(
+        id: String,
+        title: String,
+        iconName: String,
+        iconTint: Color,
+        controlStyle: PluginControlStyle,
+        menuActionBehavior: PluginMenuActionBehavior,
+        order: Int,
+        defaultDescription: String,
+        buttonTitle: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.iconName = iconName
+        self.iconTint = iconTint
+        self.controlStyle = controlStyle
+        self.menuActionBehavior = menuActionBehavior
+        self.order = order
+        self.defaultDescription = defaultDescription
+        self.buttonTitle = buttonTitle
+    }
 
     var metadata: PluginMetadata {
         PluginMetadata(
@@ -372,6 +396,8 @@ struct PluginPanelItem: Identifiable {
     let isExpanded: Bool
     let isEnabled: Bool
     let detail: PluginPanelDetail?
+    let buttonActionID: String?
+    let buttonTitle: String?
 }
 
 enum PluginFeaturePresentation: Equatable {

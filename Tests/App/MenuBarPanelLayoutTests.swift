@@ -71,7 +71,9 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             isOn: false,
             isExpanded: true,
             isEnabled: true,
-            detail: PluginPanelDetail(primaryControls: [sliderControl], secondaryPanel: nil)
+            detail: PluginPanelDetail(primaryControls: [sliderControl], secondaryPanel: nil),
+            buttonActionID: nil,
+            buttonTitle: nil
         )
 
         XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
@@ -132,7 +134,9 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             isOn: false,
             isExpanded: isExpanded,
             isEnabled: true,
-            detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: secondaryPanel)
+            detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: secondaryPanel),
+            buttonActionID: nil,
+            buttonTitle: nil
         )
     }
 }
