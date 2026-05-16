@@ -58,18 +58,6 @@ brew upgrade --cask --greedy ggbond268/mactools/mactools
 brew info --cask ggbond268/mactools/mactools
 ```
 
-## 状态栏图标自定义
-
-在“设置 > 通用”中可以自定义 MacTools 在 macOS 菜单栏里的图标：
-
-- 支持 PNG、JPG、WebP、ICNS 等常见图片格式，也支持导入轻量 GIF/MP4 动画。
-- 上传或选择图标后会统一应用到浅色和深色菜单栏，并保留原始图像颜色。
-- 导入图片和动画时会默认扣除纯色背景，减少手动调节。
-- 动画导入会转换为菜单栏尺寸的 PNG 帧，并限制文件大小、帧数和分辨率，降低长期常驻时的资源占用。
-- 支持手动播放速度调节，范围为 0.5x 到 5x；也可以选择根据 CPU、GPU、内存负载自动调整速度。
-- 内置 RunCat、奔跑狗狗和多组动态图标，可直接选择并循环播放。
-- 最近使用的图标会保存在本机，应用重启后继续生效，也可以一键恢复默认图标。
-
 ## 开发
 
 ```bash
@@ -88,4 +76,14 @@ xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -de
 贡献、测试和发布流程请参考 [CONTRIBUTING.md](CONTRIBUTING.md)。
 GitHub Actions 自动构建与发布配置请参考 [docs/github-actions.md](docs/github-actions.md)。
 
-第三方素材、依赖与实现参考说明见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。
+## 许可证
+
+MacTools 基于 [Apache License 2.0](LICENSE) 开源。
+
+## 致谢
+
+- 第三方素材、依赖与实现参考见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。
+
+<a href="https://github.com/ggbond268/MacTools/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ggbond268/MacTools" alt="contributors">
+</a>
