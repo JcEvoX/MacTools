@@ -83,7 +83,8 @@ MacTools 基于 [Apache License 2.0](LICENSE) 开源。
 ## 致谢
 
 - 第三方素材、依赖与实现参考见 [Sources/Resources/ThirdPartyNotices](Sources/Resources/ThirdPartyNotices)。
+- 贡献者
 
-<a href="https://github.com/ggbond268/MacTools/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=ggbond268/MacTools" alt="contributors">
-</a>
+  <a href="https://github.com/ggbond268/MacTools/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=ggbond268/MacTools&max=120&columns=12" width="480" alt="contributors">
+  </a>
