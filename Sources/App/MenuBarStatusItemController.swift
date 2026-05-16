@@ -325,7 +325,7 @@ final class MenuBarStatusItemController: NSObject {
             return event
         }
 
-        guard !isEventInsidePopover(event), !isEventInsideStatusButton(event) else {
+        guard !isEventInsidePresentedPanel(event), !isEventInsideStatusButton(event) else {
             return event
         }
 
@@ -333,12 +333,12 @@ final class MenuBarStatusItemController: NSObject {
         return event
     }
 
-    private func isEventInsidePopover(_ event: NSEvent) -> Bool {
+    private func isEventInsidePresentedPanel(_ event: NSEvent) -> Bool {
         guard let eventWindow = event.window else {
             return false
         }
 
-        return panelPresenter.containsPopoverWindow(eventWindow)
+        return panelPresenter.containsPresentedWindow(eventWindow)
     }
 
     private func isEventInsideStatusButton(_ event: NSEvent) -> Bool {

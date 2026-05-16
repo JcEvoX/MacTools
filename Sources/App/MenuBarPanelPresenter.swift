@@ -1,8 +1,26 @@
 import AppKit
 import SwiftUI
 
+enum MenuBarPanelWindowRegistry {
+    private static let secondaryPanelIdentifier = NSUserInterfaceItemIdentifier(
+        "MacTools.MenuBarSecondaryPanel"
+    )
+
+    @MainActor
+    static func markSecondaryPanel(_ window: NSWindow) {
+        window.identifier = secondaryPanelIdentifier
+    }
+
+    @MainActor
+    static func containsAuxiliaryPanelWindow(_ window: NSWindow) -> Bool {
+        window.identifier == secondaryPanelIdentifier
+    }
+}
+
 @MainActor
 final class MenuBarPanelPresenter: NSObject {
+    static let popoverBehavior: NSPopover.Behavior = .applicationDefined
+
     private let pluginHost: PluginHost
     private let onDismiss: () -> Void
     private let onAllPanelsClosed: () -> Void
@@ -105,16 +123,19 @@ final class MenuBarPanelPresenter: NSObject {
         componentPopover.performClose(nil)
     }
 
-    func containsPopoverWindow(_ window: NSWindow) -> Bool {
+    func containsPresentedWindow(_ window: NSWindow) -> Bool {
         window === featurePopover.contentViewController?.view.window
             || window === componentPopover.contentViewController?.view.window
+            || MenuBarPanelWindowRegistry.containsAuxiliaryPanelWindow(window)
     }
 
     private func configure(
         _ popover: NSPopover,
         contentViewController: NSViewController
     ) {
-        popover.behavior = .transient
+        // Dismissal is coordinated by MenuBarStatusItemController so sibling
+        // panels can receive clicks without AppKit closing the popover first.
+        popover.behavior = Self.popoverBehavior
         popover.animates = false
         popover.delegate = self
         popover.contentViewController = contentViewController

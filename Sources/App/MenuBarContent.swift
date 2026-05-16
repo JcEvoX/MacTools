@@ -1538,6 +1538,7 @@ private final class SecondaryPanelController: ObservableObject {
             defer: false
         )
         panel.isFloatingPanel = true
+        MenuBarPanelWindowRegistry.markSecondaryPanel(panel)
         // 必须保持为 false：对 LSUIElement 菜单栏应用来说，MenuBarExtra 展开时
         // 应用常处于非激活态，但菜单本身仍可交互。若开启 hidesOnDeactivate，
         // 侧栏会在展示后立即隐藏，甚至陷入 isVisible 仍为 true 但实际像素不上屏
