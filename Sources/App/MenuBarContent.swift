@@ -762,7 +762,7 @@ struct FeatureRowView: View {
                         }
                     } label: {
                         Text(item.buttonTitle ?? "操作")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11))
                             .foregroundStyle(.white)
                             .frame(minWidth: 45, minHeight: 21)
                             .background(item.isEnabled ? Color.accentColor : Color(NSColor.secondaryLabelColor))
