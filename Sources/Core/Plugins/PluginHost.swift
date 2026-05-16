@@ -65,6 +65,7 @@ final class PluginHost: ObservableObject {
                 DisplayBrightnessPlugin(),
                 DisplayResolutionPlugin(),
                 HideNotchPlugin(),
+                HideDockPlugin(),
                 KeepAwakePlugin(),
                 MiddleClickPlugin(),
                 DiskCleanFeature.shared.makePlugin(),
