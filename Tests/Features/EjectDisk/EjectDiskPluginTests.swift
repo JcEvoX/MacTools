@@ -10,10 +10,11 @@ final class EjectDiskPluginTests: XCTestCase {
         XCTAssertEqual(plugin.manifest.title, "推出磁盘")
     }
 
-    func testControlStyleIsSwitch() {
+    func testControlStyleIsButton() {
         let plugin = EjectDiskPlugin()
 
-        XCTAssertEqual(plugin.manifest.controlStyle, .switch)
+        XCTAssertEqual(plugin.manifest.controlStyle, .button)
+        XCTAssertEqual(plugin.manifest.buttonTitle, "推出")
     }
 
     func testInitialStateHasEjectedOffAndIsDisabled() {
