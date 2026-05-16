@@ -46,7 +46,7 @@ final class KeepAwakePlugin: FeaturePlugin {
     let manifest = PluginManifest(
         id: "keep-awake",
         title: "阻止休眠",
-        iconName: "powersleep",
+        iconName: "moon",
         iconTint: Color(nsColor: .systemOrange),
         controlStyle: .switch,
         menuActionBehavior: .keepPresented,

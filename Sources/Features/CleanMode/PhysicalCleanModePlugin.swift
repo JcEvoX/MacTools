@@ -25,7 +25,7 @@ final class PhysicalCleanModePlugin: FeaturePlugin, AccessibilityPermissionRefre
     let manifest = PluginManifest(
         id: "physical-clean-mode",
         title: "清洁模式",
-        iconName: "sparkles.rectangle.stack",
+        iconName: "sparkles",
         iconTint: Color(nsColor: .systemCyan),
         controlStyle: .switch,
         menuActionBehavior: .dismissBeforeHandling,

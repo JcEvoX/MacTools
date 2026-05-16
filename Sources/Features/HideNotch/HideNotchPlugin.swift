@@ -6,7 +6,7 @@ final class HideNotchPlugin: FeaturePlugin {
     let manifest = PluginManifest(
         id: "hide-notch",
         title: "隐藏刘海",
-        iconName: "macbook.and.iphone",
+        iconName: "rectangle.topthird.inset.filled",
         iconTint: Color(nsColor: .labelColor),
         controlStyle: .switch,
         menuActionBehavior: .keepPresented,

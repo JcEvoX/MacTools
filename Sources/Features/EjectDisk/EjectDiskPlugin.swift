@@ -7,7 +7,7 @@ final class EjectDiskPlugin: FeaturePlugin {
     let manifest = PluginManifest(
         id: "eject-disk",
         title: "推出磁盘",
-        iconName: "eject.fill",
+        iconName: "eject",
         iconTint: Color(nsColor: .systemGray),
         controlStyle: .button,
         menuActionBehavior: .keepPresented,
