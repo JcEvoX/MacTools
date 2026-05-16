@@ -69,6 +69,7 @@ final class PluginHost: ObservableObject {
                 MiddleClickPlugin(),
                 DiskCleanFeature.shared.makePlugin(),
                 LaunchControlFeature.shared.makePlugin(),
+                EjectDiskPlugin(),
                 PhysicalCleanModePlugin()
             ],
             componentPlugins: [
