@@ -85,7 +85,7 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 
 ## Release Notes 规范
 
-Release 工作流会在创建或更新 GitHub Release 前自动生成更新日志。生成逻辑使用 GitHub 的 release notes API，并读取 `.github/release.yml` 中的分类配置。
+Release 工作流会在创建或更新 GitHub Release 前自动生成更新日志。生成逻辑使用 GitHub 的 release notes API，并读取 `.github/release.yml` 中的分类配置。同一份 Markdown 更新日志也会写入 Sparkle appcast 的 `<description sparkle:format="markdown">`，因此应用内“检查更新”的 Sparkle 弹窗会直接显示内嵌更新日志，而不是加载 GitHub Release 页面。
 
 每个会进入 release notes 的 PR 应至少带一个发布分类 label：
 
@@ -125,7 +125,7 @@ changed: refine menu item icon names
 .github/release-highlights/v0.14.0.md
 ```
 
-文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。
+文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。该文件也会同步进入 Sparkle 更新弹窗。
 
 稳定版发布成功创建 GitHub Release 后，Release 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时用刚生成的 DMG URL 和 SHA-256 更新 `ggbond268/homebrew-mactools` 中的 `Casks/mactools.rb`，并打开更新 PR。预发布版本会跳过 Homebrew 同步；未配置该 secret 时也会跳过，不影响发布。Homebrew PR 合并后，用户本地仍需要先运行 `brew update` 刷新 tap，才能通过 `brew upgrade --cask --greedy ggbond268/mactools/mactools` 检测到新版本。
 
