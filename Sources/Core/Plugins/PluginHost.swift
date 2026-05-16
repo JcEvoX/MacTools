@@ -657,6 +657,8 @@ final class PluginHost: ObservableObject {
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
+        // 清空所有配置视图缓存，确保状态改变时视图能刷新
+        configurationViewCache.removeAll()
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedPluginConfigurationID()
 

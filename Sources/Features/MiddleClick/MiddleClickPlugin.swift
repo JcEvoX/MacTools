@@ -18,10 +18,26 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
 
     private enum DefaultsKey {
         static let isEnabled = "middle-click.enabled"
+        static let requiredFingerCount = "middle-click.required-finger-count"
     }
 
     private enum PermissionID {
         static let accessibility = "accessibility"
+    }
+
+    private enum ControlID {
+        static let fingerCount = "finger-count"
+    }
+
+    // 支持的手指数量
+    private enum FingerCountOption: Int, CaseIterable {
+        case three = 3
+        case four = 4
+        case five = 5
+
+        var label: String {
+            "\(self.rawValue) 指"
+        }
     }
 
     // MARK: - Manifest
@@ -34,7 +50,7 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
         controlStyle: .switch,
         menuActionBehavior: .keepPresented,
         order: 55,
-        defaultDescription: "触控板三指轻点，模拟鼠标中键按下"
+        defaultDescription: "触控板轻点 → 模拟鼠标中键"
     )
 
     // MARK: - Plugin Wiring
@@ -50,15 +66,23 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
     private var isAccessibilityGranted: Bool
     private var session: MiddleClickSession?
     private var lastErrorMessage: String?
+    private var requiredFingerCount: Int
 
     // MARK: - Init
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
+        self.requiredFingerCount = userDefaults.integer(forKey: DefaultsKey.requiredFingerCount)
+        
+        // 如果没有存储的值，默认为 3 指
+        if self.requiredFingerCount == 0 {
+            self.requiredFingerCount = 3
+        }
 
         if isAccessibilityGranted && userDefaults.bool(forKey: DefaultsKey.isEnabled) {
             let s = MiddleClickSession()
+            s.requiredFingerCount = self.requiredFingerCount
             s.activate()
             session = s
         }
@@ -67,8 +91,12 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
     // MARK: - FeaturePlugin
 
     var panelState: PluginPanelState {
-        PluginPanelState(
-            subtitle: panelSubtitle,
+        let subtitle = session != nil 
+            ? "触控板\(self.requiredFingerCount)指轻点 → 鼠标中键"
+            : panelSubtitle
+        
+        return PluginPanelState(
+            subtitle: subtitle,
             isOn: session != nil,
             isExpanded: false,
             isEnabled: true,
@@ -76,6 +104,22 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
             detail: nil,
             errorMessage: lastErrorMessage
         )
+    }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击") { [weak self] _ in
+            guard let self = self else { return AnyView(EmptyView()) }
+            let currentCount = self.userDefaults.integer(forKey: DefaultsKey.requiredFingerCount)
+            let displayCount = currentCount > 0 ? currentCount : self.requiredFingerCount
+            return AnyView(
+                MiddleClickSettingsView(
+                    selectedCount: displayCount,
+                    onCountChange: { newCount in
+                        self.setFingerCount(newCount)
+                    }
+                )
+            )
+        }
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {
@@ -132,6 +176,25 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
 
+    // MARK: - Settings
+
+    private func setFingerCount(_ count: Int) {
+        requiredFingerCount = count
+        userDefaults.set(count, forKey: DefaultsKey.requiredFingerCount)
+        userDefaults.synchronize()
+        
+        // 如果已有 session，更新其手指数量
+        if session != nil {
+            stopSession()
+            // 延迟一帧后启动新的 session，确保旧的完全清除
+            DispatchQueue.main.async { [weak self] in
+                self?.startSession()
+            }
+        }
+        
+        onStateChange?()
+    }
+
     // MARK: - Private
 
     private var panelSubtitle: String {
@@ -175,9 +238,10 @@ final class MiddleClickPlugin: FeaturePlugin, AccessibilityPermissionRefreshing 
     private func startSession() {
         guard session == nil else { return }
         let newSession = MiddleClickSession()
+        newSession.requiredFingerCount = requiredFingerCount
         newSession.activate()
         session = newSession
-        logger.info("三指中键已启用")
+        logger.info("\(self.requiredFingerCount)指中键已启用")
     }
 
     private func stopSession() {
