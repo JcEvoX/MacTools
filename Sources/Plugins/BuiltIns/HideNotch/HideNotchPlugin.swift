@@ -23,8 +23,11 @@ final class HideNotchPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let controller: HideNotchWallpaperControlling
 
-    init(controller: HideNotchWallpaperControlling = HideNotchController()) {
-        self.controller = controller
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "hide-notch"),
+        controller: HideNotchWallpaperControlling? = nil
+    ) {
+        self.controller = controller ?? HideNotchController(context: context)
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }

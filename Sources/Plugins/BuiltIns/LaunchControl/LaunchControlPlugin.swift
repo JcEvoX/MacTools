@@ -29,8 +29,11 @@ final class LaunchControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private let controller: LaunchControlController
     private var isExpanded = false
 
-    init(controller: LaunchControlController = LaunchControlFeature.shared.controller) {
-        self.controller = controller
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
+        controller: LaunchControlController? = nil
+    ) {
+        self.controller = controller ?? LaunchControlController(context: context)
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }

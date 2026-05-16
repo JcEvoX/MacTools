@@ -20,8 +20,9 @@ struct CalendarHolidayProvider {
         self.records = records
     }
 
-    static func bundled() -> CalendarHolidayProvider {
-        guard let url = Bundle.main.url(forResource: "ChinaHolidayOverrides", withExtension: "json") else {
+    @MainActor
+    static func bundled(context: PluginRuntimeContext) -> CalendarHolidayProvider {
+        guard let url = context.resourceURL(forResource: "ChinaHolidayOverrides", withExtension: "json") else {
             return .empty
         }
 

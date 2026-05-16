@@ -18,7 +18,7 @@ final class CalendarComponentViewModel: ObservableObject {
 
     init(
         eventService: CalendarEventServicing = CalendarEventService(),
-        holidayProvider: CalendarHolidayProvider = .bundled(),
+        holidayProvider: CalendarHolidayProvider,
         calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
         today: Date = Date()
     ) {

@@ -272,18 +272,24 @@ struct LaunchControlSnapshot: Equatable {
 
 @MainActor
 final class LaunchControlFavoritesStore {
-    private enum DefaultsKey {
+    private enum StorageKey {
         static let storage = "launch-control.favorite-item-ids"
     }
 
-    private let userDefaults: UserDefaults
+    private let storage: PluginStorage
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
+        storage.migrateValueIfNeeded(fromLegacyKey: StorageKey.storage, to: StorageKey.storage)
     }
 
     func favoriteItemIDs() -> Set<String> {
-        Set(userDefaults.stringArray(forKey: DefaultsKey.storage) ?? [])
+        Set(storage.stringArray(forKey: StorageKey.storage) ?? [])
     }
 
     func isFavorite(_ itemID: String) -> Bool {
@@ -297,7 +303,7 @@ final class LaunchControlFavoritesStore {
         } else {
             favorites.remove(itemID)
         }
-        userDefaults.set(favorites.sorted(), forKey: DefaultsKey.storage)
+        storage.set(favorites.sorted(), forKey: StorageKey.storage)
     }
 }
 

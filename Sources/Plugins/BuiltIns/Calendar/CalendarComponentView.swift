@@ -12,8 +12,11 @@ struct CalendarComponentView: View {
         static let cornerRadius: CGFloat = 16
     }
 
-    @StateObject private var viewModel = CalendarComponentViewModel()
-    init(context: PluginComponentContext) {}
+    @StateObject private var viewModel: CalendarComponentViewModel
+
+    init(context: PluginComponentContext, viewModel: CalendarComponentViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

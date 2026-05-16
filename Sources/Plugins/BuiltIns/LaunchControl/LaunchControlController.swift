@@ -15,10 +15,11 @@ final class LaunchControlController: ObservableObject {
     init(
         scanner: LaunchControlScanner? = nil,
         runner: any LaunchControlCommandRunning = ProcessLaunchControlCommandRunner(),
-        favoritesStore: LaunchControlFavoritesStore = LaunchControlFavoritesStore()
+        favoritesStore: LaunchControlFavoritesStore? = nil,
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control")
     ) {
         self.runner = runner
-        self.favoritesStore = favoritesStore
+        self.favoritesStore = favoritesStore ?? LaunchControlFavoritesStore(context: context)
         self.scanner = scanner ?? LaunchControlScanner(runner: runner)
     }
 
@@ -308,7 +309,7 @@ final class LaunchControlFeature {
         self.controller = controller
     }
 
-    func makePlugin() -> LaunchControlPlugin {
-        LaunchControlPlugin(controller: controller)
+    func makePlugin(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control")) -> LaunchControlPlugin {
+        LaunchControlPlugin(context: context, controller: controller)
     }
 }

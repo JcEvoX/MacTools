@@ -6,7 +6,7 @@ import SwiftUI
 
 @MainActor
 final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing {
-    private enum DefaultsKey {
+    private enum StorageKey {
         static let legacyEnabledState = "feature.cleanModeEnabled"
     }
 
@@ -40,19 +40,26 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
-    private let userDefaults: UserDefaults
+    private let storage: PluginStorage
     private let logger = AppLog.physicalCleanModePlugin
     private var isAccessibilityGranted: Bool
     private var lastErrorMessage: String?
     private var session: PhysicalCleanModeSession?
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "physical-clean-mode"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
         self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
 
-        if userDefaults.object(forKey: DefaultsKey.legacyEnabledState) != nil {
-            userDefaults.removeObject(forKey: DefaultsKey.legacyEnabledState)
-        }
+        storage.migrateValueIfNeeded(
+            fromLegacyKey: StorageKey.legacyEnabledState,
+            to: StorageKey.legacyEnabledState
+        )
+        storage.removeObject(forKey: StorageKey.legacyEnabledState)
     }
 
     var primaryPanelState: PluginPanelState {

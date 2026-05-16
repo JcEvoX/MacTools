@@ -2,11 +2,12 @@ import Foundation
 
 @MainActor
 final class HideNotchStateStore: HideNotchStateStoring {
-    private enum DefaultsKey {
+    private enum StorageKey {
         static let desiredEnabled = "hide-notch.enabled"
     }
 
-    private let userDefaults: UserDefaults
+    private let storage: PluginStorage
+    private let legacyUserDefaults: UserDefaults
     private let obsoleteKeys = [
         "feature.hideNotchManagedWallpapers",
         "feature.hideNotchEnabled",
@@ -14,19 +15,27 @@ final class HideNotchStateStore: HideNotchStateStoring {
         "hide-notch.managed-space-states"
     ]
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "hide-notch"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.legacyUserDefaults = userDefaults ?? .standard
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
+        storage.migrateValueIfNeeded(
+            fromLegacyKey: StorageKey.desiredEnabled,
+            to: StorageKey.desiredEnabled
+        )
         removeObsoleteStateIfNeeded()
     }
 
     var desiredEnabled: Bool {
-        get { userDefaults.bool(forKey: DefaultsKey.desiredEnabled) }
-        set { userDefaults.set(newValue, forKey: DefaultsKey.desiredEnabled) }
+        get { storage.bool(forKey: StorageKey.desiredEnabled) }
+        set { storage.set(newValue, forKey: StorageKey.desiredEnabled) }
     }
 
     private func removeObsoleteStateIfNeeded() {
-        for key in obsoleteKeys where userDefaults.object(forKey: key) != nil {
-            userDefaults.removeObject(forKey: key)
-        }
+        obsoleteKeys.forEach { legacyUserDefaults.removeObject(forKey: $0) }
     }
 }

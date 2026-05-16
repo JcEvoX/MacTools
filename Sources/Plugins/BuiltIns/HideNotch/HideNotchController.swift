@@ -26,13 +26,14 @@ final class HideNotchController: HideNotchWallpaperControlling {
     init(
         displayCatalog: HideNotchDisplayCatalogProviding = SystemHideNotchDisplayCatalog(),
         maskManager: HideNotchDesktopMaskManaging = HideNotchDesktopMaskManager(),
-        stateStore: HideNotchStateStoring = HideNotchStateStore(),
+        stateStore: HideNotchStateStoring? = nil,
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "hide-notch"),
         notificationCenter: NotificationCenter = .default,
         workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
     ) {
         self.displayCatalog = displayCatalog
         self.maskManager = maskManager
-        self.stateStore = stateStore
+        self.stateStore = stateStore ?? HideNotchStateStore(context: context)
         self.notificationCenter = notificationCenter
         self.workspaceNotificationCenter = workspaceNotificationCenter
 

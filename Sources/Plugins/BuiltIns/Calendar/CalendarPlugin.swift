@@ -21,9 +21,17 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         span: PluginComponentSpan(width: 4, height: 3)!
     )
 
+    private let context: PluginRuntimeContext
     private let eventService: CalendarEventServicing
 
-    init(eventService: CalendarEventServicing = CalendarEventService()) {
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(
+            pluginID: "calendar",
+            resourceSubdirectory: "CalendarPluginResources"
+        ),
+        eventService: CalendarEventServicing = CalendarEventService()
+    ) {
+        self.context = context
         self.eventService = eventService
     }
 
@@ -61,7 +69,15 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func makeView(context: PluginComponentContext) -> AnyView {
-        AnyView(CalendarComponentView(context: context))
+        AnyView(
+            CalendarComponentView(
+                context: context,
+                viewModel: CalendarComponentViewModel(
+                    eventService: eventService,
+                    holidayProvider: .bundled(context: self.context)
+                )
+            )
+        )
     }
 
     func refresh() {}

@@ -16,7 +16,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     // MARK: - IDs
 
-    private enum DefaultsKey {
+    private enum StorageKey {
         static let isEnabled = "middle-click.enabled"
         static let requiredFingerCount = "middle-click.required-finger-count"
     }
@@ -64,7 +64,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     // MARK: - State
 
-    private let userDefaults: UserDefaults
+    private let storage: PluginStorage
     private let logger = AppLog.middleClickPlugin
     private var isAccessibilityGranted: Bool
     private var session: MiddleClickSession?
@@ -73,17 +73,27 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     // MARK: - Init
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "middle-click"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
         self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
-        self.requiredFingerCount = userDefaults.integer(forKey: DefaultsKey.requiredFingerCount)
+        storage.migrateValueIfNeeded(fromLegacyKey: StorageKey.isEnabled, to: StorageKey.isEnabled)
+        storage.migrateValueIfNeeded(
+            fromLegacyKey: StorageKey.requiredFingerCount,
+            to: StorageKey.requiredFingerCount
+        )
+        self.requiredFingerCount = storage.integer(forKey: StorageKey.requiredFingerCount)
         
         // 如果没有存储的值，默认为 3 指
         if self.requiredFingerCount == 0 {
             self.requiredFingerCount = 3
         }
 
-        if isAccessibilityGranted && userDefaults.bool(forKey: DefaultsKey.isEnabled) {
+        if isAccessibilityGranted && storage.bool(forKey: StorageKey.isEnabled) {
             let s = MiddleClickSession()
             s.requiredFingerCount = self.requiredFingerCount
             s.activate()
@@ -112,7 +122,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
     var configuration: PluginConfiguration? {
         PluginConfiguration(description: "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击") { [weak self] _ in
             guard let self = self else { return AnyView(EmptyView()) }
-            let currentCount = self.userDefaults.integer(forKey: DefaultsKey.requiredFingerCount)
+            let currentCount = self.storage.integer(forKey: StorageKey.requiredFingerCount)
             let displayCount = currentCount > 0 ? currentCount : self.requiredFingerCount
             return AnyView(
                 MiddleClickSettingsView(
@@ -183,8 +193,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     private func setFingerCount(_ count: Int) {
         requiredFingerCount = count
-        userDefaults.set(count, forKey: DefaultsKey.requiredFingerCount)
-        userDefaults.synchronize()
+        storage.set(count, forKey: StorageKey.requiredFingerCount)
         
         // 如果已有 session，更新其手指数量
         if session != nil {
@@ -230,10 +239,10 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
             }
 
             startSession()
-            userDefaults.set(true, forKey: DefaultsKey.isEnabled)
+            storage.set(true, forKey: StorageKey.isEnabled)
         } else {
             stopSession()
-            userDefaults.set(false, forKey: DefaultsKey.isEnabled)
+            storage.set(false, forKey: StorageKey.isEnabled)
         }
         onStateChange?()
     }
@@ -262,11 +271,11 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         if previous && !isAccessibilityGranted {
             // 权限被撤销：停止 session，清除持久化
             stopSession()
-            userDefaults.set(false, forKey: DefaultsKey.isEnabled)
+            storage.set(false, forKey: StorageKey.isEnabled)
         } else if !previous && isAccessibilityGranted {
             // 权限新授予：清除错误，按需恢复 session
             lastErrorMessage = nil
-            if userDefaults.bool(forKey: DefaultsKey.isEnabled) {
+            if storage.bool(forKey: StorageKey.isEnabled) {
                 startSession()
             }
         }
