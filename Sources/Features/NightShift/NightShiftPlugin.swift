@@ -14,7 +14,7 @@ struct CBNightShiftController: NightShiftControlling {
     func getStatus() -> Bool {
         var status = CBBlueLightStatus()
         guard client.getBlueLightStatus(&status) else { return false }
-        return status.active.boolValue
+        return status.enabled.boolValue
     }
 
     func setEnabled(_ enabled: Bool) -> Bool {

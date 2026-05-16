@@ -6,8 +6,8 @@
 #include <Foundation/Foundation.h>
 
 typedef struct {
-    BOOL active; // whether night shift is currently reducing blue light
-    BOOL enabled;
+    BOOL active; // whether the blue light reduction session is active (always true on supported hardware)
+    BOOL enabled; // whether night shift is currently reducing blue light (user-controlled on/off state)
     BOOL sunSchedulePermitted;
     int mode; // 0 = off, 1 = scheduled (sunset to sunrise), 2 = always on
     struct {
