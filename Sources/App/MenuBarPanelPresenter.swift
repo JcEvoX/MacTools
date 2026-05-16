@@ -89,6 +89,7 @@ final class MenuBarPanelPresenter: NSObject {
         }
 
         componentPopover.performClose(nil)
+        pluginHost.refreshAll()
         featurePopover.contentSize = MenuBarPanelLayout.contentSize(for: pluginHost.panelItems)
         show(featurePopover, relativeTo: button)
     }
