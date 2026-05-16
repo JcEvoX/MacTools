@@ -711,6 +711,7 @@ struct FeatureRowView: View {
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
     @State private var isHovered = false
+    @State private var didPushDisabledCursor = false
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -755,7 +756,16 @@ struct FeatureRowView: View {
                 .fill(item.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous))
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            updateCursorForDisabledState(hovering: hovering)
+        }
+        .onChange(of: item.isEnabled) { _, _ in
+            updateCursorForDisabledState(hovering: isHovered)
+        }
+        .onDisappear {
+            resetDisabledCursorIfNeeded()
+        }
         .help(item.helpText)
     }
 
@@ -813,6 +823,24 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private func updateCursorForDisabledState(hovering: Bool) {
+        if !item.isEnabled && hovering {
+            if !didPushDisabledCursor {
+                NSCursor.operationNotAllowed.push()
+                didPushDisabledCursor = true
+            }
+        } else {
+            resetDisabledCursorIfNeeded()
+        }
+    }
+
+    private func resetDisabledCursorIfNeeded() {
+        if didPushDisabledCursor {
+            NSCursor.pop()
+            didPushDisabledCursor = false
+        }
     }
 }
 
