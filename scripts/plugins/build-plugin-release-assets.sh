@@ -4,10 +4,12 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  build-plugin-release-assets.sh --base-url URL --catalog-output dist/catalog.json --signed-catalog-output docs/plugins/catalog.json --sign-identity "Developer ID Application: ..."
+  build-plugin-release-assets.sh --base-url URL --catalog-output dist/catalog.json --sign-identity "Developer ID Application: ..." [--plugin ID]...
 
-Builds all plugin packages, signs their bundles, zips them as release assets,
-generates a release catalog, and optionally writes a signed production catalog.
+Builds selected plugin packages, signs their bundles, zips them as release assets,
+generates a release catalog for those assets, and optionally writes a signed catalog.
+Without --plugin it builds all discovered plugins. --plugin can be repeated or
+passed as a comma-separated list.
 USAGE
 }
 
@@ -24,6 +26,7 @@ CONFIGURATION="Release"
 DESTINATION=""
 MINIMUM_HOST_VERSION=""
 RELEASE_NOTES_URL=""
+PLUGIN_FILTERS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -79,6 +82,15 @@ while [[ $# -gt 0 ]]; do
             RELEASE_NOTES_URL="${2:-}"
             shift 2
             ;;
+        --plugin)
+            IFS=',' read -r -a raw_plugin_filters <<< "${2:-}"
+            for raw_plugin_filter in "${raw_plugin_filters[@]}"; do
+                raw_plugin_filter="${raw_plugin_filter#"${raw_plugin_filter%%[![:space:]]*}"}"
+                raw_plugin_filter="${raw_plugin_filter%"${raw_plugin_filter##*[![:space:]]}"}"
+                [[ -n "$raw_plugin_filter" ]] && PLUGIN_FILTERS+=("$raw_plugin_filter")
+            done
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -132,6 +144,9 @@ build_args=(
 if [[ -n "$DESTINATION" ]]; then
     build_args+=(--destination "$DESTINATION")
 fi
+for plugin_filter in "${PLUGIN_FILTERS[@]}"; do
+    build_args+=(--plugin "$plugin_filter")
+done
 
 "$REPO_ROOT/scripts/plugins/build-local-plugins.sh" "${build_args[@]}"
 

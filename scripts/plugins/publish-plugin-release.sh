@@ -7,6 +7,7 @@ Usage:
   publish-plugin-release.sh --repo owner/repo --tag plugins-2026.05.17 --asset Demo.mactoolsplugin.zip [--asset More.mactoolsplugin.zip]
 
 Requires GitHub CLI authenticated with release upload permissions.
+Use --allow-empty for catalog-only plugin releases with no package assets.
 USAGE
 }
 
@@ -15,6 +16,7 @@ TAG=""
 TITLE=""
 NOTES_FILE=""
 PRERELEASE=0
+ALLOW_EMPTY=0
 ASSETS=()
 
 while [[ $# -gt 0 ]]; do
@@ -39,6 +41,10 @@ while [[ $# -gt 0 ]]; do
             PRERELEASE=1
             shift
             ;;
+        --allow-empty)
+            ALLOW_EMPTY=1
+            shift
+            ;;
         --asset)
             ASSETS+=("${2:-}")
             shift 2
@@ -55,7 +61,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$REPO" || -z "$TAG" || ${#ASSETS[@]} -eq 0 ]]; then
+if [[ -z "$REPO" || -z "$TAG" ]]; then
+    usage >&2
+    exit 1
+fi
+
+if [[ ${#ASSETS[@]} -eq 0 && "$ALLOW_EMPTY" != "1" ]]; then
+    echo "At least one --asset is required unless --allow-empty is set." >&2
     usage >&2
     exit 1
 fi
@@ -80,8 +92,14 @@ if [[ "$PRERELEASE" == "1" ]]; then
 fi
 
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-    gh release upload "$TAG" "${ASSETS[@]}" --repo "$REPO" --clobber
+    if [[ ${#ASSETS[@]} -gt 0 ]]; then
+        gh release upload "$TAG" "${ASSETS[@]}" --repo "$REPO" --clobber
+    fi
     gh release edit "$TAG" "${release_args[@]}"
 else
-    gh release create "$TAG" "${ASSETS[@]}" "${release_args[@]}"
+    if [[ ${#ASSETS[@]} -gt 0 ]]; then
+        gh release create "$TAG" "${ASSETS[@]}" "${release_args[@]}"
+    else
+        gh release create "$TAG" "${release_args[@]}"
+    fi
 fi

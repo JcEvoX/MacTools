@@ -4,7 +4,7 @@
 
 - `Build`：在 `main` push、Pull Request 和手动触发时运行。执行 XcodeGen、Debug 测试，并在非 PR 场景额外编译 unsigned Release app 做配置校验；不上传不可分发的未签名产物。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
-- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。构建全量插件包，使用 Developer ID 签名插件 bundle，上传 `.mactoolsplugin.zip` 到同一条 GitHub Release，并提交签名后的 `docs/plugins/catalog.json`。
+- `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
 - `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
@@ -117,27 +117,36 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 
 ## 插件发布方式
 
-插件按批次单独发布，不和 app DMG 混在同一条 Release。推荐每次插件发布都上传当前全量插件包，只有实际变更的插件才递增各自 `plugin.json` 中的 `version`。应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。
+插件按批次单独发布，不和 app DMG 混在同一条 Release。默认发布方式是增量发布：只构建和上传本批实际变化的插件包，然后把这些新条目合并进生产 `docs/plugins/catalog.json`。未变化插件会继续保留上一版 catalog 中的 `package.url`、`sha256`、`size` 和 `releaseNotesURL`，所以一个 catalog 可以同时指向多个 `plugins-*` tag。
+
+应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。因此只有实际变化的插件需要递增各自 `plugin.json.version`；未变化插件不会因为新批次 tag 而显示可更新或无效。
 
 推送插件批次 tag：
 
 ```bash
-git tag plugins-2026.05.17
-git push origin plugins-2026.05.17
+git tag plugins-1.0.1
+git push origin plugins-1.0.1
 ```
 
 `Plugin Release` 工作流会：
 
-1. 生成 Xcode project。
-2. 以 Release 配置构建 `Plugins/` 下的所有插件 target。
-3. 用 Developer ID 重新签名每个插件 bundle。
-4. 打包为 `*.mactoolsplugin.zip`。
-5. 创建或更新 `plugins-2026.05.17` GitHub Release，并上传所有插件 zip。
-6. 生成 release-mode `catalog.json`，其中每个插件 entry 指向本批 GitHub Release asset。
-7. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名 catalog，并写入 `docs/plugins/catalog.json`。
-8. 将 `docs/plugins/catalog.json` 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
+1. 从 `origin/main` 读取上一版生产 `docs/plugins/catalog.json` 作为基线。
+2. 生成增量发布计划。`auto` 模式会选择新插件和 `plugin.json.version` 高于上一版 catalog 的插件。
+3. 如果插件源码、资源或 `Sources/MacToolsPluginKit` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。
+4. 只以 Release 配置构建计划中的插件 target。
+5. 用 Developer ID 重新签名这些插件 bundle，并打包为 `*.mactoolsplugin.zip`。
+6. 创建或更新对应的 `plugins-*` GitHub Release，并只上传本批变化插件的 zip。catalog-only 变化可以创建没有 zip asset 的插件 Release。
+7. 生成本批 delta catalog，把 delta 条目合并进上一版生产 catalog，保留未变化插件的旧下载链接和校验信息。
+8. 使用 `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` 签名合并后的 catalog，并写入 `docs/plugins/catalog.json`。
+9. 将 `docs/plugins/catalog.json` 提交回 `main`，再由 `Deploy Pages` 发布到 GitHub Pages。
 
-也可以在 GitHub Actions 页面手动运行 `Plugin Release`，输入已存在的 tag，例如 `plugins-2026.05.17`。
+如果 `auto` 模式没有发现插件包或 catalog 变化，工作流会成功结束，不创建或更新 GitHub Release。
+
+也可以在 GitHub Actions 页面手动运行 `Plugin Release`：
+
+- `mode=auto`：默认推荐，自动检测变化插件。
+- `mode=selected`：只发布 `plugins` 输入中列出的插件 ID 或目录名，例如 `calendar,display-brightness`。
+- `mode=all`：全量重建并上传当前所有插件包，适合证书、打包逻辑或插件运行时发生全局变化后的兜底发布。
 
 插件 release asset 形态：
 

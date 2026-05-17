@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  build-local-plugins.sh --source-dir Plugins --output-dir build/LocalPlugins [--plugin Demo]
+  build-local-plugins.sh --source-dir Plugins --output-dir build/LocalPlugins [--plugin Demo]...
   build-local-plugins.sh --source-dir Plugins --output-dir build/PluginRelease/Build --configuration Release --skip-catalog
 
 Conventions:
@@ -12,6 +12,8 @@ Conventions:
   - Or a plugin source directory can contain plugin.json and the declared bundle.
   - If the declared bundle is missing and the directory has project.yml or *.xcodeproj,
     the script tries to build it with xcodebuild first.
+  - --plugin accepts a plugin directory name or plugin ID. It can be repeated or
+    passed as a comma-separated list.
   - Set --sign-identity or PLUGIN_CODE_SIGN_IDENTITY to sign packaged bundles.
   - Set --unsigned-build when a later packaging step will sign the bundle.
 
@@ -24,7 +26,7 @@ USAGE
 
 SOURCE_DIR=""
 OUTPUT_DIR=""
-PLUGIN_FILTER=""
+PLUGIN_FILTERS=()
 CONFIGURATION="${CONFIGURATION:-Debug}"
 DESTINATION="${DESTINATION:-}"
 SIGN_IDENTITY="${PLUGIN_CODE_SIGN_IDENTITY:-}"
@@ -42,7 +44,12 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --plugin)
-            PLUGIN_FILTER="${2:-}"
+            IFS=',' read -r -a raw_plugin_filters <<< "${2:-}"
+            for raw_plugin_filter in "${raw_plugin_filters[@]}"; do
+                raw_plugin_filter="${raw_plugin_filter#"${raw_plugin_filter%%[![:space:]]*}"}"
+                raw_plugin_filter="${raw_plugin_filter%"${raw_plugin_filter##*[![:space:]]}"}"
+                [[ -n "$raw_plugin_filter" ]] && PLUGIN_FILTERS+=("$raw_plugin_filter")
+            done
             shift 2
             ;;
         --configuration)
@@ -147,7 +154,7 @@ discover_candidates() {
 matches_filter() {
     local candidate="$1"
 
-    if [[ -z "$PLUGIN_FILTER" ]]; then
+    if [[ ${#PLUGIN_FILTERS[@]} -eq 0 ]]; then
         return 0
     fi
 
@@ -155,15 +162,16 @@ matches_filter() {
     basename="$(basename "$candidate")"
     basename="${basename%.mactoolsplugin}"
 
-    if [[ "$basename" == "$PLUGIN_FILTER" ]]; then
-        return 0
+    local id=""
+    if [[ -f "$candidate/plugin.json" ]]; then
+        id="$(json_value "$candidate/plugin.json" "id")"
     fi
 
-    if [[ -f "$candidate/plugin.json" ]]; then
-        local id
-        id="$(json_value "$candidate/plugin.json" "id")"
-        [[ "$id" == "$PLUGIN_FILTER" ]] && return 0
-    fi
+    local filter
+    for filter in "${PLUGIN_FILTERS[@]}"; do
+        [[ "$basename" == "$filter" ]] && return 0
+        [[ -n "$id" && "$id" == "$filter" ]] && return 0
+    done
 
     return 1
 }
@@ -358,8 +366,8 @@ while IFS= read -r candidate; do
 done < <(discover_candidates)
 
 if [[ ${#packages[@]} -eq 0 ]]; then
-    if [[ -n "$PLUGIN_FILTER" ]]; then
-        echo "No plugin matched '$PLUGIN_FILTER' in $SOURCE_DIR." >&2
+    if [[ ${#PLUGIN_FILTERS[@]} -gt 0 ]]; then
+        echo "No plugin matched requested filters in $SOURCE_DIR: ${PLUGIN_FILTERS[*]}" >&2
     else
         echo "No plugins found in $SOURCE_DIR." >&2
     fi

@@ -10,6 +10,19 @@ on:
         description: "Plugin batch tag, for example plugins-2026.05.17 or plugins-1.0.0"
         required: true
         type: string
+      mode:
+        description: "Plugin release mode"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - selected
+          - all
+      plugins:
+        description: "Comma-separated plugin IDs or directory names when mode=selected"
+        required: false
+        type: string
       prerelease:
         description: "Mark the GitHub Release as prerelease"
         required: false
@@ -20,7 +33,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: plugin-release-${{ github.event.inputs.tag || github.ref_name }}
+  group: plugin-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -28,6 +41,9 @@ env:
   PLUGIN_RELEASE_ROOT: build/plugin-release
   PLUGIN_BUILD_DIR: build/plugin-release/Build
   PLUGIN_ASSETS_DIR: build/plugin-release/Assets
+  PLUGIN_PREVIOUS_CATALOG_PATH: build/plugin-release/previous-catalog.json
+  PLUGIN_RELEASE_PLAN_PATH: build/plugin-release/plan.json
+  PLUGIN_CATALOG_DELTA_PATH: build/plugin-release/catalog.delta.json
   PLUGIN_CATALOG_PATH: build/plugin-release/catalog.json
   SIGNED_PLUGIN_CATALOG_PATH: docs/plugins/catalog.json
 
@@ -41,28 +57,107 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set plugin release metadata
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${{ inputs.tag || github.ref_name }}"
           if [[ ! "$TAG" =~ ^plugins-[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
             echo "Plugin release tag must look like plugins-2026.05.17 or plugins-1.0.0" >&2
             exit 1
           fi
 
-          PRERELEASE="${{ github.event.inputs.prerelease || 'false' }}"
+          MODE="${{ inputs.mode || 'auto' }}"
+          PLUGIN_SELECTION="${{ inputs.plugins || '' }}"
+          if [[ "$MODE" != "selected" && -n "$PLUGIN_SELECTION" ]]; then
+            echo "The plugins input is only valid when mode=selected." >&2
+            exit 1
+          fi
+
+          PRERELEASE="${{ inputs.prerelease || 'false' }}"
           RELEASE_SUFFIX="${TAG#plugins-}"
           {
             echo "TAG=$TAG"
+            echo "PLUGIN_RELEASE_MODE=$MODE"
+            echo "PLUGIN_RELEASE_SELECTION=$PLUGIN_SELECTION"
             echo "PLUGIN_RELEASE_TITLE=MacTools Plugins ${RELEASE_SUFFIX}"
             echo "PLUGIN_RELEASE_NOTES_URL=https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
             echo "PLUGIN_ASSET_BASE_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
             echo "PLUGIN_PRERELEASE=$PRERELEASE"
           } >> "$GITHUB_ENV"
 
+      - name: Prepare previous plugin catalog
+        run: |
+          mkdir -p "$PLUGIN_RELEASE_ROOT"
+          git fetch --force --tags origin +refs/heads/main:refs/remotes/origin/main
+          if git show origin/main:docs/plugins/catalog.json > "$PLUGIN_PREVIOUS_CATALOG_PATH" 2>/dev/null; then
+            echo "Using docs/plugins/catalog.json from origin/main as the previous production catalog."
+          elif [[ -f "$SIGNED_PLUGIN_CATALOG_PATH" ]]; then
+            cp "$SIGNED_PLUGIN_CATALOG_PATH" "$PLUGIN_PREVIOUS_CATALOG_PATH"
+            echo "Using docs/plugins/catalog.json from the checked-out ref as the previous production catalog."
+          else
+            rm -f "$PLUGIN_PREVIOUS_CATALOG_PATH"
+            echo "No previous plugin catalog found; auto mode will publish all plugins."
+          fi
+
+      - name: Plan incremental plugin release
+        run: |
+          plan_args=(
+            --mode "$PLUGIN_RELEASE_MODE"
+            --source-dir "$PLUGIN_SOURCE_DIR"
+            --previous-catalog "$PLUGIN_PREVIOUS_CATALOG_PATH"
+            --output "$PLUGIN_RELEASE_PLAN_PATH"
+          )
+          if [[ -n "$PLUGIN_RELEASE_SELECTION" ]]; then
+            plan_args+=(--plugins "$PLUGIN_RELEASE_SELECTION")
+          fi
+
+          scripts/plugins/plan-plugin-release.py "${plan_args[@]}"
+
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          plan = json.loads(Path(os.environ["PLUGIN_RELEASE_PLAN_PATH"]).read_text(encoding="utf-8"))
+          selected = plan.get("selectedPluginIDs", [])
+          removed = plan.get("removedPluginIDs", [])
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"PLUGIN_RELEASE_REQUIRED={'true' if plan.get('releaseRequired') else 'false'}\n")
+              env.write(f"PLUGIN_CHANGED_COUNT={len(selected)}\n")
+              env.write(f"PLUGIN_REMOVED_COUNT={len(removed)}\n")
+              env.write(f"PLUGIN_FULL_RELEASE={'true' if plan.get('fullRelease') else 'false'}\n")
+
+          lines = [
+              "## Plugin release plan",
+              "",
+              f"- Mode: `{plan.get('mode')}`",
+              f"- Release required: `{str(plan.get('releaseRequired')).lower()}`",
+              f"- Full release: `{str(plan.get('fullRelease')).lower()}`",
+              f"- Updated packages: `{len(selected)}`",
+              f"- Removed plugins: `{len(removed)}`",
+          ]
+          if selected:
+              lines.extend(["", "### Packages to build"])
+              for plugin in plan.get("plugins", []):
+                  reason = "; ".join(plan.get("reasons", {}).get(plugin["id"], []))
+                  suffix = f" - {reason}" if reason else ""
+                  lines.append(f"- `{plugin['id']}` {plugin['version']}{suffix}")
+          if removed:
+              lines.extend(["", "### Removed from catalog"])
+              lines.extend(f"- `{plugin_id}`" for plugin_id in removed)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines) + "\n")
+          PY
+
+      - name: No plugin release changes
+        if: env.PLUGIN_RELEASE_REQUIRED != 'true'
+        run: echo "No plugin package or catalog changes were detected for $TAG."
+
       - name: Validate required secrets
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
@@ -71,29 +166,40 @@ jobs:
           PLUGIN_CATALOG_PRIVATE_KEY_BASE64: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY_BASE64 }}
         run: |
           missing=0
-          for name in \
-            APPLE_DEVELOPMENT_TEAM \
-            BUNDLE_IDENTIFIER_PREFIX \
-            DEVELOPER_ID_CERT_P12 \
-            DEVELOPER_ID_CERT_PASSWORD \
-            PLUGIN_CATALOG_PRIVATE_KEY_BASE64; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing required secret: $name" >&2
-              missing=1
-            fi
-          done
+
+          if [[ -z "$PLUGIN_CATALOG_PRIVATE_KEY_BASE64" ]]; then
+            echo "Missing required secret: PLUGIN_CATALOG_PRIVATE_KEY_BASE64" >&2
+            missing=1
+          fi
+
+          if [[ "$PLUGIN_CHANGED_COUNT" != "0" ]]; then
+            for name in \
+              APPLE_DEVELOPMENT_TEAM \
+              BUNDLE_IDENTIFIER_PREFIX \
+              DEVELOPER_ID_CERT_P12 \
+              DEVELOPER_ID_CERT_PASSWORD; do
+              if [[ -z "${!name}" ]]; then
+                echo "Missing required secret: $name" >&2
+                missing=1
+              fi
+            done
+          fi
+
           exit "$missing"
 
       - name: Show Xcode version
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         run: xcodebuild -version
 
       - name: Install XcodeGen
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then
             brew install xcodegen
           fi
 
       - name: Install catalog signing dependency
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         run: |
           python3 -m venv "$RUNNER_TEMP/plugin-signing-venv"
           "$RUNNER_TEMP/plugin-signing-venv/bin/python" -m pip install --upgrade pip
@@ -101,6 +207,7 @@ jobs:
           echo "$RUNNER_TEMP/plugin-signing-venv/bin" >> "$GITHUB_PATH"
 
       - name: Write release local config
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           BUNDLE_IDENTIFIER_PREFIX: ${{ secrets.BUNDLE_IDENTIFIER_PREFIX }}
@@ -112,6 +219,7 @@ jobs:
           EOF
 
       - name: Import Developer ID certificate
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         env:
           DEVELOPER_ID_CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
           DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
@@ -148,64 +256,129 @@ jobs:
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         run: xcodegen generate
 
       - name: Build plugin release assets
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
+        run: |
+          selected_plugins=()
+          while IFS= read -r plugin_id; do
+            [[ -n "$plugin_id" ]] && selected_plugins+=("$plugin_id")
+          done < <(python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          plan = json.loads(Path(os.environ["PLUGIN_RELEASE_PLAN_PATH"]).read_text(encoding="utf-8"))
+          for plugin_id in plan.get("selectedPluginIDs", []):
+              print(plugin_id)
+          PY
+          )
+
+          build_args=(
+            --source-dir "$PLUGIN_SOURCE_DIR"
+            --build-dir "$PLUGIN_BUILD_DIR"
+            --dist-dir "$PLUGIN_RELEASE_ROOT"
+            --assets-dir "$PLUGIN_ASSETS_DIR"
+            --base-url "$PLUGIN_ASSET_BASE_URL"
+            --catalog-output "$PLUGIN_CATALOG_DELTA_PATH"
+            --sign-identity "$SIGNING_IDENTITY"
+            --destination "generic/platform=macOS"
+            --release-notes-url "$PLUGIN_RELEASE_NOTES_URL"
+          )
+          for plugin_id in "${selected_plugins[@]}"; do
+            build_args+=(--plugin "$plugin_id")
+          done
+
+          CODE_SIGN_KEYCHAIN="$KEYCHAIN_PATH" scripts/plugins/build-plugin-release-assets.sh "${build_args[@]}"
+
+      - name: Merge and sign plugin catalog
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         env:
           PLUGIN_CATALOG_PRIVATE_KEY_BASE64: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY_BASE64 }}
         run: |
-          CODE_SIGN_KEYCHAIN="$KEYCHAIN_PATH" scripts/plugins/build-plugin-release-assets.sh \
-            --source-dir "$PLUGIN_SOURCE_DIR" \
-            --build-dir "$PLUGIN_BUILD_DIR" \
-            --dist-dir "$PLUGIN_RELEASE_ROOT" \
-            --assets-dir "$PLUGIN_ASSETS_DIR" \
-            --base-url "$PLUGIN_ASSET_BASE_URL" \
-            --catalog-output "$PLUGIN_CATALOG_PATH" \
-            --signed-catalog-output "$SIGNED_PLUGIN_CATALOG_PATH" \
-            --catalog-private-key-base64 "$PLUGIN_CATALOG_PRIVATE_KEY_BASE64" \
-            --sign-identity "$SIGNING_IDENTITY" \
-            --destination "generic/platform=macOS" \
-            --release-notes-url "$PLUGIN_RELEASE_NOTES_URL"
+          scripts/plugins/merge-plugin-catalog.py \
+            --previous "$PLUGIN_PREVIOUS_CATALOG_PATH" \
+            --updates "$PLUGIN_CATALOG_DELTA_PATH" \
+            --plan "$PLUGIN_RELEASE_PLAN_PATH" \
+            --output "$PLUGIN_CATALOG_PATH"
+
+          scripts/plugins/sign-plugin-catalog.sh \
+            --input "$PLUGIN_CATALOG_PATH" \
+            --output "$SIGNED_PLUGIN_CATALOG_PATH" \
+            --private-key-base64 "$PLUGIN_CATALOG_PRIVATE_KEY_BASE64"
 
       - name: Generate plugin release notes
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         run: |
           RELEASE_NOTES="$RUNNER_TEMP/plugin-release-notes.md"
-          export SIGNED_PLUGIN_CATALOG_PATH RELEASE_NOTES
+          export PLUGIN_RELEASE_PLAN_PATH PLUGIN_CATALOG_DELTA_PATH SIGNED_PLUGIN_CATALOG_PATH RELEASE_NOTES
           python3 <<'PY'
           import json
           import os
           from pathlib import Path
 
-          catalog = json.loads(Path(os.environ["SIGNED_PLUGIN_CATALOG_PATH"]).read_text(encoding="utf-8"))
+          def load(path):
+              path = Path(path)
+              if not path.exists():
+                  return None
+              return json.loads(path.read_text(encoding="utf-8"))
+
+          plan = load(os.environ["PLUGIN_RELEASE_PLAN_PATH"]) or {}
+          delta = load(os.environ["PLUGIN_CATALOG_DELTA_PATH"]) or {}
+          catalog = load(os.environ["SIGNED_PLUGIN_CATALOG_PATH"]) or {}
+          selected = plan.get("selectedPluginIDs", [])
+          removed = plan.get("removedPluginIDs", [])
+          delta_entries = {entry["id"]: entry for entry in delta.get("plugins", [])}
+          total_count = len(catalog.get("plugins", []))
+          unchanged_count = max(total_count - len(selected), 0)
+
           lines = [
-              "## Plugin packages",
+              "## Plugin catalog update",
               "",
-              "This release contains the signed plugin package set referenced by the production catalog.",
+              "This release updates the signed production plugin catalog.",
               "",
           ]
-          for entry in catalog["plugins"]:
-              lines.append(f"- {entry['displayName']} (`{entry['id']}`) {entry['version']}")
-          lines.append("")
+
+          if selected:
+              lines.extend(["### Updated packages", ""])
+              for plugin in plan.get("plugins", []):
+                  plugin_id = plugin["id"]
+                  entry = delta_entries.get(plugin_id, plugin)
+                  reasons = plan.get("reasons", {}).get(plugin_id, [])
+                  suffix = f" - {'; '.join(reasons)}" if reasons else ""
+                  lines.append(f"- {entry.get('displayName', plugin_id)} (`{plugin_id}`) {entry['version']}{suffix}")
+              lines.append("")
+
+          if removed:
+              lines.extend(["### Removed from catalog", ""])
+              lines.extend(f"- `{plugin_id}`" for plugin_id in removed)
+              lines.append("")
+
+          if unchanged_count:
+              noun = "entry" if unchanged_count == 1 else "entries"
+              lines.append(f"{unchanged_count} unchanged plugin {noun} keep their existing package URLs and checksums.")
+              lines.append("")
+
           Path(os.environ["RELEASE_NOTES"]).write_text("\n".join(lines), encoding="utf-8")
           PY
           echo "PLUGIN_RELEASE_NOTES_PATH=$RELEASE_NOTES" >> "$GITHUB_ENV"
 
       - name: Create or update plugin GitHub Release
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
           assets=("$PLUGIN_ASSETS_DIR"/*.mactoolsplugin.zip)
-          if [[ ${#assets[@]} -eq 0 ]]; then
-            echo "No plugin release assets found in $PLUGIN_ASSETS_DIR." >&2
-            exit 1
-          fi
 
           publish_args=(
             --repo "$GITHUB_REPOSITORY"
             --tag "$TAG"
             --title "$PLUGIN_RELEASE_TITLE"
             --notes-file "$PLUGIN_RELEASE_NOTES_PATH"
+            --allow-empty
           )
           if [[ "$PLUGIN_PRERELEASE" == "true" ]]; then
             publish_args+=(--prerelease)
@@ -217,16 +390,20 @@ jobs:
           scripts/plugins/publish-plugin-release.sh "${publish_args[@]}"
 
       - name: Upload plugin release artifact
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: MacTools-${{ env.TAG }}
           path: |
             ${{ env.PLUGIN_ASSETS_DIR }}/*.mactoolsplugin.zip
+            ${{ env.PLUGIN_RELEASE_PLAN_PATH }}
+            ${{ env.PLUGIN_CATALOG_PATH }}
             ${{ env.SIGNED_PLUGIN_CATALOG_PATH }}
           if-no-files-found: error
           retention-days: 30
 
       - name: Commit plugin catalog to main
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true'
         run: |
           cp "$SIGNED_PLUGIN_CATALOG_PATH" "$RUNNER_TEMP/plugin-catalog.json"
           git config user.name "github-actions[bot]"

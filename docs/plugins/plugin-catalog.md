@@ -30,11 +30,11 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
       },
       "permissions": [],
       "package": {
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-2026.05.17/Demo.mactoolsplugin.zip",
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.1/Demo.mactoolsplugin.zip",
         "sha256": "...",
         "size": 1234567
       },
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-2026.05.17"
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1"
     }
   ],
   "revoked": [],
@@ -56,17 +56,23 @@ MacTools/
   Plugins/
     Demo/
       plugin.json
-      Demo.bundle or an Xcode project that builds Demo.bundle
+      Sources/
+      Bundle/
+      Tests/
 ```
 
-External plugin repositories can use the same structure:
+External plugin repositories can use the same structure, as long as the manifest can resolve either a buildable project or a prebuilt bundle:
 
 ```text
 MacToolsPlugins/
   Demo/
     plugin.json
-    Demo.bundle or an Xcode project that builds Demo.bundle
+    Sources/
+    Bundle/
+    Tests/
 ```
+
+`plugin.json` declares the plugin ID, version, capabilities, bundle path, and build scheme. In this repository the build scheme points back to `MacTools.xcodeproj`; external repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 
@@ -114,26 +120,31 @@ The app copies the package into its own staging and installed directories. Unins
 
 ## Release Flow
 
-Recommended production flow is a batch plugin release:
+Recommended production flow is an incremental batch plugin release:
 
 1. Bump `plugin.json.version` only for plugins whose code or resources changed.
-2. Push a batch tag such as `plugins-2026.05.17`.
-3. The `Plugin Release` GitHub Action builds all plugin bundles in Release configuration.
-4. The workflow signs every plugin bundle with the same Developer ID Team ID as MacTools.
-5. The workflow zips each package as `*.mactoolsplugin.zip`.
-6. The workflow uploads all plugin zips to the same GitHub Release.
-7. The workflow generates and signs `docs/plugins/catalog.json`.
-8. `Deploy Pages` publishes the signed catalog to GitHub Pages.
+2. Push a batch tag such as `plugins-1.0.1`.
+3. The `Plugin Release` GitHub Action reads the current production catalog from `origin/main`.
+4. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
+5. If package-relevant files changed but a plugin version did not increase, the workflow fails before signing or uploading.
+6. The workflow builds, signs, zips, and uploads only the selected plugin packages.
+7. The workflow generates a delta catalog for the selected packages, merges those entries into the previous production catalog, and keeps unchanged plugin entries pointing at their existing assets.
+8. The merged catalog is signed and committed back to `docs/plugins/catalog.json`.
+9. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
-The release record looks like:
+The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
+
+An incremental release record contains only packages changed in that batch:
 
 ```text
-GitHub Release: plugins-2026.05.17
-  appearance.mactoolsplugin.zip
+GitHub Release: plugins-1.0.1
   calendar.mactoolsplugin.zip
-  disk-clean.mactoolsplugin.zip
-  ...
+  display-brightness.mactoolsplugin.zip
 ```
+
+Unchanged plugin entries remain valid because the catalog preserves their previous URLs, checksums, and versions. They are not shown as updates in the app unless their catalog version is higher than the installed version.
+
+When a full rebuild is needed, run the `Plugin Release` workflow manually with `mode=all`. To publish a controlled subset, use `mode=selected` and pass comma-separated plugin IDs or directory names in `plugins`.
 
 Each zip keeps the package root:
 
@@ -154,7 +165,7 @@ Local dry-run packaging uses the same release asset script:
 make package-plugins-release \
   PLUGIN_CODE_SIGN_IDENTITY="Developer ID Application: Example (TEAMID)" \
   PLUGIN_CATALOG_PRIVATE_KEY_BASE64="$PLUGIN_CATALOG_PRIVATE_KEY_BASE64" \
-  PLUGIN_RELEASE_TAG=plugins-2026.05.17
+  PLUGIN_RELEASE_TAG=plugins-1.0.1
 ```
 
 Generated local output:
@@ -166,25 +177,37 @@ build/PluginRelease/
 docs/plugins/catalog.json
 ```
 
-The lower-level scripts are still useful for external plugin repositories:
+The lower-level scripts are still useful for external plugin repositories. `build-plugin-release-assets.sh` can build all plugins or a subset with repeated `--plugin` arguments:
 
 ```bash
+scripts/plugins/plan-plugin-release.py \
+  --mode auto \
+  --previous-catalog docs/plugins/catalog.json \
+  --output build/PluginRelease/plan.json
+
 scripts/plugins/build-plugin-release-assets.sh \
-  --base-url https://github.com/ggbond268/MacTools/releases/download/plugins-2026.05.17 \
-  --catalog-output build/PluginRelease/catalog.json \
-  --signed-catalog-output docs/plugins/catalog.json \
-  --sign-identity "Developer ID Application: Example (TEAMID)"
+  --base-url https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.1 \
+  --catalog-output build/PluginRelease/catalog.delta.json \
+  --sign-identity "Developer ID Application: Example (TEAMID)" \
+  --plugin calendar \
+  --plugin display-brightness
+
+scripts/plugins/merge-plugin-catalog.py \
+  --previous docs/plugins/catalog.json \
+  --updates build/PluginRelease/catalog.delta.json \
+  --plan build/PluginRelease/plan.json \
+  --output build/PluginRelease/catalog.merged.json
 
 scripts/plugins/generate-plugin-catalog.sh \
   --mode release \
-  --base-url https://github.com/ggbond268/MacTools/releases/download/plugins-2026.05.17 \
+  --base-url https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.1 \
   --output dist/catalog.json \
   --package dist/Demo.mactoolsplugin.zip \
-  --release-notes-url https://github.com/ggbond268/MacTools/releases/tag/plugins-2026.05.17
+  --release-notes-url https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1
 
 scripts/plugins/sign-plugin-catalog.sh \
-  --input dist/catalog.json \
-  --output dist/catalog.signed.json \
+  --input build/PluginRelease/catalog.merged.json \
+  --output docs/plugins/catalog.json \
   --private-key-base64 "$PLUGIN_CATALOG_PRIVATE_KEY_BASE64"
 ```
 

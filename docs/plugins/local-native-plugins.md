@@ -40,19 +40,22 @@ Example.mactoolsplugin/
 }
 ```
 
-The plugin bundle must expose a factory that conforms to `MacToolsPluginBundleFactory`. The factory returns a `PluginProvider`, and the provider returns one or more `MacToolsPlugin` instances.
+The plugin bundle must expose a factory that conforms to `MacToolsPluginBundleFactory`. The factory returns a `PluginProvider`, and the provider returns exactly one `MacToolsPlugin` instance for the package.
 
 Source repositories can keep implementation and tests beside each plugin:
 
 ```text
 Plugins/Example/
   plugin.json
-  Sources/
-  Bundle/
-  Tests/
+  Sources/              # Plugin implementation and feature code
+  Bundle/               # Thin bundle entrypoint that anchors the factory
+  Tests/                # Optional XCTest files
+  Resources/            # Optional plugin resources
 ```
 
 Only `plugin.json` and the built `.bundle` are copied into a `.mactoolsplugin` package. `Tests/` is included only by the host unit-test target during development and is never packaged into the app or plugin distribution.
+
+The manifest ID is the stable identity of the package. It must match the runtime `PluginMetadata.id`, and a package must return exactly one plugin instance. Use lower-case, readable IDs such as `display-brightness` unless there is a strong reason to use a reverse-DNS identifier.
 
 ## Install Location
 

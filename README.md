@@ -66,12 +66,24 @@ brew info --cask ggbond268/mactools/mactools
 
 ## 开发
 
+核心 app 代码在 `Sources/`，插件源码在 `Plugins/<PluginName>/`。每个插件目录包含 `plugin.json`、`Sources/`、`Bundle/`，有测试时放在同目录的 `Tests/`。
+
 ```bash
 make setup      # 生成 LocalConfig.xcconfig，请填写 DEVELOPMENT_TEAM 与 BUNDLE_IDENTIFIER_PREFIX
 make generate   # 使用 XcodeGen 生成 MacTools.xcodeproj
 make build      # 编译校验
 make run        # 本地运行
 ```
+
+开发或调试本地插件：
+
+```bash
+make build-plugin                 # 构建 Plugins/ 下的所有本地插件并生成 Debug catalog
+make build-plugin PLUGIN=calendar # 只构建指定插件目录名或插件 ID
+make run                          # 自动使用 build/LocalPlugins/catalog.dev.json
+```
+
+插件发布通过 `plugins-*` 批次 tag 触发 GitHub Actions。只需要给实际变更的插件递增 `plugin.json.version`；工作流会默认只构建和上传变更插件，合并签名后的 catalog，并保留未变化插件的既有下载链接。
 
 运行完整测试：
 
