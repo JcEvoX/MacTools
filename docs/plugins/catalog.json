@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-17T16:47:34Z",
+  "generatedAt": "2026-05-17T17:21:50Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -270,6 +270,26 @@
     {
       "capabilities": {
         "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "displayName": "锁定屏幕",
+      "id": "lock-screen",
+      "minimumHostVersion": "0.15.2",
+      "package": {
+        "sha256": "9e495219a1add5892fdbb8a14495b2edd560a375aec779ba71fec7d0b991a135",
+        "size": 40423,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.2/lock-screen.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.2",
+      "summary": "一键立即锁定屏幕，进入密码解锁界面",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
         "configuration": true,
         "primaryPanel": true
       },
@@ -356,6 +376,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "R+YpfFWUAxf3tNnE5Rkp3WFuqIANlkq6b91RVRmg/JmPf2ZjZ/MqwYU65lQGuBeW9ZB8szw/KjZIYo9x9wwPBw=="
+    "value": "uX4J+UO8qrlpYnrtyvCuzoLxiRE9hnSErbSwB+uY7DpVprCqQ6qn0jaChY8PdzBOSxODN5bNYCZ9XJxEGbu/CQ=="
   }
 }
