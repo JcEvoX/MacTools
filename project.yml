@@ -773,6 +773,52 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
 
+  LockScreenPluginCore:
+    type: library.static
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/LockScreen/Sources
+    dependencies:
+      - target: MacToolsPluginKit
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: LockScreenPlugin
+        PRODUCT_NAME: LockScreenPluginCore
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.lock-screen.core
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+
+  LockScreenPlugin:
+    type: bundle
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/LockScreen/Bundle
+    dependencies:
+      - target: MacToolsPluginKit
+      - target: LockScreenPluginCore
+        link: true
+    settings:
+      base:
+        PRODUCT_NAME: LockScreen
+        PRODUCT_MODULE_NAME: LockScreenPluginBundle
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.lock-screen
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+
   EjectDiskPluginCore:
     type: library.static
     platform: macOS
@@ -894,6 +940,7 @@ targets:
       - target: DiskCleanPluginCore
       - target: CalendarPluginCore
       - target: EmptyTrashPluginCore
+      - target: LockScreenPluginCore
       - target: EjectDiskPluginCore
       - target: KeepAwakePluginCore
     settings:
@@ -923,6 +970,7 @@ schemes:
         DiskCleanPlugin: all
         CalendarPlugin: all
         EmptyTrashPlugin: all
+        LockScreenPlugin: all
         EjectDiskPlugin: all
         KeepAwakePlugin: all
         MacTools: all
@@ -1084,6 +1132,16 @@ schemes:
       targets:
         MacToolsPluginKit: all
         EmptyTrashPlugin: all
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+  LockScreenPlugin:
+    build:
+      targets:
+        MacToolsPluginKit: all
+        LockScreenPlugin: all
     profile:
       config: Release
     archive:

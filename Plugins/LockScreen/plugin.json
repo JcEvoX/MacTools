@@ -1,0 +1,20 @@
+{
+  "id": "lock-screen",
+  "displayName": "锁定屏幕",
+  "summary": "一键立即锁定屏幕，进入密码解锁界面",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "LockScreen.bundle",
+  "factoryClass": "LockScreenPlugin.LockScreenPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "LockScreenPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}
