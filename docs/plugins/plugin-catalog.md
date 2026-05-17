@@ -104,6 +104,12 @@ make build-plugin LOCAL_PLUGIN_SOURCE_DIR=/path/to/plugins LOCAL_PLUGIN_BUILD_DI
 make run MACTOOLS_PLUGIN_CATALOG_URL=file:///path/to/catalog.dev.json
 ```
 
+For Debug runs, the catalog URL scheme selects the verification mode. A `file://` URL uses the local development catalog policy, where signatures are optional. An `https://` URL uses the production catalog policy, where the catalog signature is required:
+
+```bash
+make run MACTOOLS_PLUGIN_CATALOG_URL=https://ggbond268.github.io/MacTools/plugins/catalog.json
+```
+
 The app copies the package into its own staging and installed directories. Uninstall deletes only the installed copy under MacTools application support; it never deletes the plugin source directory or the local build directory.
 
 ## Release Flow

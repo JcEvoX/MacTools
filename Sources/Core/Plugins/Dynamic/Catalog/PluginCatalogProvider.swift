@@ -33,7 +33,7 @@ struct PluginCatalogProviderConfiguration {
         #if DEBUG
         if let rawURL = environment["MACTOOLS_PLUGIN_CATALOG_URL"],
            let url = URL(string: rawURL) {
-            return .localDevelopment(url)
+            return source(forEnvironmentCatalogURL: url)
         }
 
         if FileManager.default.fileExists(atPath: defaultLocalDevelopmentCatalogURL.path) {
@@ -42,6 +42,14 @@ struct PluginCatalogProviderConfiguration {
         #endif
 
         return .production(productionCatalogURL)
+    }
+
+    private static func source(forEnvironmentCatalogURL url: URL) -> PluginCatalogSource {
+        if url.isFileURL {
+            return .localDevelopment(url)
+        }
+
+        return .production(url)
     }
 
     static var defaultLocalDevelopmentCatalogURL: URL {

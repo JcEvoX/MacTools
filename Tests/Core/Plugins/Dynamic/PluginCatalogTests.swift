@@ -4,6 +4,24 @@ import XCTest
 @testable import MacTools
 
 final class PluginCatalogTests: XCTestCase {
+    func testEnvironmentHTTPSCatalogURLUsesProductionSource() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.com/plugins/catalog.json"))
+        let source = PluginCatalogProviderConfiguration.defaultSource(
+            environment: ["MACTOOLS_PLUGIN_CATALOG_URL": url.absoluteString]
+        )
+
+        XCTAssertEqual(source, .production(url))
+    }
+
+    func testEnvironmentFileCatalogURLUsesLocalDevelopmentSource() {
+        let url = URL(fileURLWithPath: "/tmp/catalog.dev.json")
+        let source = PluginCatalogProviderConfiguration.defaultSource(
+            environment: ["MACTOOLS_PLUGIN_CATALOG_URL": url.absoluteString]
+        )
+
+        XCTAssertEqual(source, .localDevelopment(url))
+    }
+
     func testLocalDevelopmentCatalogAcceptsUnsignedValidCatalog() throws {
         let catalog = makeCatalog()
         let verifier = PluginCatalogVerifier.localDevelopment(hostVersion: "1.0.0")
