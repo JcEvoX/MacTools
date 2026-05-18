@@ -125,7 +125,10 @@ final class ActivityBarCodingSessionStoreTests: XCTestCase {
             )
         )
 
-        let cursorStats = try XCTUnwrap(store.today.perTool["Cursor"])
+        guard let cursorStats = store.today.perTool["Cursor"] else {
+            XCTFail("Expected Cursor stats to be recorded")
+            return
+        }
         XCTAssertEqual(cursorStats.wordCount, 3)
         XCTAssertEqual(cursorStats.toolCallCount, 1)
         XCTAssertEqual(cursorStats.durationSeconds, 8, accuracy: 0.1)
