@@ -94,6 +94,16 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.state, .enabled)
     }
 
+    func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {
+        let rootDirectory = PluginPackageStore.defaultRootDirectory(fileManager: .default)
+
+        XCTAssertEqual(rootDirectory.lastPathComponent, "Plugins")
+        XCTAssertEqual(
+            rootDirectory.deletingLastPathComponent().lastPathComponent,
+            AppStorageScope.applicationSupportDirectoryName
+        )
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,

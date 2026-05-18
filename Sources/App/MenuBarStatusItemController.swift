@@ -101,7 +101,7 @@ final class MenuBarStatusItemController: NSObject {
         button.target = self
         button.action = #selector(handleStatusItemAction(_:))
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
-        button.toolTip = "MacTools"
+        button.toolTip = AppMetadata.appName
     }
 
     private func observePluginHost() {

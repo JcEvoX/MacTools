@@ -291,6 +291,14 @@ test_settings = {
   "base" => {
     "PRODUCT_BUNDLE_IDENTIFIER" => "$(BUNDLE_IDENTIFIER_PREFIX).mactoolsTests",
     "GENERATE_INFOPLIST_FILE" => "YES"
+  },
+  "configs" => {
+    "Debug" => {
+      "TEST_HOST" => "$(BUILT_PRODUCTS_DIR)/MacTools Dev.app/Contents/MacOS/MacTools Dev"
+    },
+    "Release" => {
+      "TEST_HOST" => "$(BUILT_PRODUCTS_DIR)/MacTools.app/Contents/MacOS/MacTools"
+    }
   }
 }
 test_settings["base"]["SWIFT_INCLUDE_PATHS"] = test_include_paths.join(" ") unless test_include_paths.empty?

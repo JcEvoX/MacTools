@@ -1094,9 +1094,7 @@ final class MenuBarIconSettings: ObservableObject {
     }
 
     private static func defaultRootDirectory(fileManager: FileManager) -> URL {
-        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        return baseURL.appendingPathComponent("MacTools", isDirectory: true)
+        AppStorageScope.applicationSupportRoot(fileManager: fileManager)
     }
 
     private static func loadState(userDefaults: UserDefaults) -> StoredState {

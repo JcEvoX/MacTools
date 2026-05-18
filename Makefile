@@ -1,13 +1,14 @@
 SHELL := /bin/zsh
 
 PROJECT_NAME := MacTools
+APP_PRODUCT_NAME ?= MacTools Dev
 REMOTE_URL ?= git@github.com:owner/MacTools.git
 PLACEHOLDER_REMOTE_URL := git@github.com:owner/MacTools.git
 PROJECT_FILE := $(PROJECT_NAME).xcodeproj
 WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
-APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(PROJECT_NAME).app
-APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(PROJECT_NAME)
+APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(APP_PRODUCT_NAME).app
+APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
 HOST_ARCH := $(shell uname -m)
 BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
 LOCAL_PLUGIN_SOURCE_DIR ?= Plugins
@@ -87,7 +88,7 @@ run: build
 	fi
 
 run-open: build
-	@open $(APP_PATH)
+	@open "$(APP_PATH)"
 
 clean:
 	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"

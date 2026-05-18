@@ -61,6 +61,13 @@ final class MenuBarIconSettingsTests: XCTestCase {
         XCTAssertEqual(payload.image.size, NSSize(width: 18, height: 18))
     }
 
+    func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {
+        XCTAssertEqual(
+            AppStorageScope.applicationSupportRoot().lastPathComponent,
+            AppStorageScope.applicationSupportDirectoryName
+        )
+    }
+
     func testImportImageRemovesPlainBackgroundByDefault() throws {
         let sourceURL = try makeImageFileWithBackground(name: "plain-background.png")
         let settings = MenuBarIconSettings(

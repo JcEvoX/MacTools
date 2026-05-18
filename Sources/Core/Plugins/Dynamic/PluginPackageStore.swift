@@ -305,12 +305,8 @@ final class PluginPackageStore {
         pendingRestartPluginIDs.remove(pluginID)
     }
 
-    private static func defaultRootDirectory(fileManager: FileManager) -> URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-
-        return base
-            .appendingPathComponent("MacTools", isDirectory: true)
+    static func defaultRootDirectory(fileManager: FileManager) -> URL {
+        AppStorageScope.applicationSupportRoot(fileManager: fileManager)
             .appendingPathComponent("Plugins", isDirectory: true)
     }
 }

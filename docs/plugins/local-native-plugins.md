@@ -92,6 +92,12 @@ Installed plugins are copied into:
   Temporary/
 ```
 
+Debug builds use a separate application identity and storage root:
+
+```text
+~/Library/Application Support/MacTools Dev/Plugins/
+```
+
 Install and update are staged before moving into `Installed`. Per-plugin runtime context includes scoped `UserDefaults` storage plus support, cache, temporary, and bundle resource locations.
 
 ## Security Model
