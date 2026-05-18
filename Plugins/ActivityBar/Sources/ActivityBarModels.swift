@@ -138,6 +138,10 @@ struct ActivityBarCodingDailyStats: Codable, Identifiable, Equatable, Sendable {
 }
 
 enum ActivityBarFormatting {
+    static func decimal(_ value: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+
     static func count(_ value: Int) -> String {
         if value >= 10_000 {
             return "\(value / 1_000)k"

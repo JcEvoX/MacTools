@@ -10,7 +10,7 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.plugin.metadata.id, "activity-bar")
         XCTAssertEqual(harness.plugin.metadata.title, "活动统计")
         XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .switch)
-        XCTAssertEqual(harness.plugin.descriptor.span, .fourByTwo)
+        XCTAssertEqual(harness.plugin.descriptor.span, PluginComponentSpan(width: 4, height: 6)!)
     }
 
     func testSwitchStartsAndStopsRuntime() {

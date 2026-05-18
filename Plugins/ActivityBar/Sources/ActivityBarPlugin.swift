@@ -39,7 +39,9 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         menuActionBehavior: .keepPresented
     )
 
-    let descriptor = PluginComponentDescriptor(span: .fourByTwo)
+    let descriptor = PluginComponentDescriptor(
+        span: PluginComponentSpan(width: 4, height: 6)!
+    )
 
     private let controller: ActivityBarController
 
