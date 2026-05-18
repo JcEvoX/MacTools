@@ -1,0 +1,364 @@
+import Foundation
+import OSLog
+import SwiftUI
+import MacToolsPluginKit
+
+// MARK: - Bundle Factory
+
+public final class FanControlPluginFactory: NSObject, MacToolsPluginBundleFactory {
+    public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
+        FanControlPluginProvider(context: context)
+    }
+}
+
+@MainActor
+private struct FanControlPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+    func makePlugins() -> [any MacToolsPlugin] {
+        [FanControlPlugin(context: context)]
+    }
+}
+
+// MARK: - Control IDs
+
+private enum ControlID {
+    static let presetList   = "fan-preset-list"
+    static let customSlider = "fan-custom-rpm"
+    static let addPreset    = "fan-add-preset"
+    static let deletePreset = "fan-delete-preset"
+    static let installGuide = "fan-install-guide"
+}
+
+// MARK: - Plugin
+
+@MainActor
+final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
+
+    // MARK: Metadata
+
+    let metadata = PluginMetadata(
+        id: "fan-control",
+        title: "风扇控制",
+        iconName: "fan",
+        iconTint: Color(nsColor: .systemCyan),
+        order: 45,
+        defaultDescription: "管理风扇转速预设"
+    )
+
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .disclosure,
+        menuActionBehavior: .keepPresented
+    )
+
+    // MARK: Callbacks
+
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    // MARK: Private State
+
+    let presetStore: FanControlPresetStore
+    private let smcReader: any FanControlSMCReading
+    private let smcWriter: any FanControlSMCWriting
+
+    private var isExpanded = false
+    private var fanSnapshot = FanSnapshot.empty
+    private var lastErrorMessage: String?
+    private var monitoringTask: Task<Void, Never>?
+
+    // MARK: Init
+
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fan-control"),
+        smcReader: any FanControlSMCReading = FanControlSMCReader(),
+        smcWriter: any FanControlSMCWriting = FanControlSMCWriter()
+    ) {
+        self.presetStore = FanControlPresetStore(storage: context.storage)
+        self.smcReader = smcReader
+        self.smcWriter = smcWriter
+    }
+
+    // MARK: - MacToolsPlugin
+
+    func activate(context: PluginRuntimeContext) {
+        startMonitoring()
+        // Re-apply the persisted active preset so fan state is consistent
+        // even after the app restarts. Skip if already "auto" to avoid
+        // spurious admin prompts on launch.
+        let preset = presetStore.activePreset
+        if case .auto = preset.strategy { return }
+        applyActivePreset()
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        stopMonitoring()
+        if reason.requiresStateCleanup {
+            let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
+            smcWriter.apply(strategy: .auto, snapshot: snapshot)
+            FanControlLog.plugin.info("Deactivated (\(String(describing: reason), privacy: .public)) — restored fan control to auto")
+        }
+    }
+
+    func refresh() {
+        fanSnapshot = smcReader.readSnapshot()
+        onStateChange?()
+    }
+
+    // MARK: - PluginPrimaryPanel
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: panelSubtitle,
+            isOn: false,
+            isExpanded: isExpanded,
+            isEnabled: true,
+            isVisible: true,
+            detail: isExpanded ? buildDetail() : nil,
+            errorMessage: lastErrorMessage
+        )
+    }
+
+    var permissionRequirements: [PluginPermissionRequirement] { [] }
+    var settingsSections: [PluginSettingsSection] { [] }
+    var shortcutDefinitions: [PluginShortcutDefinition] { [] }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: "管理风扇转速预设，支持自定义名称和转速") { [self] _ in
+            FanControlPresetManagerView(
+                presetStore: self.presetStore,
+                fanSnapshot: self.fanSnapshot
+            )
+        }
+    }
+
+    func handleAction(_ action: PluginPanelAction) {
+        switch action {
+        case let .setDisclosureExpanded(expanded):
+            isExpanded = expanded
+            if !expanded { lastErrorMessage = nil }
+            onStateChange?()
+
+        case let .setSelection(controlID, optionID):
+            guard controlID == ControlID.presetList else { return }
+            guard presetStore.allPresets.contains(where: { $0.id == optionID }) else { return }
+            presetStore.setActivePreset(id: optionID)
+            lastErrorMessage = nil
+            onStateChange?()
+            applyActivePreset()
+
+        case let .setSlider(controlID, value, phase):
+            guard controlID == ControlID.customSlider, phase == .ended else { return }
+            let rpm = Int(value)
+            let activeID = presetStore.activePresetID
+            presetStore.updateCustomPresetRPM(id: activeID, rpm: rpm)
+            lastErrorMessage = nil
+            onStateChange?()
+            applyActivePreset()
+
+        case let .invokeAction(controlID):
+            handleInvokeAction(controlID)
+
+        case .setSwitch, .setNavigationSelection, .clearNavigationSelection, .setDate:
+            break
+        }
+    }
+
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        PluginPermissionState(isGranted: true, footnote: nil)
+    }
+
+    func handlePermissionAction(id: String) {}
+    func handleSettingsAction(id: String) {}
+    func handleShortcutAction(id: String) {}
+
+    // MARK: - Actions
+
+    private func handleInvokeAction(_ controlID: String) {
+        switch controlID {
+        case ControlID.addPreset:
+            // Navigation to settings page is handled by MenuBarContent;
+            // the host intercepts this action ID and calls
+            // pluginHost.presentPluginConfiguration(pluginID: "fan-control").
+            break
+
+        case ControlID.deletePreset:
+            let idToDelete = presetStore.activePresetID
+            guard !presetStore.activePreset.isBuiltIn else { return }
+            presetStore.deleteCustomPreset(id: idToDelete)
+            lastErrorMessage = nil
+            onStateChange?()
+            // Active preset has been reset to auto by the store
+            applyActivePreset()
+
+        case ControlID.installGuide:
+            openInstallGuide()
+
+        default:
+            break
+        }
+    }
+
+    private func applyActivePreset() {
+        let preset = presetStore.activePreset
+        let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
+        let result = smcWriter.apply(strategy: preset.strategy, snapshot: snapshot)
+        if let err = result {
+            lastErrorMessage = err.errorDescription
+            FanControlLog.plugin.error("Apply preset failed: \(err.localizedDescription, privacy: .public)")
+        } else {
+            lastErrorMessage = nil
+        }
+        onStateChange?()
+    }
+
+    private func openInstallGuide() {
+        let url = URL(string: "https://github.com/mohamadtorchani/solofan#installation")!
+        NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Monitoring
+
+    private func startMonitoring() {
+        guard monitoringTask == nil else { return }
+        monitoringTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.fanSnapshot = self?.smcReader.readSnapshot() ?? .empty
+                self?.onStateChange?()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private func stopMonitoring() {
+        monitoringTask?.cancel()
+        monitoringTask = nil
+    }
+
+    // MARK: - Panel Builder
+
+    private var panelSubtitle: String {
+        let preset = presetStore.activePreset
+        if let rpm = fanSnapshot.averageSpeed, rpm > 0 {
+            return "\(preset.name) · \(rpm) RPM"
+        }
+        return preset.name
+    }
+
+    private func buildDetail() -> PluginPanelDetail {
+        var controls: [PluginPanelControl] = []
+
+        // 1. Preset select list
+        let presetOptions = presetStore.allPresets.map {
+            PluginPanelControlOption(
+                id: $0.id,
+                title: $0.name,
+                subtitle: presetSubtitle(for: $0)
+            )
+        }
+        controls.append(PluginPanelControl(
+            id: ControlID.presetList,
+            kind: .selectList,
+            options: presetOptions,
+            selectedOptionID: presetStore.activePresetID,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            isEnabled: true
+        ))
+
+        // 2. Slider for the active custom preset
+        let activePreset = presetStore.activePreset
+        if case let .fixed(rpm) = activePreset.strategy, !activePreset.isBuiltIn {
+            let maxSlider = Double(fanSnapshot.globalMaxSpeed > 0
+                ? fanSnapshot.globalMaxSpeed
+                : FanRPMLimits.fallbackMax)
+            controls.append(PluginPanelControl(
+                id: ControlID.customSlider,
+                kind: .slider,
+                options: [],
+                selectedOptionID: nil,
+                dateValue: nil,
+                minimumDate: nil,
+                displayedComponents: nil,
+                datePickerStyle: nil,
+                sectionTitle: "目标转速",
+                sliderValue: Double(rpm),
+                sliderBounds: Double(FanRPMLimits.absoluteMin)...maxSlider,
+                sliderStep: 100,
+                valueLabel: "\(rpm) RPM",
+                isEnabled: true
+            ))
+
+            // 3. Delete button for custom preset
+            controls.append(PluginPanelControl(
+                id: ControlID.deletePreset,
+                kind: .actionRow,
+                options: [],
+                selectedOptionID: nil,
+                dateValue: nil,
+                minimumDate: nil,
+                displayedComponents: nil,
+                datePickerStyle: nil,
+                sectionTitle: nil,
+                actionTitle: "删除此预设",
+                actionIconSystemName: "trash",
+                isEnabled: true
+            ))
+        }
+
+        // 4. Add custom preset → opens plugin settings page
+        controls.append(PluginPanelControl(
+            id: ControlID.addPreset,
+            kind: .actionRow,
+            options: [],
+            selectedOptionID: nil,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            actionTitle: "管理预设…",
+            actionIconSystemName: "slider.horizontal.3",
+            actionBehavior: .dismissBeforeHandling,
+            showsLeadingDivider: true,
+            isEnabled: true
+        ))
+
+        // 5. Helper-not-found warning
+        if !smcWriter.isHelperAvailable {
+            controls.append(PluginPanelControl(
+                id: ControlID.installGuide,
+                kind: .actionRow,
+                options: [],
+                selectedOptionID: nil,
+                dateValue: nil,
+                minimumDate: nil,
+                displayedComponents: nil,
+                datePickerStyle: nil,
+                sectionTitle: nil,
+                actionTitle: "安装风扇控制助手…",
+                actionIconSystemName: "exclamationmark.triangle",
+                actionBehavior: .dismissBeforeHandling,
+                showsLeadingDivider: true,
+                isEnabled: true
+            ))
+        }
+
+        return PluginPanelDetail(primaryControls: controls, secondaryPanel: nil)
+    }
+
+    private func presetSubtitle(for preset: FanPreset) -> String? {
+        switch preset.strategy {
+        case .auto:
+            return "由 macOS 管理"
+        case .fullSpeed:
+            let maxRPM = fanSnapshot.globalMaxSpeed
+            return maxRPM > 0 ? "最高 \(maxRPM) RPM" : "最高转速"
+        case .fixed(let rpm):
+            return "\(rpm) RPM"
+        }
+    }
+}

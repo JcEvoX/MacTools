@@ -104,6 +104,8 @@ final class PluginHost: ObservableObject {
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
+            // Pause any dynamic plugin that was hidden before this launch.
+            pauseHiddenDynamicPlugins()
             dynamicPluginManager.onPluginsChanged = { [weak self] plugins in
                 self?.replaceDynamicPlugins(plugins)
             }
@@ -344,6 +346,15 @@ final class PluginHost: ObservableObject {
             for: pluginID,
             defaultPluginIDs: defaultPluginIDs
         )
+        // For dynamic plugins, pause/resume side effects with visibility.
+        // The plugin stays loaded so it remains visible in the 已安装 list.
+        if dynamicPlugins.contains(where: { $0.metadata.id == pluginID }) {
+            if isVisible {
+                dynamicPluginManager?.resumePlugin(pluginID)
+            } else {
+                dynamicPluginManager?.pausePlugin(pluginID)
+            }
+        }
         rebuildDerivedState()
     }
 
@@ -578,8 +589,20 @@ final class PluginHost: ObservableObject {
             return $0.metadata.order < $1.metadata.order
         }
         configureCallbacks(for: dynamicPlugins)
+        // Re-apply pause for any plugin that is currently hidden.
+        pauseHiddenDynamicPlugins()
         rebuildDerivedState()
         syncGlobalShortcuts()
+    }
+
+    private func pauseHiddenDynamicPlugins() {
+        for plugin in dynamicPlugins
+            where !pluginDisplayPreferencesStore.isVisible(
+                plugin.metadata.id, defaultPluginIDs: defaultPluginIDs
+            )
+        {
+            dynamicPluginManager?.pausePlugin(plugin.metadata.id)
+        }
     }
 
     private func syncPluginManagementState() {

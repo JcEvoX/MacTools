@@ -117,6 +117,11 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         }
     }
 
+    func deactivate(reason: PluginDeactivationReason) {
+        guard reason.requiresStateCleanup else { return }
+        stopSession()
+    }
+
     // MARK: - Primary Panel
 
     var primaryPanelState: PluginPanelState {
