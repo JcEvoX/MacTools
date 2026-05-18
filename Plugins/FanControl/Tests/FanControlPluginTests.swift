@@ -119,7 +119,7 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .writeFailed("test error")
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
 
         plugin.handleAction(.setDisclosureExpanded(false))
@@ -132,7 +132,7 @@ final class FanControlPluginTests: XCTestCase {
         let writer = MockSMCWriter()
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.auto))
 
         XCTAssertEqual(writer.appliedStrategy, .auto)
     }
@@ -141,7 +141,7 @@ final class FanControlPluginTests: XCTestCase {
         let writer = MockSMCWriter()
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
 
         XCTAssertEqual(writer.appliedStrategy, .fullSpeed)
     }
@@ -150,7 +150,7 @@ final class FanControlPluginTests: XCTestCase {
         let writer = MockSMCWriter()
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", "nonexistent-id"))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: "nonexistent-id"))
 
         XCTAssertNil(writer.appliedStrategy)
     }
@@ -160,9 +160,9 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .writeFailed("prev error")
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
         writer.writeError = nil
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.auto))
 
         XCTAssertNil(plugin.primaryPanelState.errorMessage)
     }
@@ -174,7 +174,7 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .writeFailed("硬件写入失败")
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
 
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
@@ -184,7 +184,7 @@ final class FanControlPluginTests: XCTestCase {
         writer.writeError = .helperNotFound
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        plugin.handleAction(.setSelection(controlID: "fan-preset-list", optionID: FanPresetBuiltInID.fullSpeed))
 
         XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
     }
@@ -198,7 +198,7 @@ final class FanControlPluginTests: XCTestCase {
         let preset = plugin.presetStore.addCustomPreset()
         plugin.presetStore.setActivePreset(id: preset.id)
 
-        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .ended))
+        plugin.handleAction(.setSlider(controlID: "fan-custom-rpm", value: 4000, phase: .ended))
 
         if case let .fixed(rpm) = writer.appliedStrategy {
             XCTAssertEqual(rpm, 4000)
@@ -214,7 +214,7 @@ final class FanControlPluginTests: XCTestCase {
         let preset = plugin.presetStore.addCustomPreset()
         plugin.presetStore.setActivePreset(id: preset.id)
 
-        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .changed))
+        plugin.handleAction(.setSlider(controlID: "fan-custom-rpm", value: 4000, phase: .changed))
 
         XCTAssertNil(writer.appliedStrategy)
     }
@@ -223,7 +223,7 @@ final class FanControlPluginTests: XCTestCase {
         let writer = MockSMCWriter()
         let plugin = makeFanControlPlugin(writer: writer)
 
-        plugin.handleAction(.setSlider("wrong-id", 4000, .ended))
+        plugin.handleAction(.setSlider(controlID: "wrong-id", value: 4000, phase: .ended))
 
         XCTAssertNil(writer.appliedStrategy)
     }
@@ -235,7 +235,7 @@ final class FanControlPluginTests: XCTestCase {
         let plugin = makeFanControlPlugin(writer: writer)
 
         // Active preset is built-in by default
-        plugin.handleAction(.invokeAction("fan-delete-preset"))
+        plugin.handleAction(.invokeAction(controlID: "fan-delete-preset"))
 
         XCTAssertNil(writer.appliedStrategy)
     }
@@ -247,7 +247,7 @@ final class FanControlPluginTests: XCTestCase {
         let preset = plugin.presetStore.addCustomPreset()
         plugin.presetStore.setActivePreset(id: preset.id)
 
-        plugin.handleAction(.invokeAction("fan-delete-preset"))
+        plugin.handleAction(.invokeAction(controlID: "fan-delete-preset"))
 
         XCTAssertEqual(writer.appliedStrategy, .auto)
     }
