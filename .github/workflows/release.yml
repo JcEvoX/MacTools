@@ -166,7 +166,7 @@ jobs:
 
       - name: Build unsigned Release app
         run: |
-          xcodebuild \
+          ./scripts/xcodebuild-filtered.sh \
             -project "${PROJECT_NAME}.xcodeproj" \
             -scheme "${SCHEME}" \
             -configuration Release \

@@ -2,7 +2,7 @@
   "id": "system-status",
   "displayName": "系统状态",
   "summary": "实时查看系统状态",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "SystemStatus.bundle",

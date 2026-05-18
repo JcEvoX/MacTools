@@ -2,7 +2,7 @@
   "id": "empty-trash",
   "displayName": "清空废纸篓",
   "summary": "清空废纸篓中的所有项目",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "EmptyTrash.bundle",

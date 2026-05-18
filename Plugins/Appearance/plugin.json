@@ -2,7 +2,7 @@
   "id": "appearance",
   "displayName": "深色模式",
   "summary": "切换系统亮色与深色外观",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "Appearance.bundle",

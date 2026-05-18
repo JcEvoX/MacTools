@@ -2,7 +2,7 @@
   "id": "clipboard-clear",
   "displayName": "清空剪贴板",
   "summary": "一键清空当前剪贴板内容",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "ClipboardClear.bundle",

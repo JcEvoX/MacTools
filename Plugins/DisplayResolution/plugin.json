@@ -2,7 +2,7 @@
   "id": "display-resolution",
   "displayName": "显示器分辨率",
   "summary": "查看并切换每个显示器的分辨率",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "DisplayResolution.bundle",

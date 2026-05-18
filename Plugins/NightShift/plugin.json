@@ -2,7 +2,7 @@
   "id": "night-shift",
   "displayName": "夜览",
   "summary": "降低蓝光，使屏幕颜色更暖",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "NightShift.bundle",

@@ -285,6 +285,7 @@ jobs:
             --catalog-output "$PLUGIN_CATALOG_DELTA_PATH"
             --sign-identity "$SIGNING_IDENTITY"
             --destination "generic/platform=macOS"
+            --xcodebuild "$PWD/scripts/xcodebuild-filtered.sh"
             --release-notes-url "$PLUGIN_RELEASE_NOTES_URL"
           )
           for plugin_id in "${selected_plugins[@]}"; do

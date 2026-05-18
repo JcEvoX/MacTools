@@ -1,7 +1,7 @@
 {
   "id": "hide-dock",
   "displayName": "隐藏 Dock",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "HideDock.bundle",

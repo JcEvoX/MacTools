@@ -2,7 +2,7 @@
   "id": "calendar",
   "displayName": "日历",
   "summary": "查看日期、节假日和系统日程",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "Calendar.bundle",

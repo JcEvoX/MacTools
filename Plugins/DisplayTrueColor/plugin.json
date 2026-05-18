@@ -2,7 +2,7 @@
   "id": "display-true-color",
   "displayName": "原彩显示",
   "summary": "自动调节显示器颜色以适应环境光",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "DisplayTrueColor.bundle",
