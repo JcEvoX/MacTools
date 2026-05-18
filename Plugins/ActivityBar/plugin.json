@@ -1,0 +1,20 @@
+{
+  "id": "activity-bar",
+  "displayName": "活动统计",
+  "summary": "统计输入、前台应用使用时长和 AI 编程活动",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "ActivityBar.bundle",
+  "factoryClass": "ActivityBarPlugin.ActivityBarPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "ActivityBarPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": true,
+    "configuration": false
+  },
+  "permissions": []
+}
