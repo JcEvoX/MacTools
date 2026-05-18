@@ -104,6 +104,11 @@ final class KeepAwakePlugin: MacToolsPlugin, PluginPrimaryPanel {
         scheduleSubtitleRefreshIfNeeded()
     }
 
+    func deactivate(reason: PluginDeactivationReason) {
+        guard reason.requiresStateCleanup else { return }
+        session?.requestStop(reason: .userRequested)
+    }
+
     func handleAction(_ action: PluginPanelAction) {
         switch action {
         case let .setSwitch(isEnabled):

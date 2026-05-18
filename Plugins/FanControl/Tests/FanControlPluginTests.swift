@@ -1,0 +1,548 @@
+import XCTest
+@testable import MacTools
+@testable import FanControlPlugin
+
+// MARK: - Mock SMC Reader
+
+@MainActor
+private final class MockSMCReader: FanControlSMCReading {
+    var snapshot: FanSnapshot
+
+    init(snapshot: FanSnapshot = .empty) {
+        self.snapshot = snapshot
+    }
+
+    func readSnapshot() -> FanSnapshot { snapshot }
+}
+
+// MARK: - Mock SMC Writer
+
+@MainActor
+private final class MockSMCWriter: FanControlSMCWriting {
+    var isHelperAvailable: Bool
+    var appliedStrategy: FanControlStrategy?
+    var writeError: FanWriteError?
+
+    init(isHelperAvailable: Bool = true) {
+        self.isHelperAvailable = isHelperAvailable
+    }
+
+    @discardableResult
+    func apply(strategy: FanControlStrategy, snapshot: FanSnapshot) -> FanWriteError? {
+        appliedStrategy = strategy
+        return writeError
+    }
+}
+
+// MARK: - FanControlPluginTests
+
+@MainActor
+final class FanControlPluginTests: XCTestCase {
+
+    // MARK: - Metadata
+
+    func testMetadataIdentifiesFanControlPlugin() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.metadata.id, "fan-control")
+        XCTAssertEqual(plugin.metadata.title, "风扇控制")
+    }
+
+    func testMetadataDefaultDescription() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.metadata.defaultDescription, "管理风扇转速预设")
+    }
+
+    func testControlStyleIsDisclosure() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
+    }
+
+    // MARK: - Panel State
+
+    func testInitialPanelStateIsNotExpanded() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
+    }
+
+    func testInitialPanelStateIsEnabled() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
+    }
+
+    func testInitialPanelStateHasNoError() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testSubtitleContainsActivePresetNameWhenNoSnapshot() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.primaryPanelState.subtitle.contains("自动"))
+    }
+
+    func testSubtitleContainsRPMWhenSnapshotHasFanSpeed() {
+        let snapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let reader = MockSMCReader(snapshot: snapshot)
+        let plugin = makeFanControlPlugin(reader: reader)
+
+        plugin.refresh()
+
+        XCTAssertTrue(plugin.primaryPanelState.subtitle.contains("3600 RPM"))
+    }
+
+    // MARK: - Disclosure Expansion
+
+    func testHandleDisclosureExpandedTogglesState() {
+        let plugin = makeFanControlPlugin()
+
+        plugin.handleAction(.setDisclosureExpanded(true))
+        XCTAssertTrue(plugin.primaryPanelState.isExpanded)
+
+        plugin.handleAction(.setDisclosureExpanded(false))
+        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
+    }
+
+    func testCollapsingDisclosureClearsError() {
+        let writer = MockSMCWriter()
+        writer.writeError = .writeFailed("test error")
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+
+        plugin.handleAction(.setDisclosureExpanded(false))
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Preset Selection
+
+    func testSelectingBuiltInAutoPresetAppliesAutoStrategy() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+
+        XCTAssertEqual(writer.appliedStrategy, .auto)
+    }
+
+    func testSelectingFullSpeedPresetAppliesFullSpeedStrategy() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertEqual(writer.appliedStrategy, .fullSpeed)
+    }
+
+    func testSelectingUnknownPresetIDDoesNotApply() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", "nonexistent-id"))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    func testSelectingPresetClearsError() {
+        let writer = MockSMCWriter()
+        writer.writeError = .writeFailed("prev error")
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+        writer.writeError = nil
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Write Error Propagation
+
+    func testWriteErrorAppearsInPanelState() {
+        let writer = MockSMCWriter()
+        writer.writeError = .writeFailed("硬件写入失败")
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testHelperNotFoundErrorAppearsInPanelState() {
+        let writer = MockSMCWriter(isHelperAvailable: false)
+        writer.writeError = .helperNotFound
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Slider Action
+
+    func testSliderEndedUpdatesCustomPresetRPM() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        let preset = plugin.presetStore.addCustomPreset()
+        plugin.presetStore.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .ended))
+
+        if case let .fixed(rpm) = writer.appliedStrategy {
+            XCTAssertEqual(rpm, 4000)
+        } else {
+            XCTFail("Expected .fixed strategy, got \(String(describing: writer.appliedStrategy))")
+        }
+    }
+
+    func testSliderChangedPhaseDoesNotApplyPreset() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        let preset = plugin.presetStore.addCustomPreset()
+        plugin.presetStore.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .changed))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    func testSliderWithWrongControlIDDoesNothing() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSlider("wrong-id", 4000, .ended))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    // MARK: - Delete Preset Action
+
+    func testDeleteBuiltInPresetDoesNothing() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        // Active preset is built-in by default
+        plugin.handleAction(.invokeAction("fan-delete-preset"))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    func testDeleteCustomPresetResetsToAuto() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        let preset = plugin.presetStore.addCustomPreset()
+        plugin.presetStore.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.invokeAction("fan-delete-preset"))
+
+        XCTAssertEqual(writer.appliedStrategy, .auto)
+    }
+
+    // MARK: - Permissions & Settings
+
+    func testPermissionRequirementsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
+    }
+
+    func testSettingsSectionsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.settingsSections.isEmpty)
+    }
+
+    func testShortcutDefinitionsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.shortcutDefinitions.isEmpty)
+    }
+
+    // MARK: - Plugin Host Integration
+
+    func testPluginHostIncludesFanControlPlugin() {
+        let host = makePluginHostForTests(plugins: [makeFanControlPlugin()])
+
+        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "fan-control" })
+    }
+
+    // MARK: - Helpers
+
+    private func makeFanControlPlugin(
+        reader: MockSMCReader = MockSMCReader(),
+        writer: MockSMCWriter = MockSMCWriter()
+    ) -> FanControlPlugin {
+        FanControlPlugin(smcReader: reader, smcWriter: writer)
+    }
+}
+
+
+// MARK: - FanControlPluginTests
+
+@MainActor
+final class FanControlPluginTests: XCTestCase {
+
+    // MARK: - Metadata
+
+    func testMetadataIdentifiesFanControlPlugin() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.metadata.id, "fan-control")
+        XCTAssertEqual(plugin.metadata.title, "风扇控制")
+    }
+
+    func testMetadataDefaultDescription() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.metadata.defaultDescription, "管理风扇转速预设")
+    }
+
+    func testControlStyleIsDisclosure() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
+    }
+
+    // MARK: - Panel State
+
+    func testInitialPanelStateIsNotExpanded() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
+    }
+
+    func testInitialPanelStateIsEnabled() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
+    }
+
+    func testInitialPanelStateHasNoError() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testSubtitleContainsActivePresetNameWhenNoSnapshot() {
+        let plugin = makeFanControlPlugin()
+
+        // Default active preset is "自动"
+        XCTAssertTrue(plugin.primaryPanelState.subtitle.contains("自动"))
+    }
+
+    func testSubtitleContainsRPMWhenSnapshotHasFanSpeed() {
+        let snapshot = FanSnapshot(
+            fanCount: 1,
+            fanSpeeds: [3600],
+            fanMinSpeeds: [1200],
+            fanMaxSpeeds: [5200],
+            cpuTemperature: 45.0
+        )
+        let reader = MockSMCReader(snapshot: snapshot)
+        let plugin = makeFanControlPlugin(reader: reader)
+
+        // Trigger a refresh to load the snapshot
+        plugin.refresh()
+
+        XCTAssertTrue(plugin.primaryPanelState.subtitle.contains("3600 RPM"))
+    }
+
+    // MARK: - Disclosure Expansion
+
+    func testHandleDisclosureExpandedTogglesState() {
+        let plugin = makeFanControlPlugin()
+
+        plugin.handleAction(.setDisclosureExpanded(true))
+        XCTAssertTrue(plugin.primaryPanelState.isExpanded)
+
+        plugin.handleAction(.setDisclosureExpanded(false))
+        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
+    }
+
+    func testCollapsingDisclosureClearsError() {
+        let writer = MockSMCWriter(isHelperAvailable: false)
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setDisclosureExpanded(true))
+        // Force an error by applying preset (helper not available)
+        plugin.handleAction(.setDisclosureExpanded(false))
+
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Preset Selection
+
+    func testSelectingBuiltInAutoPreset() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+
+        XCTAssertEqual(writer.appliedStrategy, .auto)
+    }
+
+    func testSelectingFullSpeedPreset() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertEqual(writer.appliedStrategy, .fullSpeed)
+    }
+
+    func testSelectingUnknownPresetIDDoesNothing() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", "nonexistent-id"))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    func testSelectingPresetClearsError() {
+        let writer = MockSMCWriter()
+        writer.writeError = .writeFailed("test error")
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        // First set some error
+        plugin.handleAction(.setDisclosureExpanded(true))
+        writer.writeError = nil
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.auto))
+
+        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Write Error Propagation
+
+    func testWriteErrorAppearsInPanelState() {
+        let writer = MockSMCWriter()
+        writer.writeError = .writeFailed("硬件写入失败")
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    func testHelperNotFoundErrorAppearsInPanelState() {
+        let writer = MockSMCWriter(isHelperAvailable: false)
+        writer.writeError = .helperNotFound
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        plugin.handleAction(.setSelection("fan-preset-list", FanPresetBuiltInID.fullSpeed))
+
+        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+    }
+
+    // MARK: - Slider Action
+
+    func testSliderEndedUpdatesCustomPresetRPM() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        // Add and activate a custom preset
+        let store = plugin.exposedPresetStore
+        let preset = store.addCustomPreset()
+        store.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .ended))
+
+        if case let .fixed(rpm) = writer.appliedStrategy {
+            XCTAssertEqual(rpm, 4000)
+        } else {
+            XCTFail("Expected .fixed strategy, got \(String(describing: writer.appliedStrategy))")
+        }
+    }
+
+    func testSliderChangedPhaseDoesNotApplyPreset() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        let store = plugin.exposedPresetStore
+        let preset = store.addCustomPreset()
+        store.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.setSlider("fan-custom-rpm", 4000, .changed))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    // MARK: - Delete Preset Action
+
+    func testDeleteBuiltInPresetDoesNothing() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        // Active preset is built-in by default
+        writer.appliedStrategy = nil
+        plugin.handleAction(.invokeAction("fan-delete-preset"))
+
+        XCTAssertNil(writer.appliedStrategy)
+    }
+
+    func testDeleteCustomPresetResetsToAuto() {
+        let writer = MockSMCWriter()
+        let plugin = makeFanControlPlugin(writer: writer)
+
+        let store = plugin.exposedPresetStore
+        let preset = store.addCustomPreset()
+        store.setActivePreset(id: preset.id)
+
+        plugin.handleAction(.invokeAction("fan-delete-preset"))
+
+        // After deletion, should fall back to auto
+        XCTAssertEqual(writer.appliedStrategy, .auto)
+    }
+
+    // MARK: - Permissions & Settings
+
+    func testPermissionRequirementsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.permissionRequirements.isEmpty)
+    }
+
+    func testSettingsSectionsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.settingsSections.isEmpty)
+    }
+
+    func testShortcutDefinitionsIsEmpty() {
+        let plugin = makeFanControlPlugin()
+
+        XCTAssertTrue(plugin.shortcutDefinitions.isEmpty)
+    }
+
+    // MARK: - Plugin Host Integration
+
+    func testPluginHostIncludesFanControlPlugin() {
+        let host = makePluginHostForTests(plugins: [makeFanControlPlugin()])
+
+        XCTAssertTrue(host.featureManagementItems.contains { $0.id == "fan-control" })
+    }
+
+    // MARK: - Helpers
+
+    private func makeFanControlPlugin(
+        reader: MockSMCReader = MockSMCReader(),
+        writer: MockSMCWriter = MockSMCWriter()
+    ) -> FanControlPlugin {
+        FanControlPlugin(smcReader: reader, smcWriter: writer)
+    }
+}

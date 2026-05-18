@@ -214,6 +214,27 @@ final class DynamicPluginManager: ObservableObject {
         reloadInstalledPlugins()
     }
 
+    func isInstalledPlugin(_ pluginID: String) -> Bool {
+        packageStore.installedRecords().contains { $0.id == pluginID }
+    }
+
+    /// Deactivate a loaded plugin without unloading it.
+    /// Used when the user hides the plugin — it stays in the list but its side effects stop.
+    func pausePlugin(_ pluginID: String) {
+        guard let plugins = loadedPluginsByID[pluginID] else { return }
+        for plugin in plugins {
+            plugin.deactivate(reason: .disabled)
+        }
+    }
+
+    /// Re-activate a previously paused plugin without reloading it.
+    func resumePlugin(_ pluginID: String) {
+        guard let plugins = loadedPluginsByID[pluginID] else { return }
+        for plugin in plugins {
+            plugin.activate(context: PluginRuntimeContext(pluginID: pluginID))
+        }
+    }
+
     func setPluginEnabled(_ isEnabled: Bool, pluginID: String) {
         if !isEnabled {
             deactivateLoadedPlugins(pluginID: pluginID, reason: .disabled)

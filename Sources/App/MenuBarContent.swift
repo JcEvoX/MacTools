@@ -314,6 +314,8 @@ struct MenuBarContent: View {
     static let diskCleanOpenDetailsActionID = "disk-clean-open-details"
     static let launchControlWindowID = "launch-control"
     static let launchControlOpenManagerActionID = "launch-control-open-manager"
+    static let fanControlPluginID = "fan-control"
+    static let fanControlManagePresetsActionID = "fan-add-preset"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -412,6 +414,12 @@ struct MenuBarContent: View {
             return
         }
 
+        if isFanControlManagePresetsAction(pluginID: item.id, controlID: controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.fanControlPluginID)
+            onDismiss()
+            return
+        }
+
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -458,6 +466,11 @@ struct MenuBarContent: View {
             return
         }
 
+        if isFanControlManagePresetsAction(pluginID: action.pluginID, controlID: action.controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.fanControlPluginID)
+            return
+        }
+
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -470,6 +483,10 @@ struct MenuBarContent: View {
 
     private func isLaunchControlOpenManagerAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.launchControlWindowID && controlID == Self.launchControlOpenManagerActionID
+    }
+
+    private func isFanControlManagePresetsAction(pluginID: String, controlID: String) -> Bool {
+        pluginID == Self.fanControlPluginID && controlID == Self.fanControlManagePresetsActionID
     }
 
     private func presentDiskCleanDetails() {
@@ -1283,8 +1300,6 @@ private struct SliderControl: View {
             }
 
             HStack(alignment: .center, spacing: 8) {
-                brightnessGlyph(systemName: "sun.min.fill", size: 12)
-
                 Slider(
                     value: Binding(
                         get: { isEditing ? localValue : (control.sliderValue ?? localValue) },
@@ -1309,8 +1324,6 @@ private struct SliderControl: View {
                 .disabled(!control.isEnabled)
                 .tint(Color(nsColor: .controlAccentColor))
                 .accessibilityLabel(control.sectionTitle ?? "显示器亮度")
-
-                brightnessGlyph(systemName: "sun.max.fill", size: 12)
             }
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)

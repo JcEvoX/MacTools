@@ -913,6 +913,54 @@ targets:
         DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         OTHER_LDFLAGS: -framework IOKit
 
+  FanControlPluginCore:
+    type: library.static
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/FanControl/Sources
+    dependencies:
+      - target: MacToolsPluginKit
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: FanControlPlugin
+        PRODUCT_NAME: FanControlPluginCore
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.fan-control.core
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        OTHER_LDFLAGS: -framework IOKit
+
+  FanControlPlugin:
+    type: bundle
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/FanControl/Bundle
+    dependencies:
+      - target: MacToolsPluginKit
+      - target: FanControlPluginCore
+        link: true
+    settings:
+      base:
+        PRODUCT_NAME: FanControl
+        PRODUCT_MODULE_NAME: FanControlPluginBundle
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.fan-control
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        OTHER_LDFLAGS: -framework IOKit
+
   MacToolsTests:
     type: bundle.unit-test
     platform: macOS
@@ -943,6 +991,7 @@ targets:
       - target: LockScreenPluginCore
       - target: EjectDiskPluginCore
       - target: KeepAwakePluginCore
+      - target: FanControlPluginCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactoolsTests
@@ -973,6 +1022,7 @@ schemes:
         LockScreenPlugin: all
         EjectDiskPlugin: all
         KeepAwakePlugin: all
+        FanControlPlugin: all
         MacTools: all
         MacToolsTests: [test]
     run:
@@ -1162,6 +1212,16 @@ schemes:
       targets:
         MacToolsPluginKit: all
         KeepAwakePlugin: all
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+  FanControlPlugin:
+    build:
+      targets:
+        MacToolsPluginKit: all
+        FanControlPlugin: all
     profile:
       config: Release
     archive:
