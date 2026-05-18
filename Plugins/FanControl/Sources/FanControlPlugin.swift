@@ -66,6 +66,8 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var fanSnapshot = FanSnapshot.empty
     private var lastErrorMessage: String?
     private var monitoringTask: Task<Void, Never>?
+    private var sleepObserver: (any NSObjectProtocol)?
+    private var wakeObserver: (any NSObjectProtocol)?
 
     // MARK: Init
 
@@ -83,6 +85,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func activate(context: PluginRuntimeContext) {
         startMonitoring()
+        registerSleepWakeObservers()
         // Re-apply the persisted active preset so fan state is consistent
         // even after the app restarts. Skip if already "auto" to avoid
         // spurious admin prompts on launch.
@@ -92,6 +95,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        unregisterSleepWakeObservers()
         stopMonitoring()
         if reason.requiresStateCleanup {
             let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
@@ -233,6 +237,50 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func stopMonitoring() {
         monitoringTask?.cancel()
         monitoringTask = nil
+    }
+
+    private func registerSleepWakeObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        sleepObserver = center.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.handleSystemWillSleep() }
+        }
+        wakeObserver = center.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.handleSystemDidWake() }
+        }
+    }
+
+    private func unregisterSleepWakeObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        if let obs = sleepObserver { center.removeObserver(obs) }
+        if let obs = wakeObserver { center.removeObserver(obs) }
+        sleepObserver = nil
+        wakeObserver = nil
+    }
+
+    private func handleSystemWillSleep() {
+        let preset = presetStore.activePreset
+        guard case .auto = preset.strategy else {
+            let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
+            smcWriter.apply(strategy: .auto, snapshot: snapshot)
+            FanControlLog.plugin.info("System will sleep — restored fan control to auto")
+            return
+        }
+    }
+
+    private func handleSystemDidWake() {
+        fanSnapshot = smcReader.readSnapshot()
+        let preset = presetStore.activePreset
+        if case .auto = preset.strategy { return }
+        applyActivePreset()
+        FanControlLog.plugin.info("System did wake — re-applied active preset: \(preset.name, privacy: .public)")
     }
 
     // MARK: - Panel Builder
