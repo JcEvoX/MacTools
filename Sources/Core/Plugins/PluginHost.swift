@@ -38,6 +38,7 @@ final class PluginHost: ObservableObject {
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
+    private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
 
@@ -129,13 +130,16 @@ final class PluginHost: ObservableObject {
     }
 
     func refreshAll() {
-        handlePluginAction {
-            for plugin in plugins {
-                plugin.refresh()
+        handlePluginAction(rebuildAfterAction: false) {
+            for plugin in activePlugins {
+                guardPluginCall(plugin, operation: "refresh") {
+                    plugin.refresh()
+                }
             }
         }
 
         syncGlobalShortcuts()
+        rebuildDerivedState()
     }
 
     func refreshDisplayTopology() {
@@ -148,22 +152,30 @@ final class PluginHost: ObservableObject {
     }
 
     func setSwitchValue(_ isOn: Bool, for pluginID: String) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.setSwitch(isOn))
+            guardPluginCall(plugin, operation: "set switch") {
+                primaryPanel.handleAction(.setSwitch(isOn))
+            }
         }
     }
 
     func setDisclosureExpanded(_ isExpanded: Bool, for pluginID: String) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.setDisclosureExpanded(isExpanded))
+            guardPluginCall(plugin, operation: "set disclosure") {
+                primaryPanel.handleAction(.setDisclosureExpanded(isExpanded))
+            }
         }
     }
 
@@ -172,12 +184,16 @@ final class PluginHost: ObservableObject {
         controlID: String,
         for pluginID: String
     ) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.setSelection(controlID: controlID, optionID: optionID))
+            guardPluginCall(plugin, operation: "set selection") {
+                primaryPanel.handleAction(.setSelection(controlID: controlID, optionID: optionID))
+            }
         }
     }
 
@@ -186,14 +202,18 @@ final class PluginHost: ObservableObject {
         controlID: String,
         for pluginID: String
     ) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(
-                .setNavigationSelection(controlID: controlID, optionID: optionID)
-            )
+            guardPluginCall(plugin, operation: "set navigation selection") {
+                primaryPanel.handleAction(
+                    .setNavigationSelection(controlID: controlID, optionID: optionID)
+                )
+            }
         }
     }
 
@@ -201,12 +221,16 @@ final class PluginHost: ObservableObject {
         controlID: String,
         for pluginID: String
     ) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.clearNavigationSelection(controlID: controlID))
+            guardPluginCall(plugin, operation: "clear navigation selection") {
+                primaryPanel.handleAction(.clearNavigationSelection(controlID: controlID))
+            }
         }
     }
 
@@ -215,12 +239,16 @@ final class PluginHost: ObservableObject {
         controlID: String,
         for pluginID: String
     ) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.setDate(controlID: controlID, value: date))
+            guardPluginCall(plugin, operation: "set date") {
+                primaryPanel.handleAction(.setDate(controlID: controlID, value: date))
+            }
         }
     }
 
@@ -230,22 +258,30 @@ final class PluginHost: ObservableObject {
         for pluginID: String,
         phase: PluginPanelAction.SliderPhase
     ) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
+            guardPluginCall(plugin, operation: "set slider") {
+                primaryPanel.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
+            }
         }
     }
 
     func invokePanelAction(controlID: String, for pluginID: String) {
-        guard let plugin = plugin(for: pluginID) else {
+        guard let plugin = corePlugin(for: pluginID),
+              let primaryPanel = plugin.primaryPanel
+        else {
             return
         }
 
         handlePluginAction {
-            plugin.handleAction(.invokeAction(controlID: controlID))
+            guardPluginCall(plugin, operation: "invoke panel action") {
+                primaryPanel.handleAction(.invokeAction(controlID: controlID))
+            }
         }
     }
 
@@ -255,7 +291,9 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handleSettingsAction(id: actionID)
+            guardPluginCall(plugin, operation: "settings action") {
+                plugin.handleSettingsAction(id: actionID)
+            }
         }
     }
 
@@ -265,7 +303,9 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            plugin.handlePermissionAction(id: permissionID)
+            guardPluginCall(plugin, operation: "permission action") {
+                plugin.handlePermissionAction(id: permissionID)
+            }
         }
     }
 
@@ -430,23 +470,33 @@ final class PluginHost: ObservableObject {
             return cachedItem
         }
 
-        guard let componentPanel = componentPanel(for: itemID) else {
+        guard let plugin = corePlugin(for: itemID),
+              let componentPanel = plugin.componentPanel
+        else {
             let item = PluginComponentViewItem(id: itemID, content: AnyView(EmptyView()))
             componentViewCache[itemID] = item
             return item
         }
 
+        let context = PluginComponentContext(
+            pluginID: itemID,
+            dismiss: dismiss,
+            isPanelVisible: isPanelVisible
+        )
+        let content = guardedValue(
+            for: plugin,
+            operation: "make component view",
+            componentPanel.makeView(context: context)
+        ) ?? AnyView(EmptyView())
+
         let item = PluginComponentViewItem(
             id: itemID,
-            content: componentPanel.makeView(
-                context: PluginComponentContext(
-                    pluginID: itemID,
-                    dismiss: dismiss,
-                    isPanelVisible: isPanelVisible
-                )
-            )
+            content: content
         )
         componentViewCache[itemID] = item
+        if isPluginIsolated(plugin) {
+            rebuildDerivedState()
+        }
         return item
     }
 
@@ -457,7 +507,22 @@ final class PluginHost: ObservableObject {
 
         let configurations = orderedCorePlugins()
             .filter { $0.metadata.id == pluginID }
-            .compactMap(\.configuration)
+            .compactMap { plugin -> (any MacToolsPlugin, PluginConfiguration)? in
+                guard let configuration = guardedOptionalValue(
+                    for: plugin,
+                    operation: "read plugin configuration",
+                    plugin.configuration
+                ) else {
+                    return nil
+                }
+
+                return (plugin, configuration)
+            }
+
+        guard corePlugin(for: pluginID) != nil else {
+            rebuildDerivedState()
+            return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
+        }
 
         let context = PluginConfigurationContext(pluginID: pluginID)
         let content: AnyView
@@ -466,9 +531,19 @@ final class PluginHost: ObservableObject {
         case 0:
             content = AnyView(EmptyView())
         case 1:
-            content = configurations[0].makeView(context)
+            content = guardedConfigurationView(
+                for: configurations[0].0,
+                configuration: configurations[0].1,
+                context: context
+            )
         default:
-            let views = configurations.map { $0.makeView(context) }
+            let views = configurations.map {
+                guardedConfigurationView(
+                    for: $0.0,
+                    configuration: $0.1,
+                    context: context
+                )
+            }
             content = AnyView(
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(Swift.Array(views.enumerated()), id: \.offset) { entry in
@@ -476,6 +551,11 @@ final class PluginHost: ObservableObject {
                     }
                 }
             )
+        }
+
+        guard corePlugin(for: pluginID) != nil else {
+            rebuildDerivedState()
+            return PluginConfigurationViewItem(id: pluginID, content: AnyView(EmptyView()))
         }
 
         let item = PluginConfigurationViewItem(id: pluginID, content: content)
@@ -523,6 +603,10 @@ final class PluginHost: ObservableObject {
     }
 
     func setDynamicPluginEnabled(_ isEnabled: Bool, pluginID: String) {
+        if isEnabled {
+            isolatedPluginFailures.removeValue(forKey: pluginID)
+        }
+
         dynamicPluginManager?.setPluginEnabled(isEnabled, pluginID: pluginID)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
@@ -538,16 +622,12 @@ final class PluginHost: ObservableObject {
         builtInPlugins + dynamicPlugins
     }
 
-    private func plugin(for pluginID: String) -> (any PluginPrimaryPanel)? {
-        plugins.first(where: { $0.metadata.id == pluginID })?.primaryPanel
-    }
-
-    private func componentPanel(for pluginID: String) -> (any PluginComponentPanel)? {
-        plugins.first(where: { $0.metadata.id == pluginID })?.componentPanel
+    private var activePlugins: [any MacToolsPlugin] {
+        plugins.filter { isolatedPluginFailures[$0.metadata.id] == nil }
     }
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
-        plugins.first(where: { $0.metadata.id == pluginID })
+        activePlugins.first(where: { $0.metadata.id == pluginID })
     }
 
     private func configureCallbacks(for plugins: [any MacToolsPlugin]) {
@@ -588,26 +668,51 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedState() {
+        let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedPlugins = orderedPlugins()
-        let orderedDescriptors = orderedPluginDescriptors()
         let panelStatesByID = Dictionary(
             uniqueKeysWithValues: orderedPlugins.compactMap { plugin -> (String, PluginPanelState)? in
+                guard !isPluginIsolated(plugin) else {
+                    return nil
+                }
+
                 guard let primaryPanel = plugin.primaryPanel else {
                     return nil
                 }
 
-                return (plugin.metadata.id, primaryPanel.primaryPanelState)
+                guard let state = guardedValue(
+                    for: plugin,
+                    operation: "read primary panel state",
+                    primaryPanel.primaryPanelState
+                ) else {
+                    return nil
+                }
+
+                return (plugin.metadata.id, state)
             }
         )
         let componentStatesByID = Dictionary(
             uniqueKeysWithValues: orderedPlugins.compactMap { plugin -> (String, PluginComponentState)? in
+                guard !isPluginIsolated(plugin) else {
+                    return nil
+                }
+
                 guard let componentPanel = plugin.componentPanel else {
                     return nil
                 }
 
-                return (plugin.metadata.id, componentPanel.componentPanelState)
+                guard let state = guardedValue(
+                    for: plugin,
+                    operation: "read component panel state",
+                    componentPanel.componentPanelState
+                ) else {
+                    return nil
+                }
+
+                return (plugin.metadata.id, state)
             }
         )
+        let orderedDescriptors = orderedPluginDescriptors()
 
         panelItems = orderedPlugins.compactMap { plugin in
             let metadata = plugin.metadata
@@ -706,7 +811,13 @@ final class PluginHost: ObservableObject {
         }
 
         settingsCards = orderedCorePlugins().flatMap { plugin in
-            plugin.settingsSections.map { section in
+            let sections = guardedValue(
+                for: plugin,
+                operation: "read settings sections",
+                plugin.settingsSections
+            ) ?? []
+
+            return sections.map { section in
                 PluginSettingsCard(
                     id: "\(plugin.metadata.id).\(section.id)",
                     pluginID: plugin.metadata.id,
@@ -722,9 +833,21 @@ final class PluginHost: ObservableObject {
             }
         }
 
-        permissionCards = orderedCorePlugins().flatMap { plugin in
-            plugin.permissionRequirements.map { requirement in
-                let state = plugin.permissionState(for: requirement.id)
+        permissionCards = orderedCorePlugins().flatMap { plugin -> [PluginPermissionCard] in
+            let requirements = guardedValue(
+                for: plugin,
+                operation: "read permission requirements",
+                plugin.permissionRequirements
+            ) ?? []
+
+            return requirements.compactMap { requirement -> PluginPermissionCard? in
+                guard let state = guardedValue(
+                    for: plugin,
+                    operation: "read permission state",
+                    plugin.permissionState(for: requirement.id)
+                ) else {
+                    return nil
+                }
 
                 return PluginPermissionCard(
                     id: "\(plugin.metadata.id).permission.\(requirement.id)",
@@ -774,9 +897,13 @@ final class PluginHost: ObservableObject {
 
         hasActivePlugin = panelStatesByID.values.contains(where: \.isOn)
             || componentStatesByID.values.contains(where: \.isActive)
+
+        if isolatedPluginFailures.count > isolatedPluginCountAtStart {
+            rebuildDerivedState()
+        }
     }
 
-    private func handlePluginAction(_ action: () -> Void) {
+    private func handlePluginAction(rebuildAfterAction: Bool = true, _ action: () -> Void) {
         guard !isHandlingPluginAction else {
             action()
             return
@@ -787,7 +914,9 @@ final class PluginHost: ObservableObject {
         action()
 
         isHandlingPluginAction = false
-        rebuildDerivedState()
+        if rebuildAfterAction {
+            rebuildDerivedState()
+        }
     }
 
     private func rebuildDerivedStateAfterPluginChange() {
@@ -796,6 +925,113 @@ final class PluginHost: ObservableObject {
         }
 
         rebuildDerivedState()
+    }
+
+    private func guardedValue<T>(
+        for plugin: any MacToolsPlugin,
+        operation: String,
+        _ value: @autoclosure () -> T
+    ) -> T? {
+        guard !isPluginIsolated(plugin) else {
+            return nil
+        }
+
+        switch PluginInvocationGuard.value(operation: operation, value) {
+        case let .success(value):
+            return value
+        case let .failure(failure):
+            isolatePlugin(plugin, operation: operation, failure: failure)
+            return nil
+        }
+    }
+
+    private func guardedOptionalValue<T>(
+        for plugin: any MacToolsPlugin,
+        operation: String,
+        _ value: @autoclosure () -> T?
+    ) -> T? {
+        guard !isPluginIsolated(plugin) else {
+            return nil
+        }
+
+        switch PluginInvocationGuard.value(operation: operation, value) {
+        case let .success(value):
+            return value
+        case let .failure(failure):
+            isolatePlugin(plugin, operation: operation, failure: failure)
+            return nil
+        }
+    }
+
+    private func guardPluginCall(
+        _ plugin: any MacToolsPlugin,
+        operation: String,
+        _ action: () -> Void
+    ) {
+        guard !isPluginIsolated(plugin) else {
+            return
+        }
+
+        switch PluginInvocationGuard.run(operation: operation, action) {
+        case .success:
+            break
+        case let .failure(failure):
+            isolatePlugin(plugin, operation: operation, failure: failure)
+        }
+    }
+
+    private func guardedConfigurationView(
+        for plugin: any MacToolsPlugin,
+        configuration: PluginConfiguration,
+        context: PluginConfigurationContext
+    ) -> AnyView {
+        guardedValue(
+            for: plugin,
+            operation: "make configuration view",
+            configuration.makeView(context)
+        ) ?? AnyView(EmptyView())
+    }
+
+    private func isPluginIsolated(_ plugin: any MacToolsPlugin) -> Bool {
+        isolatedPluginFailures[plugin.metadata.id] != nil
+    }
+
+    private func isolatePlugin(
+        _ plugin: any MacToolsPlugin,
+        operation: String,
+        failure: PluginInvocationFailure
+    ) {
+        let pluginID = plugin.metadata.id
+        let message = failure.localizedDescription
+
+        guard isolatedPluginFailures[pluginID] == nil else {
+            return
+        }
+
+        isolatedPluginFailures[pluginID] = message
+        componentViewCache.removeValue(forKey: pluginID)
+        configurationViewCache.removeValue(forKey: pluginID)
+        shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
+
+        AppLog.pluginHost.error(
+            "Plugin \(pluginID, privacy: .public) isolated after \(operation, privacy: .public): \(message, privacy: .public)"
+        )
+
+        switch PluginInvocationGuard.run(operation: "deactivate isolated plugin \(pluginID)", {
+            plugin.deactivate(reason: .disabled)
+        }) {
+        case .success:
+            break
+        case let .failure(deactivateFailure):
+            AppLog.pluginHost.error(
+                "Plugin \(pluginID, privacy: .public) failed during isolation deactivate: \(deactivateFailure.localizedDescription, privacy: .public)"
+            )
+        }
+
+        plugin.onStateChange = nil
+        plugin.requestPermissionGuidance = nil
+        plugin.shortcutBindingResolver = nil
+        syncGlobalShortcuts()
     }
 
     private func scheduleDisplayTopologyRefresh() {
@@ -819,9 +1055,11 @@ final class PluginHost: ObservableObject {
     private func refreshDisplayTopologyNow() {
         displayTopologyRefreshTask = nil
         handlePluginAction {
-            for plugin in plugins {
+            for plugin in activePlugins {
                 if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
-                    displayTopologyRefreshing.refreshDisplayTopology()
+                    guardPluginCall(plugin, operation: "refresh display topology") {
+                        displayTopologyRefreshing.refreshDisplayTopology()
+                    }
                 }
             }
         }
@@ -829,9 +1067,11 @@ final class PluginHost: ObservableObject {
 
     private func refreshAccessibilityPermissionNow() {
         handlePluginAction {
-            for plugin in plugins {
+            for plugin in activePlugins {
                 if let accessibilityRefreshing = plugin as? AccessibilityPermissionRefreshing {
-                    accessibilityRefreshing.refreshAccessibilityPermission()
+                    guardPluginCall(plugin, operation: "refresh accessibility permission") {
+                        accessibilityRefreshing.refreshAccessibilityPermission()
+                    }
                 }
             }
         }
@@ -847,7 +1087,13 @@ final class PluginHost: ObservableObject {
             let matchingSettingsCards = settingsCards.filter { $0.pluginID == pluginID }
             let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
             let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
-            let configurations = [descriptor.plugin].compactMap(\.configuration)
+            let configurations = [
+                guardedOptionalValue(
+                    for: descriptor.plugin,
+                    operation: "read plugin configuration",
+                    descriptor.plugin.configuration
+                )
+            ].compactMap { $0 }
             let hasConfigurationSurface = !matchingSettingsCards.isEmpty
                 || !matchingPermissionCards.isEmpty
                 || !matchingShortcutItems.isEmpty
@@ -874,7 +1120,13 @@ final class PluginHost: ObservableObject {
 
     private func shortcutDescriptors() -> [ShortcutDescriptor] {
         orderedCorePlugins().flatMap { plugin in
-            plugin.shortcutDefinitions.map { definition in
+            let definitions = guardedValue(
+                for: plugin,
+                operation: "read shortcut definitions",
+                plugin.shortcutDefinitions
+            ) ?? []
+
+            return definitions.map { definition in
                 ShortcutDescriptor(
                     itemID: shortcutItemID(
                         pluginID: plugin.metadata.id,
@@ -914,7 +1166,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func pluginsByID() -> [String: any MacToolsPlugin] {
-        plugins.reduce(into: [String: any MacToolsPlugin]()) { result, plugin in
+        activePlugins.reduce(into: [String: any MacToolsPlugin]()) { result, plugin in
             let id = plugin.metadata.id
 
             if result[id] == nil {
@@ -934,7 +1186,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func defaultPluginDescriptors() -> [PluginDescriptor] {
-        plugins
+        activePlugins
             .map { PluginDescriptor(metadata: $0.metadata, plugin: $0) }
             .sorted { lhs, rhs in
                 if lhs.metadata.order == rhs.metadata.order {
@@ -1080,14 +1332,20 @@ final class PluginHost: ObservableObject {
         }
 
         handlePluginAction {
-            descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+            guardPluginCall(descriptor.plugin, operation: "shortcut action") {
+                descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+            }
         }
     }
 
     private func requestPermissionGuidance(forPluginID pluginID: String, permissionID: String) {
-        guard plugins.contains(where: { plugin in
+        guard activePlugins.contains(where: { plugin in
             plugin.metadata.id == pluginID
-                && plugin.permissionRequirements.contains(where: { $0.id == permissionID })
+                && (guardedValue(
+                    for: plugin,
+                    operation: "read permission requirements",
+                    plugin.permissionRequirements
+                ) ?? []).contains(where: { $0.id == permissionID })
         }) else {
             return
         }

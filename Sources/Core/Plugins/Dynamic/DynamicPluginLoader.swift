@@ -32,13 +32,25 @@ final class DynamicPluginLoader: DynamicPluginLoading {
             }
 
             do {
-                let provider = try loadProvider(for: record)
+                let provider = try PluginInvocationGuard
+                    .value(operation: "load provider for \(record.id)") {
+                        try loadProvider(for: record)
+                    }
+                    .get()
                 let context = packageStore.runtimeContext(for: record)
-                let plugins = provider.makePlugins()
+                let plugins = try PluginInvocationGuard
+                    .value(operation: "make plugins for \(record.id)") {
+                        provider.makePlugins()
+                    }
+                    .get()
                 try Self.validateLoadedPlugins(plugins, for: record)
 
                 for plugin in plugins {
-                    plugin.activate(context: context)
+                    try PluginInvocationGuard
+                        .run(operation: "activate plugin \(plugin.metadata.id)") {
+                            plugin.activate(context: context)
+                        }
+                        .get()
                 }
 
                 return DynamicPluginLoadResult(record: record, plugins: plugins, errorMessage: nil)
