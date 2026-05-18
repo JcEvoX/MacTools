@@ -1,5 +1,6 @@
 import Foundation
 import MacToolsPluginKit
+@testable import ActivityBarPlugin
 
 @MainActor
 final class ActivityBarMemoryStorage: PluginStorage {
