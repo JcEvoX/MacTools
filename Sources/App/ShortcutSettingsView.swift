@@ -69,38 +69,24 @@ struct ShortcutSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("键盘快捷键", systemImage: "command")
-                        .font(.title2.weight(.semibold))
+                        .font(PluginSettingsTheme.Typography.pageTitle)
 
                     Text("为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。")
-                        .font(.subheadline)
+                        .font(PluginSettingsTheme.Typography.pageDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(24)
+                .padding(PluginSettingsTheme.Spacing.cardContent)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(SettingsStyle.cardBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-                )
+                .pluginSettingsCardBackground(.host)
 
                 ShortcutSettingsRowsView(pluginHost: pluginHost, items: pluginHost.shortcutItems)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(SettingsStyle.cardBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-                )
+                .pluginSettingsCardBackground(.host)
             }
-            .padding(24)
+            .padding(PluginSettingsTheme.Spacing.pagePadding)
         }
         .background(SettingsStyle.contentBackground)
     }
@@ -172,7 +158,7 @@ private struct ShortcutSettingsRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(item.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(item.title)
@@ -183,7 +169,7 @@ private struct ShortcutSettingsRow: View {
                 }
 
                 Text(supportingText)
-                    .font(.footnote)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(supportingColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -213,8 +199,8 @@ private struct ShortcutSettingsRow: View {
                 .frame(width: ShortcutSettingsLayout.controlColumnWidth)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -224,7 +210,7 @@ private struct ShortcutSettingsDivider: View {
         Rectangle()
             .fill(SettingsStyle.separator)
             .frame(height: 1)
-            .padding(.horizontal, 18)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
     }
 }
 
@@ -233,7 +219,7 @@ private struct ShortcutStatusBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold))
+            .font(PluginSettingsTheme.Typography.statusBadge)
             .foregroundStyle(Color.accentColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -285,14 +271,7 @@ private struct ShortcutActionGroup: View {
         }
         .padding(4)
         .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SettingsStyle.recessedControlBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-        )
+        .pluginSettingsCardBackground(.recessed)
     }
 }
 
@@ -316,7 +295,7 @@ private struct ShortcutActionButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.sectionTitle)
                 .frame(width: 32, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -351,14 +330,18 @@ private struct ShortcutBindingBadge: View {
         .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, minHeight: ShortcutSettingsLayout.controlHeight, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isRecording ? SettingsStyle.recordingBackground : SettingsStyle.fieldBackground)
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.hostCard, style: .continuous)
+                .fill(
+                    isRecording
+                        ? PluginSettingsTheme.Palette.recordingBackground
+                        : PluginSettingsTheme.Palette.fieldBackground
+                )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.hostCard, style: .continuous)
                 .strokeBorder(
-                    isRecording ? Color.accentColor : SettingsStyle.cardBorder,
-                    lineWidth: isRecording ? 1.5 : 1
+                    isRecording ? Color.accentColor : PluginSettingsTheme.Palette.cardBorder,
+                    lineWidth: isRecording ? 1.5 : PluginSettingsTheme.Stroke.standard
                 )
         )
     }
@@ -367,11 +350,11 @@ private struct ShortcutBindingBadge: View {
     private var badgeContent: some View {
         if isRecording {
             Label("请按下快捷键", systemImage: "record.circle.fill")
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.controlLabel.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
         } else if displayText == "未设置" {
             Text(displayText)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(PluginSettingsTheme.Typography.controlLabel.weight(.medium))
                 .foregroundStyle(.secondary)
         } else {
             ViewThatFits(in: .horizontal) {
@@ -485,11 +468,14 @@ private struct ShortcutKeycap: View {
             .padding(.vertical, metrics.verticalPadding)
             .background(
                 RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .fill(SettingsStyle.keycapBackground)
+                    .fill(PluginSettingsTheme.Palette.keycapBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
-                    .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
+                    .strokeBorder(
+                        PluginSettingsTheme.Palette.cardBorder,
+                        lineWidth: PluginSettingsTheme.Stroke.standard
+                    )
             )
     }
 }

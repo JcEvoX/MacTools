@@ -40,28 +40,28 @@ private struct PermissionSettingsRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: card.statusSystemImage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                 .foregroundStyle(statusColor)
-                .frame(width: 18)
+                .frame(width: PluginSettingsTheme.Size.rowIcon)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(card.title)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                     Text(card.statusText)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(statusColor)
                 }
 
                 Text(card.description)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let footnote = card.footnote {
                     Text(footnote)
-                        .font(.footnote)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -116,17 +116,17 @@ private struct AppearanceSettingsRow: View {
                     .fill(Color.accentColor.opacity(0.12))
 
                 Image(systemName: "circle.lefthalf.filled")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
             }
             .frame(width: 30, height: 30)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("应用外观")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                 Text("自动跟随系统，也可以固定为深色或浅色。")
-                    .font(.footnote)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -212,7 +212,7 @@ private struct FeatureSettingsSidebar: View {
 
                 if configurationItems.isEmpty {
                     Text("暂无可设置插件")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -246,7 +246,7 @@ private struct FeatureSettingsSidebarSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(PluginSettingsTheme.Typography.statusBadge)
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .padding(.horizontal, 10)
@@ -266,12 +266,12 @@ private struct FeatureSettingsSidebarRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(isSelected ? Color.accentColor : iconTint)
                     .frame(width: 18, height: 18)
 
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -358,7 +358,7 @@ private struct InstalledFeaturesSettingsView: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(PluginSettingsTheme.Spacing.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(SettingsStyle.contentBackground)
@@ -379,14 +379,7 @@ private struct SettingsCardContainer<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(SettingsStyle.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-            )
+            .pluginSettingsCardBackground(.host)
     }
 }
 
@@ -423,7 +416,7 @@ private struct PluginConfigurationDetailPane: View {
                             pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
                         }
                     }
-                    .padding(24)
+                    .padding(PluginSettingsTheme.Spacing.pagePadding)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 .background(SettingsStyle.contentBackground)
@@ -467,17 +460,17 @@ private struct SettingsPageHeader: View {
                     .fill(iconTint.opacity(0.14))
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(iconTint)
             }
-            .frame(width: 42, height: 42)
+            .frame(width: PluginSettingsTheme.Size.pageIcon, height: PluginSettingsTheme.Size.pageIcon)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageTitle)
 
                 Text(description)
-                    .font(.subheadline)
+                    .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -520,14 +513,14 @@ private struct PluginSettingsCardRow: View {
     let onAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                     Text(card.title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                     Text(card.description)
-                        .font(.footnote)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -539,13 +532,13 @@ private struct PluginSettingsCardRow: View {
                 } icon: {
                     Image(systemName: card.statusSystemImage)
                 }
-                .font(.system(size: 12, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
                 .foregroundStyle(statusColor)
             }
 
             if let footnote = card.footnote {
                 Text(footnote)
-                    .font(.footnote)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -559,7 +552,7 @@ private struct PluginSettingsCardRow: View {
                 }
             }
         }
-        .padding(16)
+        .padding(PluginSettingsTheme.Spacing.cardContent)
     }
 }
 
@@ -622,9 +615,9 @@ private struct PluginConfigurationSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
             SettingsCardContainer {
@@ -724,7 +717,7 @@ private struct AboutUpdateCard: View {
             .disabled(viewModel.isPrimaryButtonDisabled)
 
             Text(statusText ?? " ")
-                .font(.footnote)
+                .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(viewModel.statusColor)
                 .lineLimit(nil)
                 .multilineTextAlignment(.center)
@@ -750,7 +743,7 @@ private struct AboutUpdatePrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13))
+            .font(PluginSettingsTheme.Typography.rowTitle)
             .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.82))
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
@@ -781,7 +774,7 @@ private struct AppIconPreview: View {
                     .scaledToFit()
                     .padding(12)
                     .foregroundStyle(.secondary)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(PluginSettingsTheme.Palette.nativeCardBackground)
             }
         }
         .frame(width: 64, height: 64)

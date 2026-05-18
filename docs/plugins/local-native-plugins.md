@@ -79,6 +79,30 @@ make run
 
 To update an existing plugin, change its code/resources/tests beside the plugin. If the update should be released through the plugin catalog, bump only that plugin's `plugin.json.version`, then run the focused build or tests before opening a PR.
 
+## Settings UI
+
+Plugin settings are hosted by MacTools. Prefer the descriptive surfaces first:
+
+- Use `settingsSections` for simple status/action cards.
+- Use `permissionRequirements` for system permission rows.
+- Use `shortcutDefinitions` for global shortcut rows.
+- Use `PluginConfiguration` only when the plugin needs a custom manager, list, editor, drag-and-drop surface, chart, or other interaction that cannot be expressed by the descriptive models.
+
+Custom configuration views must provide only the plugin-specific content. The settings window header, plugin icon, plugin description, permission cards, and shortcut cards are derived by the host; do not repeat a full page title inside the custom view.
+
+All custom settings views should use `MacToolsPluginKit.PluginSettingsTheme` for typography, spacing, radii, strokes, colors, and shared card backgrounds. This keeps the dependency direction clean: the host app and plugins both depend on `MacToolsPluginKit`, while plugins never depend on `Sources/App/SettingsStyle.swift`.
+
+Recommended mapping:
+
+- Page-level text: `PluginSettingsTheme.Typography.pageTitle` and `pageDescription`.
+- Section labels: `Label` with an SF Symbol, `sectionTitle`, and `.foregroundStyle(.secondary)`.
+- Row text: `rowTitle` or `emphasizedRowTitle`; supporting text uses `rowDescription`; status pills use `statusBadge`.
+- Fixed-width numeric or path-like values may use `monospacedValue` or a local monospaced font when the content requires it.
+- Layout: use `Spacing.section`, `sectionHeaderContent`, `cardContent`, `rowHorizontal`, `rowVertical`, `interactiveRowVertical`, and `rowContentControl`.
+- Containers: use `.pluginSettingsCardBackground(.host)` for host-style cards, `.pluginSettingsCardBackground(.plugin)` for native plugin lists, and `.pluginSettingsCardBackground(.recessed)` for inset fields/log panes.
+
+Avoid copying a plugin-local settings style enum. If a token is missing, add it to `PluginSettingsTheme` instead of hard-coding the same value in multiple plugins.
+
 ## Install Location
 
 Installed plugins are copied into:

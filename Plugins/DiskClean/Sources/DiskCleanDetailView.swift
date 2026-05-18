@@ -1,4 +1,5 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct DiskCleanDetailView: View {
     @ObservedObject var controller: DiskCleanController
@@ -19,7 +20,7 @@ struct DiskCleanDetailView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             if showsHeader {
                 header
             }
@@ -40,10 +41,10 @@ struct DiskCleanDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("磁盘清理")
-                .font(.system(size: 22, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.pageTitle)
 
             Text(snapshot.errorMessage ?? snapshot.subtitle)
-                .font(.system(size: 13, weight: .medium))
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.medium))
                 .foregroundStyle(snapshot.errorMessage == nil ? Color.secondary : Color.red)
         }
     }
@@ -96,7 +97,7 @@ struct DiskCleanDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("扫描日志")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.sectionTitle)
                 Spacer()
                 if snapshot.phase == .scanning {
                     ProgressView()
@@ -110,7 +111,7 @@ struct DiskCleanDetailView: View {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         if snapshot.scanLogEntries.isEmpty {
                             Text("点击扫描后显示实时进度")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(PluginSettingsTheme.Typography.secondaryLabel)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
@@ -123,12 +124,7 @@ struct DiskCleanDetailView: View {
                     .padding(10)
                 }
                 .frame(minHeight: 118, maxHeight: 160)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                }
+                .pluginSettingsCardBackground(.recessed)
                 .onChange(of: snapshot.scanLogEntries.last?.id) {
                     guard let id = snapshot.scanLogEntries.last?.id else { return }
                     proxy.scrollTo(id, anchor: .bottom)
@@ -140,7 +136,7 @@ struct DiskCleanDetailView: View {
     private func logRow(_ entry: DiskCleanScanLogEntry) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: logIconName(entry.tone))
-                .font(.system(size: 11, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.statusBadge)
                 .foregroundStyle(logColor(entry.tone))
                 .frame(width: 14, height: 14)
 
@@ -187,10 +183,10 @@ struct DiskCleanDetailView: View {
     private func summaryTile(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(size: 15, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
         }
         .frame(minWidth: 96, alignment: .leading)
     }
@@ -209,7 +205,7 @@ struct DiskCleanDetailView: View {
             .overlay {
                 if scanResult.candidates.isEmpty {
                     Text("没有发现可清理项目")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.rowTitle)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -227,10 +223,10 @@ struct DiskCleanDetailView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(candidate.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     Spacer(minLength: 12)
                     Text(byteText(candidate.sizeBytes))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(.secondary)
                 }
 
@@ -240,7 +236,7 @@ struct DiskCleanDetailView: View {
                     .lineLimit(2)
 
                 Text(safetyText(candidate.safety))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
                     .foregroundStyle(candidate.safety.isCleanable ? Color.green : Color.secondary)
             }
         }

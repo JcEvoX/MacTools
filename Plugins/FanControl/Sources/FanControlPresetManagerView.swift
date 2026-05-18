@@ -9,7 +9,7 @@ struct FanControlPresetManagerView: View {
     var fanSnapshot: FanSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             builtInSection
             customSection
         }
@@ -18,7 +18,7 @@ struct FanControlPresetManagerView: View {
     // MARK: - Built-in Section
 
     private var builtInSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             sectionHeader(title: "内置预设", icon: "lock")
 
             VStack(spacing: 0) {
@@ -29,27 +29,20 @@ struct FanControlPresetManagerView: View {
                     }
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
-            )
+            .pluginSettingsCardBackground(.plugin)
         }
     }
 
     // MARK: - Custom Section
 
     private var customSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
                 sectionHeader(title: "自定义预设", icon: "slider.horizontal.3")
                 Spacer()
                 Button(action: addPreset) {
                     Label("添加", systemImage: "plus")
-                        .font(.system(size: 12))
+                        .font(PluginSettingsTheme.Typography.controlLabel)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -72,14 +65,7 @@ struct FanControlPresetManagerView: View {
                         }
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                )
+                .pluginSettingsCardBackground(.plugin)
             }
         }
     }
@@ -92,27 +78,20 @@ struct FanControlPresetManagerView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
                 Text("点击「添加」创建自定义转速预设")
-                    .font(.subheadline)
+                    .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 24)
             Spacer()
         }
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
-        )
+        .pluginSettingsCardBackground(.plugin)
     }
 
     // MARK: - Helpers
 
     private func sectionHeader(title: String, icon: String) -> some View {
         Label(title, systemImage: icon)
-            .font(.system(size: 13, weight: .semibold))
+            .font(PluginSettingsTheme.Typography.sectionTitle)
             .foregroundStyle(.secondary)
     }
 
@@ -131,15 +110,14 @@ private struct BuiltInPresetRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(preset.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Text("内置")
-                .font(.caption2)
-                .fontWeight(.medium)
+                .font(PluginSettingsTheme.Typography.statusBadge)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -147,8 +125,8 @@ private struct BuiltInPresetRow: View {
                     Capsule().fill(Color(nsColor: .quaternaryLabelColor).opacity(0.4))
                 )
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
     }
 
     private var subtitle: String {
@@ -211,18 +189,18 @@ private struct CustomPresetRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             // Name row
             HStack(spacing: 6) {
                 TextField("预设名称", text: $nameText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(isNameFocused
-                                  ? Color(nsColor: .textBackgroundColor)
+                                  ? PluginSettingsTheme.Palette.nativeFieldBackground
                                   : Color.clear)
                     )
                     .overlay(
@@ -231,7 +209,7 @@ private struct CustomPresetRow: View {
                                 isNameFocused
                                     ? Color(nsColor: .controlAccentColor)
                                     : isNameHovered
-                                        ? Color(nsColor: .separatorColor)
+                                        ? PluginSettingsTheme.Palette.nativeSeparator
                                         : Color.clear,
                                 lineWidth: 1
                             )
@@ -268,13 +246,13 @@ private struct CustomPresetRow: View {
                 }
 
                 Text("\(Int(sliderValue)) RPM")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(PluginSettingsTheme.Typography.monospacedValue)
                     .foregroundStyle(.secondary)
                     .frame(width: 80, alignment: .trailing)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
         .contentShape(Rectangle())
         .onTapGesture { resignFocus() }
         // Sync external changes (e.g. from panel slider) back to local state

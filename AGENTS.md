@@ -51,6 +51,17 @@
 - 控件 ID、插件 ID、快捷键 ID 要稳定、可读，并尽量集中在功能内的私有常量中。
 - 普通新增插件不需要更新根 `project.yml`；保持 `plugin.json.build.scheme` 指向对应 bundle scheme，生成器会自动创建 core target、bundle target、测试依赖和插件 scheme。若插件需要额外 framework、include path、bundle 资源或 target 覆盖，在 `Plugins/<PluginName>/project.yml` 中声明最小差异。
 
+## 插件设置界面规范
+- 插件设置页默认使用宿主设置页框架：`PluginConfiguration` 只提供当前插件的配置内容，页面主标题、图标、描述、权限卡、快捷键卡等通用区域交给 `PluginHost`/`SettingsView` 派生和渲染；不要在插件自定义配置里重复实现整页标题。
+- 新增设置项优先使用 `settingsSections`、`permissionRequirements`、`shortcutDefinitions` 等描述式模型，由宿主统一排版；只有需要复杂交互、列表、拖放、图表或专用管理器时才提供 `PluginConfiguration.makeView` 自定义视图。
+- 设置页主题常量统一使用 `MacToolsPluginKit.PluginSettingsTheme`。插件 target 不得依赖 `Sources/App/SettingsStyle.swift`，也不要复制一套插件私有 settings style；需要扩展主题时优先加到 `PluginSettingsTheme`，保持依赖方向为宿主 App -> PluginKit、插件 -> PluginKit。
+- 自定义插件设置视图的字体层级以 `FanControlPresetManagerView` 为视觉基准，并通过 `PluginSettingsTheme.Typography` 表达：页面标题用 `pageTitle`，页面说明用 `pageDescription`；分组标题使用 `Label` + SF Symbol + `sectionTitle` + `.foregroundStyle(.secondary)`；普通行标题使用 `rowTitle`，强调行标题或表头使用 `emphasizedRowTitle`；说明、帮助、副标题使用 `rowDescription`；状态徽标使用 `statusBadge`；固定宽度数值读数使用 `monospacedValue`。这些 token 应优先映射 Apple 平台语义字体（如 `.title2`、`.body`、`.subheadline`），避免在插件里散落裸字号。
+- 宿主设置页页面头使用 `PluginSettingsTheme.Typography.pageTitle` + `pageDescription`；插件自定义配置内容从分组开始，不再使用页面级标题，避免同一页出现多个视觉主标题。
+- 自定义配置的排版以风扇控制为基准，并优先使用 `PluginSettingsTheme.Spacing`：外层分组间距用 `section`，分组标题与内容间距用 `sectionHeaderContent`；卡片/列表行横向 padding 用 `rowHorizontal`，普通行纵向 padding 用 `rowVertical`，包含编辑控件或滑杆的行用 `interactiveRowVertical`；行内主副标题间距用 `rowTitleDescription`，控件与文本间距用 `rowContentControl`。
+- 卡片和列表容器优先使用 `PluginSettingsTheme.Palette` 与 `Radius`/`Stroke`：宿主设置卡片用 `cardBackground`/`cardBorder`，插件自定义列表可用 macOS 原生 `nativeCardBackground`/`nativeSeparator`；圆角优先 `Radius.card`，宿主大卡片可用 `Radius.hostCard`。
+- 控件布局要稳定：按钮使用系统 `.bordered`/`.borderedProminent` 与 `.controlSize(.small)`，开关使用 `.toggleStyle(.switch)`；滑杆、Picker、文本框等设置明确的最小/理想/最大宽度，数值文本给固定宽度，长标题和路径使用 `lineLimit`、`fixedSize` 或 text selection，避免窗口缩放时挤压或跳动。
+- 文案保持中文、短句、接近 macOS 原生表达。标题描述“对象/设置项”，副标题描述“作用/当前状态”，不要把操作说明写成大段说明文字。
+
 ## Swift 代码风格
 - 保持现有 Swift 风格：小类型、明确命名、早返回、少全局状态。
 - 优先使用 Apple 原生框架；引入第三方依赖前先说明理由。插件私有的系统 framework/include path 优先写入对应 `Plugins/<PluginName>/project.yml`。

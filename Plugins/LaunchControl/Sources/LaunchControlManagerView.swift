@@ -1,4 +1,5 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct LaunchControlManagerView: View {
     @ObservedObject var controller: LaunchControlController
@@ -10,7 +11,7 @@ struct LaunchControlManagerView: View {
     @State private var pendingAction: LaunchControlPendingAction?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             summaryHeader
             toolbar
 
@@ -30,8 +31,7 @@ struct LaunchControlManagerView: View {
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
             }
             .frame(minHeight: 500)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .pluginSettingsCardBackground(.plugin)
 
             scanActivity
         }
@@ -81,7 +81,7 @@ struct LaunchControlManagerView: View {
                         .controlSize(.small)
                         .scaleEffect(0.72)
                     Text(URL(fileURLWithPath: target).lastPathComponent.isEmpty ? target : URL(fileURLWithPath: target).lastPathComponent)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -142,10 +142,10 @@ struct LaunchControlManagerView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("启动项")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Spacer()
                 Text("\(filteredItems.count) / \(controller.snapshot.items.count)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
@@ -172,7 +172,7 @@ struct LaunchControlManagerView: View {
                 }
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(PluginSettingsTheme.Palette.nativeFieldBackground)
     }
 
     private var detailPane: some View {
@@ -201,9 +201,9 @@ struct LaunchControlManagerView: View {
                 .font(.system(size: 30, weight: .regular))
                 .foregroundStyle(.secondary)
             Text(controller.snapshot.isRefreshing ? "正在读取启动项" : "选择一个启动项")
-                .font(.system(size: 15, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
             Text(controller.snapshot.isRefreshing ? "左侧列表会随扫描进度逐步更新" : "查看 plist 字段、运行状态和可用操作")
-                .font(.system(size: 12, weight: .medium))
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -217,7 +217,7 @@ struct LaunchControlManagerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("扫描进度")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.sectionTitle)
                     Spacer()
                     if controller.snapshot.isRefreshing {
                         ProgressView()
@@ -248,8 +248,7 @@ struct LaunchControlManagerView: View {
                 }
             }
             .padding(10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .pluginSettingsCardBackground(.plugin)
         }
     }
 
@@ -296,18 +295,18 @@ struct LaunchControlManagerView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: item.origin == .system ? "lock.shield" : "powerplug")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageTitle.weight(.semibold))
                     .foregroundStyle(item.origin == .system ? Color.secondary : Color.orange)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.label)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.pageTitle)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                     Text(item.plistURL.path)
-                        .font(.system(size: 12))
+                        .font(PluginSettingsTheme.Typography.controlLabel)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -319,7 +318,7 @@ struct LaunchControlManagerView: View {
                     controller.setFavorite(!item.isFavorite, for: item)
                 } label: {
                     Image(systemName: item.isFavorite ? "star.fill" : "star")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                         .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
                 }
                 .buttonStyle(.plain)
@@ -393,7 +392,7 @@ struct LaunchControlManagerView: View {
     private func keyFields(_ item: LaunchControlItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("关键字段")
-                .font(.system(size: 14, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
             fieldRow("ProgramArguments", value: item.commandText, help: "启动时执行的命令与参数。")
             fieldRow("RunAtLoad", value: item.runAtLoad ? "true" : "false", help: "加载 LaunchAgent 后是否立即运行一次。")
@@ -407,7 +406,7 @@ struct LaunchControlManagerView: View {
     private func rawPlist(_ item: LaunchControlItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("原始 plist")
-                .font(.system(size: 14, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
             ScrollView(.horizontal) {
                 Text(item.rawPlist.isEmpty ? "无法以 UTF-8 显示原始内容" : item.rawPlist)
@@ -417,8 +416,7 @@ struct LaunchControlManagerView: View {
                     .padding(10)
             }
             .frame(minHeight: 180, maxHeight: 260)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .pluginSettingsCardBackground(.recessed)
         }
     }
 
@@ -431,18 +429,17 @@ struct LaunchControlManagerView: View {
                     .frame(width: 138, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(value)
-                        .font(.system(size: 13))
+                        .font(PluginSettingsTheme.Typography.rowTitle)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                     Text(help)
-                        .font(.system(size: 11))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .pluginSettingsCardBackground(.plugin)
     }
 
     private func statusBanner(message: String, systemImage: String, color: Color) -> some View {
@@ -450,35 +447,34 @@ struct LaunchControlManagerView: View {
             Image(systemName: systemImage)
                 .foregroundStyle(color)
             Text(message)
-                .font(.system(size: 12, weight: .medium))
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .padding(10)
         .background(color.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous))
     }
 
     private func metric(_ title: String, value: Int, color: Color) -> some View {
         HStack(spacing: 6) {
-            Text("\(value)")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(color)
+                Text("\(value)")
+                    .font(PluginSettingsTheme.Typography.pageTitle)
+                    .foregroundStyle(color)
                 .monospacedDigit()
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .pluginSettingsCardBackground(.plugin)
     }
 
     private func badge(_ title: String, color: Color) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(PluginSettingsTheme.Typography.statusBadge)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -598,22 +594,22 @@ private struct LaunchControlItemRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(item.label)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                         .lineLimit(1)
                     if item.origin == .userCreated {
                         Text("用户")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(PluginSettingsTheme.Typography.statusBadge)
                             .foregroundStyle(.orange)
                     }
                 }
 
                 Text(item.commandText)
-                    .font(.system(size: 11))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 Text("\(item.scope.title) · \(item.statusText)")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -622,7 +618,7 @@ private struct LaunchControlItemRow: View {
 
             Button(action: onFavoriteToggle) {
                 Image(systemName: item.isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
                     .foregroundStyle(item.isFavorite ? Color.yellow : Color.secondary)
                     .frame(width: 18, height: 18)
             }

@@ -1,22 +1,23 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct MiddleClickSettingsView: View {
     let selectedCount: Int
     let onCountChange: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             Label("设置", systemImage: "gearshape")
-                .font(.system(size: 13, weight: .semibold))
+                .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("手指数量", systemImage: "hand.tap")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     
                     Text("用指定数量的手指在触控板上轻点，将模拟鼠标中键点击")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                 }
 
@@ -33,15 +34,8 @@ struct MiddleClickSettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(MiddleClickSettingsStyle.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(MiddleClickSettingsStyle.cardBorder, lineWidth: 1)
-            )
+            .padding(PluginSettingsTheme.Spacing.cardContent)
+            .pluginSettingsCardBackground(.host)
         }
     }
 }
@@ -58,7 +52,7 @@ private struct FingerCountButton: View {
                     .font(.system(size: 16, weight: .medium))
 
                 Text("\(count)指")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
             .frame(height: 60)

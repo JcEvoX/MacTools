@@ -1,4 +1,5 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct PluginManagementSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
@@ -8,7 +9,7 @@ struct PluginManagementSettingsView: View {
     @State private var activeOperationID: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             header
 
             if pluginHost.pluginManagementItems.isEmpty {
@@ -36,7 +37,7 @@ struct PluginManagementSettingsView: View {
                 }
             }
         }
-        .padding(24)
+        .padding(PluginSettingsTheme.Spacing.pagePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(SettingsStyle.contentBackground)
         .task {
@@ -63,22 +64,22 @@ struct PluginManagementSettingsView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("市场")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageTitle)
 
                 HStack(spacing: 8) {
                     Text(pluginHost.pluginCatalogStatus.title)
-                        .font(.subheadline)
+                        .font(PluginSettingsTheme.Typography.pageDescription)
                         .foregroundStyle(.secondary)
 
                     if let lastUpdatedAt = pluginHost.pluginCatalogStatus.lastUpdatedAt {
                         Text(lastUpdatedAt, style: .time)
-                            .font(.subheadline)
+                            .font(PluginSettingsTheme.Typography.pageDescription)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 Text(pluginHost.pluginCatalogStatus.detailText)
-                    .font(.footnote)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(pluginHost.pluginCatalogStatus.errorMessage == nil ? Color.secondary : Color.orange)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -135,18 +136,18 @@ private struct PluginManagementRow: View {
                     .fill(statusColor.opacity(0.14))
 
                 Image(systemName: statusImageName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
                     .foregroundStyle(statusColor)
             }
-            .frame(width: 36, height: 36)
+            .frame(width: PluginSettingsTheme.Size.metricIcon, height: PluginSettingsTheme.Size.metricIcon)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(item.title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
                     Text(item.version)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(.secondary)
                 }
 
@@ -156,36 +157,29 @@ private struct PluginManagementRow: View {
 
             if let visibleStatusText {
                 Text(visibleStatusText)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
                     .foregroundStyle(statusColor)
                     .frame(width: 58, alignment: .trailing)
             }
 
             actionButtons
         }
-        .padding(14)
+        .padding(PluginSettingsTheme.Spacing.cardContent)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(SettingsStyle.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(SettingsStyle.cardBorder, lineWidth: 1)
-        )
+        .pluginSettingsCardBackground(.host)
     }
 
     private var detail: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(item.detailText)
-                .font(.footnote)
+                .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .truncationMode(.middle)
 
             if item.requiresRelaunchAction {
                 Button("立即重启", action: onRelaunch)
-                    .font(.footnote)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .buttonStyle(.link)
                     .disabled(isBusy)
             }

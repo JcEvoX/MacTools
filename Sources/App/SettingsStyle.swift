@@ -1,84 +1,56 @@
-import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 enum SettingsStyle {
     static var windowBackground: Color {
-        dynamic(light: 0xF4F5F7, dark: 0x1E1F22)
+        PluginSettingsTheme.Palette.windowBackground
     }
 
     static var sidebarBackground: Color {
-        dynamic(light: 0xEEF0F3, dark: 0x25262A)
+        PluginSettingsTheme.Palette.sidebarBackground
     }
 
     static var contentBackground: Color {
-        dynamic(light: 0xF7F8FA, dark: 0x1F2023)
+        PluginSettingsTheme.Palette.contentBackground
     }
 
     static var cardBackground: Color {
-        dynamic(light: 0xFFFFFF, dark: 0x2A2B2F)
+        PluginSettingsTheme.Palette.cardBackground
     }
 
     static var recessedControlBackground: Color {
-        dynamic(light: 0xF1F3F6, dark: 0x222327)
+        PluginSettingsTheme.Palette.recessedControlBackground
     }
 
     static var fieldBackground: Color {
-        dynamic(light: 0xFFFFFF, dark: 0x1C1D20)
+        PluginSettingsTheme.Palette.fieldBackground
     }
 
     static var keycapBackground: Color {
-        dynamic(light: 0xF8F9FB, dark: 0x2F3035)
+        PluginSettingsTheme.Palette.keycapBackground
     }
 
     static var separator: Color {
-        dynamic(light: 0xD9DDE4, dark: 0x3A3B40)
+        PluginSettingsTheme.Palette.separator
     }
 
     static var cardBorder: Color {
-        dynamic(light: 0xDDE1E7, dark: 0x3B3C42)
+        PluginSettingsTheme.Palette.cardBorder
     }
 
     static var sidebarHoverBackground: Color {
-        Color.primary.opacity(0.05)
+        PluginSettingsTheme.Palette.sidebarHoverBackground
     }
 
     static var sidebarSelectionBackground: Color {
-        Color.accentColor.opacity(0.12)
+        PluginSettingsTheme.Palette.sidebarSelectionBackground
     }
 
     static var activeControlBackground: Color {
-        Color.accentColor.opacity(0.12)
+        PluginSettingsTheme.Palette.activeControlBackground
     }
 
     static var recordingBackground: Color {
-        Color.accentColor.opacity(0.08)
-    }
-
-    private static func dynamic(light lightHex: UInt32, dark darkHex: UInt32) -> Color {
-        Color(
-            nsColor: NSColor(
-                name: nil,
-                dynamicProvider: { appearance in
-                    appearance.settingsStyleIsDark ? .settingsStyleRGB(darkHex) : .settingsStyleRGB(lightHex)
-                }
-            )
-        )
-    }
-}
-
-private extension NSAppearance {
-    var settingsStyleIsDark: Bool {
-        bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-    }
-}
-
-private extension NSColor {
-    static func settingsStyleRGB(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
-        NSColor(
-            srgbRed: CGFloat((hex >> 16) & 0xff) / 255,
-            green: CGFloat((hex >> 8) & 0xff) / 255,
-            blue: CGFloat(hex & 0xff) / 255,
-            alpha: alpha
-        )
+        PluginSettingsTheme.Palette.recordingBackground
     }
 }
