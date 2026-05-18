@@ -5,19 +5,30 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.0</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.0</link>
-            <sparkle:version>30</sparkle:version>
-            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.0 -->
+            <title>Version 1.0.1</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.1</link>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.1 -->
 
+## What's Changed
+### Other Changes
+* feat: add lock screen plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/46
+* feat: add microphone mute plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/49
+* feat: add fans control plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/47
+* fix: align plugin market action buttons by @FaiChou in https://github.com/ggbond268/MacTools/pull/51
+* fix: render installed plugin drag preview by @FaiChou in https://github.com/ggbond268/MacTools/pull/53
+* feat: add fix damaged app plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/50
+* Add Activity Bar plugin by @char1eslu in https://github.com/ggbond268/MacTools/pull/52
 
+## New Contributors
+* @FaiChou made their first contribution in https://github.com/ggbond268/MacTools/pull/51
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v0.15.2...v1.0.0
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.0...v1.0.1
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Sun, 17 May 2026 17:09:50 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.0/MacTools.dmg" length="6335983" type="application/octet-stream" sparkle:edSignature="u1rUIozJawPiz0Iew20sjEDqWEU9TPNdEf8JhqbsvZgp1XT4yaGNKUWWumgBmyMTcJ7yFPUwtv219ach/wkyAA==" />
+            <pubDate>Mon, 18 May 2026 09:58:13 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.1/MacTools.dmg" length="6424044" type="application/octet-stream" sparkle:edSignature="6atJnLA1CN4BOF/o7Y4p4uJL/OVlMxJ5u7uDFgyyneGh5IQRawBsbigDajLzF93stW414mbpVLgGYIZpCIN6AA==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
