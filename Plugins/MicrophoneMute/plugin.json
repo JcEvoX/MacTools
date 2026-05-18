@@ -1,0 +1,20 @@
+{
+  "id": "microphone-mute",
+  "displayName": "麦克风静音",
+  "summary": "快速静音或恢复默认麦克风输入",
+  "version": "1.0.0",
+  "minHostVersion": "0.15.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "MicrophoneMute.bundle",
+  "factoryClass": "MicrophoneMutePlugin.MicrophoneMutePluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MicrophoneMutePlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}

@@ -961,6 +961,52 @@ targets:
         DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         OTHER_LDFLAGS: -framework IOKit
 
+  MicrophoneMutePluginCore:
+    type: library.static
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/MicrophoneMute/Sources
+    dependencies:
+      - target: MacToolsPluginKit
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: MicrophoneMutePlugin
+        PRODUCT_NAME: MicrophoneMutePluginCore
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.microphone-mute.core
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+
+  MicrophoneMutePlugin:
+    type: bundle
+    platform: macOS
+    deploymentTarget: "14.0"
+    configFiles:
+      Debug: Configs/Debug.xcconfig
+      Release: Configs/Release.xcconfig
+    sources:
+      - path: Plugins/MicrophoneMute/Bundle
+    dependencies:
+      - target: MacToolsPluginKit
+      - target: MicrophoneMutePluginCore
+        link: true
+    settings:
+      base:
+        PRODUCT_NAME: MicrophoneMute
+        PRODUCT_MODULE_NAME: MicrophoneMutePluginBundle
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactools.plugins.microphone-mute
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 6.0
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+
   MacToolsTests:
     type: bundle.unit-test
     platform: macOS
@@ -992,6 +1038,7 @@ targets:
       - target: EjectDiskPluginCore
       - target: KeepAwakePluginCore
       - target: FanControlPluginCore
+      - target: MicrophoneMutePluginCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_IDENTIFIER_PREFIX).mactoolsTests
@@ -1023,6 +1070,7 @@ schemes:
         EjectDiskPlugin: all
         KeepAwakePlugin: all
         FanControlPlugin: all
+        MicrophoneMutePlugin: all
         MacTools: all
         MacToolsTests: [test]
     run:
@@ -1222,6 +1270,16 @@ schemes:
       targets:
         MacToolsPluginKit: all
         FanControlPlugin: all
+    profile:
+      config: Release
+    archive:
+      config: Release
+
+  MicrophoneMutePlugin:
+    build:
+      targets:
+        MacToolsPluginKit: all
+        MicrophoneMutePlugin: all
     profile:
       config: Release
     archive:
