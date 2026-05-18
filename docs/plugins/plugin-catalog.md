@@ -72,7 +72,7 @@ MacToolsPlugins/
     Tests/
 ```
 
-`plugin.json` declares the plugin ID, version, capabilities, bundle path, and build scheme. In this repository the build scheme points back to `MacTools.xcodeproj`; external repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`.
+`plugin.json` declares the plugin ID, version, capabilities, bundle path, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 

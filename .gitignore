@@ -1,6 +1,7 @@
 MacTools.xcodeproj
 MacTools.xcworkspace
 LocalConfig.xcconfig
+Configs/GeneratedPlugins.yml
 scripts/release.local.env
 build/
 .build/

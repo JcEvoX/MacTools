@@ -11,6 +11,8 @@ APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(PROJECT_NAME)
 HOST_ARCH := $(shell uname -m)
 BUILD_DESTINATION := platform=macOS,arch=$(HOST_ARCH)
 LOCAL_PLUGIN_SOURCE_DIR ?= Plugins
+PLUGIN_PROJECT_SOURCE_DIR ?= Plugins
+GENERATED_PLUGIN_PROJECT_CONFIG := Configs/GeneratedPlugins.yml
 LOCAL_PLUGIN_BUILD_DIR ?= build/LocalPlugins
 LOCAL_PLUGIN_CATALOG := $(LOCAL_PLUGIN_BUILD_DIR)/catalog.dev.json
 PLUGIN_RELEASE_REPO ?= ggbond268/MacTools
@@ -22,7 +24,7 @@ PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_RELEASE_SIGNED_CATALOG ?= docs/plugins/catalog.json
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate build build-plugin build-plugins package-plugins-release run run-open clean release-local
+.PHONY: setup generate-plugin-config generate build build-plugin build-plugins package-plugins-release run run-open clean release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -33,7 +35,12 @@ setup:
 		if git remote get-url origin >/dev/null 2>&1; then git remote set-url origin $(REMOTE_URL); else git remote add origin $(REMOTE_URL); fi; \
 	fi
 
-generate:
+generate-plugin-config:
+	@./scripts/plugins/generate-plugin-project-config.rb \
+		--source-dir "$(PLUGIN_PROJECT_SOURCE_DIR)" \
+		--output "$(GENERATED_PLUGIN_PROJECT_CONFIG)"
+
+generate: generate-plugin-config
 	@xcodegen generate
 
 build: generate
@@ -83,7 +90,7 @@ run-open: build
 	@open $(APP_PATH)
 
 clean:
-	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE)
+	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"
 
 release-local:
 	@./scripts/release-local.sh $(ARGS)

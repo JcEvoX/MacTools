@@ -1,0 +1,8 @@
+settings:
+  base:
+    OTHER_LDFLAGS: -framework EventKit
+
+bundle:
+  sources:
+    - path: CalendarPluginResources
+      type: folder

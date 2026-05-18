@@ -1,0 +1,4 @@
+settings:
+  base:
+    SWIFT_INCLUDE_PATHS: $(SRCROOT)/Sources/Core/MultitouchSupport
+    OTHER_LDFLAGS: -framework MultitouchSupport -F /System/Library/PrivateFrameworks

@@ -162,7 +162,7 @@ jobs:
           echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: make generate
 
       - name: Build unsigned Release app
         run: |

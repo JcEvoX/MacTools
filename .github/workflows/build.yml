@@ -47,7 +47,7 @@ jobs:
           EOF
 
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: make generate
 
       - name: Build and run tests
         run: |

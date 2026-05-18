@@ -20,18 +20,21 @@
 - `Sources/MacToolsPluginKit/`：插件 API、描述式 UI 模型和运行时上下文。
 - `Plugins/<PluginName>/`：插件 manifest、源码、bundle 入口、资源和相邻测试。
 - `Tests/`：App/Core 共享逻辑的 XCTest；插件测试优先放在对应插件目录下。
-- `project.yml`：XcodeGen 项目源文件；依赖和 target 变更应改这里。
+- `project.yml`：XcodeGen 根项目源文件，只维护 App、PluginKit 和公共聚合入口；插件 target 由生成器自动生成。
+- `Plugins/<PluginName>/project.yml`：可选的插件构建差异配置，仅在插件需要额外 framework、include path、bundle 资源或 target 覆盖时添加。
 - `docs/plugins/`：插件包、catalog、本地调试和发布流程说明。
 - `docs/superpowers/`：较大的产品、交互或实施设计文档。
 
 ## 开发约定
 - 新增插件放在 `Plugins/<PluginName>/`，至少包含 `plugin.json`、`Sources/` 和 `Bundle/`。
+- 普通插件只需要在目录内定义 `plugin.json`、源码和 bundle 入口；`make generate` 会扫描 `Plugins/*/plugin.json` 并生成本地 `Configs/GeneratedPlugins.yml`，不要手改生成文件。
+- 新增和更新插件的命令流程见 `docs/plugins/local-native-plugins.md` 的 Development Steps。
 - 插件实现 `MacToolsPlugin`；菜单栏主面板实现 `PluginPrimaryPanel`，组件面板实现 `PluginComponentPanel`。
 - `plugin.json.id` 必须稳定、可读，并与运行时 `PluginMetadata.id` 完全一致；每个插件包只返回一个插件实例。
 - 插件展示状态通过 `PluginPanelState`、`PluginPanelDetail`、`PluginPanelControl` 等模型表达，不绕过现有面板框架。
 - 插件状态变化后调用 `onStateChange?()`；耗时扫描、文件系统和系统调用不要长时间阻塞主线程。
 - 用户可见文案以中文为主，保持简洁、清楚、接近 macOS 原生表达。
-- 优先复用 Apple 原生框架；新增第三方依赖需说明理由并更新 `project.yml`。
+- 优先复用 Apple 原生框架；新增系统 framework 或私有 include path 时，在插件自己的 `project.yml` 中声明最小差异。
 
 ## 测试
 - 行为改动应补充或更新相邻 XCTest，测试文件命名使用 `<TypeName>Tests.swift`。

@@ -50,12 +50,34 @@ Plugins/Example/
   Sources/              # Plugin implementation and feature code
   Bundle/               # Thin bundle entrypoint that anchors the factory
   Tests/                # Optional XCTest files
+  project.yml           # Optional build overrides for non-default plugins
   Resources/            # Optional plugin resources
 ```
 
 Only `plugin.json` and the built `.bundle` are copied into a `.mactoolsplugin` package. `Tests/` is included only by the host unit-test target during development and is never packaged into the app or plugin distribution.
 
+In this repository, plugin Xcode targets are generated before XcodeGen runs. The generator scans `Plugins/*/plugin.json` and applies a shared target template for `Sources/`, `Bundle/`, `Tests/`, plugin schemes, and the host test target. Most plugins do not need any root project changes. Add `Plugins/<PluginName>/project.yml` only for plugin-local build differences such as `OTHER_LDFLAGS`, `SWIFT_INCLUDE_PATHS`, extra bundle resources, or additional target dependencies.
+
 The manifest ID is the stable identity of the package. It must match the runtime `PluginMetadata.id`, and a package must return exactly one plugin instance. Use lower-case, readable IDs such as `display-brightness` unless there is a strong reason to use a reverse-DNS identifier.
+
+## Development Steps
+
+To add a plugin, create `Plugins/<PluginName>/plugin.json`, `Sources/`, and `Bundle/`. Add `Tests/` when the behavior is testable. Most plugins can then run directly with:
+
+```bash
+make run
+```
+
+If the plugin needs extra frameworks, private include paths, bundle resources, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`.
+
+To test the plugin as a dynamic local package, build its package and Debug catalog first:
+
+```bash
+make build-plugin PLUGIN=<plugin directory or id>
+make run
+```
+
+To update an existing plugin, change its code/resources/tests beside the plugin. If the update should be released through the plugin catalog, bump only that plugin's `plugin.json.version`, then run the focused build or tests before opening a PR.
 
 ## Install Location
 

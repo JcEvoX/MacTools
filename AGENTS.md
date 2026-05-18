@@ -28,8 +28,8 @@
 
 ## 构建与运行
 - 先运行 `make setup` 初始化 `LocalConfig.xcconfig`，再填写 `DEVELOPMENT_TEAM` 与 `BUNDLE_IDENTIFIER_PREFIX`。
-- `project.yml` 是 XcodeGen 的项目源文件；`MacTools.xcodeproj` 是生成物，默认不提交。
-- 生成项目：`make generate` 或 `xcodegen generate`。
+- `project.yml` 是 XcodeGen 的根项目源文件；插件 target/scheme 由 `scripts/plugins/generate-plugin-project-config.rb` 扫描 `Plugins/*/plugin.json` 后生成到本地 `Configs/GeneratedPlugins.yml`，该生成文件不提交。
+- 生成项目：`make generate`。不要直接运行裸 `xcodegen generate`，否则可能缺少最新插件生成配置。
 - 编译校验：`make build`。
 - 本地运行：`make run`。
 - 构建本地插件并生成 Debug catalog：`make build-plugin`。
@@ -49,11 +49,11 @@
 - 插件状态变化后调用 `onStateChange?()`，使宿主重建派生状态。若状态会被外部系统事件改变（如显示器热插拔、权限变化、文件系统变化、日历授权变化），需要接入明确的事件监听或刷新入口，并配合 debounce/节流更新快照，避免依赖用户展开面板、切换设置页或全量 `refreshAll()` 才拿到新数据。
 - 有跨插件通用意义的外部状态变化应优先抽象成 Core 层协议或观察器；例如显示器拓扑变化使用 `DisplayConfigurationObserving` 通知宿主，再由实现 `DisplayTopologyRefreshing` 的显示器相关插件刷新自身快照。
 - 控件 ID、插件 ID、快捷键 ID 要稳定、可读，并尽量集中在功能内的私有常量中。
-- 新增插件 target 需更新 `project.yml`，并在 `plugin.json.build.scheme` 中指向对应 bundle scheme。
+- 普通新增插件不需要更新根 `project.yml`；保持 `plugin.json.build.scheme` 指向对应 bundle scheme，生成器会自动创建 core target、bundle target、测试依赖和插件 scheme。若插件需要额外 framework、include path、bundle 资源或 target 覆盖，在 `Plugins/<PluginName>/project.yml` 中声明最小差异。
 
 ## Swift 代码风格
 - 保持现有 Swift 风格：小类型、明确命名、早返回、少全局状态。
-- 优先使用 Apple 原生框架；引入第三方依赖前先说明理由并更新 `project.yml`。
+- 优先使用 Apple 原生框架；引入第三方依赖前先说明理由。插件私有的系统 framework/include path 优先写入对应 `Plugins/<PluginName>/project.yml`。
 - 使用 `AppLog` 添加 OSLog category，避免在应用代码中使用裸 `print`。
 - 与 AppKit、CoreGraphics、IOKit、EventKit 等系统 API 交互时，保留失败分支和降级路径。
 - 文件、路径、权限、显示器 ID、快捷键绑定等外部输入必须校验后再使用。

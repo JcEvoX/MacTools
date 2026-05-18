@@ -415,7 +415,7 @@ function build_release_app() {
   require_command xcodebuild
 
   info "Generating Xcode project"
-  (cd "$ROOT_DIR" && xcodegen generate >/dev/null)
+  (cd "$ROOT_DIR" && make generate >/dev/null)
 
   info "Building Release app version=$VERSION build=$BUILD_NUMBER"
   xcodebuild \
