@@ -76,6 +76,15 @@ final class MenuBarStatusItemController: NSObject {
         observePluginHost()
         observeIconSettings()
         updateStatusIcon()
+        pluginHost.statusItemButtonFrameProvider = { [weak self] in
+            self?.statusItemButtonScreenRect()
+        }
+    }
+
+    private func statusItemButtonScreenRect() -> NSRect? {
+        guard let button = statusItem.button, let window = button.window else { return nil }
+        let frameInWindow = button.convert(button.bounds, to: nil)
+        return window.convertToScreen(frameInWindow)
     }
 
     deinit {

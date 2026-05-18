@@ -56,6 +56,9 @@ final class PluginHost: ObservableObject {
     @Published var selectedSettingsDestination: SettingsDestination = .general
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
+    /// 由 `MenuBarStatusItemController` 注入，返回状态栏图标按钮的屏幕 frame。
+    var statusItemButtonFrameProvider: (() -> NSRect?)? = nil
+
     convenience init() {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
@@ -653,6 +656,11 @@ final class PluginHost: ObservableObject {
             }
             plugin.shortcutBindingResolver = { [weak self] shortcutDefinitionID in
                 self?.resolvedBinding(forPluginID: pluginID, shortcutDefinitionID: shortcutDefinitionID)
+            }
+            if let anchorable = plugin as? any DropZoneAnchorProviding {
+                anchorable.anchorRectProvider = { [weak self] in
+                    self?.statusItemButtonFrameProvider?()
+                }
             }
         }
     }

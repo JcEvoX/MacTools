@@ -108,3 +108,11 @@ public protocol AccessibilityPermissionRefreshing {
 public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
+
+/// 可选协议——仅需要浮动窗口锚点的插件才声明遵从。
+/// 不修改 `MacToolsPlugin` witness table，对已安装旧插件无影响。
+@MainActor
+public protocol DropZoneAnchorProviding: AnyObject {
+    /// 宿主注入：返回状态栏图标按钮在屏幕坐标系中的 frame。
+    var anchorRectProvider: (() -> NSRect?)? { get set }
+}
