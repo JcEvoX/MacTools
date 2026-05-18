@@ -286,6 +286,15 @@ final class FanControlPluginTests: XCTestCase {
         reader: MockSMCReader? = nil,
         writer: MockSMCWriter? = nil
     ) -> FanControlPlugin {
-        FanControlPlugin(smcReader: reader ?? MockSMCReader(), smcWriter: writer ?? MockSMCWriter())
+        let suiteName = "FanControlPluginTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let storage = UserDefaultsPluginStorage(pluginID: "fan-control", userDefaults: defaults)
+        let context = PluginRuntimeContext(pluginID: "fan-control", storage: storage)
+        return FanControlPlugin(
+            context: context,
+            smcReader: reader ?? MockSMCReader(),
+            smcWriter: writer ?? MockSMCWriter()
+        )
     }
 }

@@ -141,6 +141,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         case let .setSelection(controlID, optionID):
             guard controlID == ControlID.presetList else { return }
+            guard presetStore.allPresets.contains(where: { $0.id == optionID }) else { return }
             presetStore.setActivePreset(id: optionID)
             lastErrorMessage = nil
             onStateChange?()
