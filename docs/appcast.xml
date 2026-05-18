@@ -5,11 +5,11 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.1</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.1</link>
-            <sparkle:version>31</sparkle:version>
-            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.1 -->
+            <title>Version 1.0.2</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.2</link>
+            <sparkle:version>32</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.2 -->
 
 ## What's Changed
 ### Other Changes
@@ -20,15 +20,17 @@
 * fix: render installed plugin drag preview by @FaiChou in https://github.com/ggbond268/MacTools/pull/53
 * feat: add fix damaged app plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/50
 * Add Activity Bar plugin by @char1eslu in https://github.com/ggbond268/MacTools/pull/52
+* Refine ActivityBar component UI by @char1eslu in https://github.com/ggbond268/MacTools/pull/54
+* feat: add sleep/wake observers to manage fan control state by @ayangweb in https://github.com/ggbond268/MacTools/pull/56
 
 ## New Contributors
 * @FaiChou made their first contribution in https://github.com/ggbond268/MacTools/pull/51
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.0...v1.0.1
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.0...v1.0.2
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Mon, 18 May 2026 09:58:13 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.1/MacTools.dmg" length="6424044" type="application/octet-stream" sparkle:edSignature="6atJnLA1CN4BOF/o7Y4p4uJL/OVlMxJ5u7uDFgyyneGh5IQRawBsbigDajLzF93stW414mbpVLgGYIZpCIN6AA==" />
+            <pubDate>Mon, 18 May 2026 14:24:10 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.2/MacTools.dmg" length="6459525" type="application/octet-stream" sparkle:edSignature="WPqhNKbm6KYoyApsa7XOjEG5nRkhNMW5q2Pujj0vts28wJLkhroxF+B+u2ZmJjaFrfJBawWeaQr5NCxBOeJ1BQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
