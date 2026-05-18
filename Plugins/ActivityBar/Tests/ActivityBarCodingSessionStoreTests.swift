@@ -125,9 +125,10 @@ final class ActivityBarCodingSessionStoreTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(store.today.perTool["Cursor"]?.wordCount, 3)
-        XCTAssertEqual(store.today.perTool["Cursor"]?.toolCallCount, 1)
-        XCTAssertEqual(store.today.perTool["Cursor"]?.durationSeconds, 8, accuracy: 0.1)
+        let cursorStats = try XCTUnwrap(store.today.perTool["Cursor"])
+        XCTAssertEqual(cursorStats.wordCount, 3)
+        XCTAssertEqual(cursorStats.toolCallCount, 1)
+        XCTAssertEqual(cursorStats.durationSeconds, 8, accuracy: 0.1)
         XCTAssertEqual(store.today.topTools.first?.name, "Cursor")
     }
 }
