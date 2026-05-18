@@ -145,18 +145,32 @@ struct FeatureManagementTableView: NSViewRepresentable {
             session.draggingFormation = .none
         }
 
-        func tableView(
-            _ tableView: NSTableView,
-            draggingImageForRowsWith rowIndexes: IndexSet,
-            event: NSEvent,
-            offset dragImageOffset: NSPointPointer
-        ) -> NSImage {
-            guard let row = rowIndexes.first, parent.items.indices.contains(row) else {
-                return NSImage(size: NSSize(width: 1, height: 1))
-            }
+        func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
+            draggingInfo.enumerateDraggingItems(
+                options: [],
+                for: tableView,
+                classes: [NSPasteboardItem.self],
+                searchOptions: [:]
+            ) { [weak self] draggingItem, _, _ in
+                guard
+                    let self,
+                    let pasteboardItem = draggingItem.item as? NSPasteboardItem,
+                    let pluginID = pasteboardItem.string(forType: FeatureManagementTableView.dragType),
+                    let item = parent.items.first(where: { $0.id == pluginID })
+                else {
+                    return
+                }
 
-            dragImageOffset.pointee = .init(x: 0, y: 0)
-            return FeatureManagementDragPreview.image(for: parent.items[row])
+                let image = FeatureManagementDragPreview.image(
+                    for: item,
+                    width: tableView.bounds.width
+                )
+                let frame = NSRect(
+                    origin: draggingItem.draggingFrame.origin,
+                    size: image.size
+                )
+                draggingItem.setDraggingFrame(frame, contents: image)
+            }
         }
 
         func tableView(
@@ -209,58 +223,147 @@ private final class LockedClipView: NSClipView {
 
 @MainActor
 private enum FeatureManagementDragPreview {
-    static func image(for item: PluginFeatureManagementItem) -> NSImage {
-        let previewView = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 46))
-        previewView.wantsLayer = true
-        previewView.layer?.cornerRadius = 12
-        previewView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
-        previewView.layer?.borderWidth = 1
-        previewView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.28).cgColor
-        previewView.layer?.shadowColor = NSColor.black.withAlphaComponent(0.14).cgColor
-        previewView.layer?.shadowOpacity = 1
-        previewView.layer?.shadowRadius = 10
-        previewView.layer?.shadowOffset = NSSize(width: 0, height: -2)
-
-        let iconBackgroundView = NSView()
-        iconBackgroundView.wantsLayer = true
-        iconBackgroundView.layer?.cornerRadius = 9
-        iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
-
-        let iconImageView = NSImageView()
-        iconImageView.image = NSImage(
-            systemSymbolName: item.iconName,
-            accessibilityDescription: item.title
+    static func image(for item: PluginFeatureManagementItem, width: CGFloat) -> NSImage {
+        let imageSize = NSSize(
+            width: min(max(width, 320), 620),
+            height: FeatureManagementTableView.rowHeight
         )
-        iconImageView.contentTintColor = NSColor(item.iconTint)
+        let image = NSImage(size: imageSize)
 
-        let titleLabel = NSTextField(labelWithString: item.title)
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        titleLabel.lineBreakMode = .byTruncatingTail
+        image.lockFocus()
+        defer { image.unlockFocus() }
 
-        [iconBackgroundView, iconImageView, titleLabel].forEach {
-            $0.translatesAutoresizingMaskIntoConstraints = false
+        NSGraphicsContext.current?.imageInterpolation = .high
+
+        let bounds = NSRect(origin: .zero, size: imageSize)
+        let contentBounds = bounds.insetBy(dx: 1, dy: 1)
+        let backgroundPath = NSBezierPath(
+            roundedRect: contentBounds,
+            xRadius: 12,
+            yRadius: 12
+        )
+        NSColor.windowBackgroundColor.withAlphaComponent(0.96).setFill()
+        backgroundPath.fill()
+        NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
+        backgroundPath.lineWidth = 1
+        backgroundPath.stroke()
+
+        let tintColor = NSColor(item.iconTint)
+        let iconBackgroundRect = NSRect(x: 9, y: 16, width: 30, height: 30)
+        NSColor(item.iconTint.opacity(0.14)).setFill()
+        NSBezierPath(roundedRect: iconBackgroundRect, xRadius: 10, yRadius: 10).fill()
+
+        drawSymbol(
+            item.iconName,
+            in: NSRect(x: 16, y: 23, width: 16, height: 16),
+            color: tintColor,
+            pointSize: 16
+        )
+
+        let trailingWidth: CGFloat = 74
+        let textX = iconBackgroundRect.maxX + 12
+        let textWidth = max(imageSize.width - textX - trailingWidth - 12, 80)
+        let titleRect = NSRect(x: textX, y: 34, width: textWidth, height: 18)
+        let descriptionRect = NSRect(x: textX, y: 13, width: textWidth, height: 17)
+
+        drawText(
+            item.title,
+            in: titleRect,
+            font: .systemFont(ofSize: 13, weight: .semibold),
+            color: .labelColor
+        )
+
+        drawText(
+            "\(item.description) · \(featureManagementPresentationText(for: item.presentation))",
+            in: descriptionRect,
+            font: .systemFont(ofSize: 11, weight: .medium),
+            color: .secondaryLabelColor
+        )
+
+        if item.isActive {
+            NSColor.systemGreen.setFill()
+            NSBezierPath(
+                ovalIn: NSRect(
+                    x: imageSize.width - 72,
+                    y: (imageSize.height - 8) / 2,
+                    width: 8,
+                    height: 8
+                )
+            )
+            .fill()
         }
 
-        previewView.addSubview(iconBackgroundView)
-        iconBackgroundView.addSubview(iconImageView)
-        previewView.addSubview(titleLabel)
+        drawVisibilitySwitch(
+            isOn: item.isVisible,
+            in: NSRect(x: imageSize.width - 54, y: 22, width: 26, height: 16)
+        )
+        drawSymbol(
+            "line.3.horizontal",
+            in: NSRect(x: imageSize.width - 20, y: 23, width: 13, height: 13),
+            color: .secondaryLabelColor,
+            pointSize: 13
+        )
 
-        NSLayoutConstraint.activate([
-            iconBackgroundView.leadingAnchor.constraint(equalTo: previewView.leadingAnchor, constant: 10),
-            iconBackgroundView.centerYAnchor.constraint(equalTo: previewView.centerYAnchor),
-            iconBackgroundView.widthAnchor.constraint(equalToConstant: 28),
-            iconBackgroundView.heightAnchor.constraint(equalToConstant: 28),
+        return image
+    }
 
-            iconImageView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
-            iconImageView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
+    private static func drawText(
+        _ text: String,
+        in rect: NSRect,
+        font: NSFont,
+        color: NSColor
+    ) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byTruncatingTail
 
-            titleLabel.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 10),
-            titleLabel.trailingAnchor.constraint(equalTo: previewView.trailingAnchor, constant: -12),
-            titleLabel.centerYAnchor.constraint(equalTo: previewView.centerYAnchor)
-        ])
+        NSString(string: text).draw(
+            in: rect,
+            withAttributes: [
+                .font: font,
+                .foregroundColor: color,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+    }
 
-        previewView.layoutSubtreeIfNeeded()
-        return previewView.snapshotImage()
+    private static func drawSymbol(
+        _ name: String,
+        in rect: NSRect,
+        color: NSColor,
+        pointSize: CGFloat
+    ) {
+        guard
+            let symbol = NSImage(
+                systemSymbolName: name,
+                accessibilityDescription: nil
+            )?.withSymbolConfiguration(.init(pointSize: pointSize, weight: .semibold))
+        else {
+            return
+        }
+
+        let tintedSymbol = symbol.tinted(with: color)
+        tintedSymbol.draw(in: rect)
+    }
+
+    private static func drawVisibilitySwitch(isOn: Bool, in rect: NSRect) {
+        let trackColor = isOn
+            ? NSColor.controlAccentColor.withAlphaComponent(0.85)
+            : NSColor.tertiaryLabelColor.withAlphaComponent(0.32)
+        trackColor.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+
+        let knobSize = rect.height - 4
+        let knobX = isOn ? rect.maxX - knobSize - 2 : rect.minX + 2
+        NSColor.white.withAlphaComponent(0.96).setFill()
+        NSBezierPath(
+            ovalIn: NSRect(
+                x: knobX,
+                y: rect.minY + 2,
+                width: knobSize,
+                height: knobSize
+            )
+        )
+        .fill()
     }
 }
 
@@ -291,11 +394,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         item: PluginFeatureManagementItem,
         onVisibilityChange: @escaping (Bool) -> Void
     ) {
-        textField = titleLabel
         visibilityHandler = onVisibilityChange
 
         titleLabel.stringValue = item.title
-        descriptionLabel.stringValue = "\(item.description) · \(presentationText(for: item.presentation))"
+        descriptionLabel.stringValue = "\(item.description) · \(featureManagementPresentationText(for: item.presentation))"
         iconImageView.image = NSImage(
             systemSymbolName: item.iconName,
             accessibilityDescription: item.title
@@ -411,44 +513,31 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private func handleVisibilityToggle(_ sender: NSButton) {
         visibilityHandler?(sender.state == .on)
     }
+}
 
-    private func presentationText(for presentation: PluginFeaturePresentation) -> String {
-        switch presentation {
-        case .featurePanel:
-            return "操作面板"
-        case .componentPanel:
-            return "组件"
-        case .featureAndComponentPanel:
-            return "操作面板与组件"
-        }
+private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
+    switch presentation {
+    case .featurePanel:
+        return "操作面板"
+    case .componentPanel:
+        return "组件"
+    case .featureAndComponentPanel:
+        return "操作面板与组件"
     }
 }
 
-@MainActor
-private extension NSView {
-    func snapshotImage() -> NSImage {
-        guard
-            let bitmap = bitmapImageRepForCachingDisplay(in: bounds)
-                ?? NSBitmapImageRep(
-                    bitmapDataPlanes: nil,
-                    pixelsWide: Int(bounds.width),
-                    pixelsHigh: Int(bounds.height),
-                    bitsPerSample: 8,
-                    samplesPerPixel: 4,
-                    hasAlpha: true,
-                    isPlanar: false,
-                    colorSpaceName: .deviceRGB,
-                    bytesPerRow: 0,
-                    bitsPerPixel: 0
-                )
-        else {
-            return NSImage(size: bounds.size)
-        }
+private extension NSImage {
+    func tinted(with color: NSColor) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
 
-        cacheDisplay(in: bounds, to: bitmap)
+        let rect = NSRect(origin: .zero, size: size)
+        color.setFill()
+        rect.fill()
+        draw(in: rect, from: rect, operation: .destinationIn, fraction: 1)
 
-        let image = NSImage(size: bounds.size)
-        image.addRepresentation(bitmap)
+        image.isTemplate = false
         return image
     }
 }
