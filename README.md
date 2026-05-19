@@ -7,9 +7,9 @@
 
 ## 截图
 
-|                                   菜单栏功能面板                                    |                                              组件仪表盘                                              |                                        设置与插件                                         |                                       关于与更新                                        |
+|                                   菜单栏功能面板                                    |                                              组件仪表盘                                              |                                        通用设置                                         |                                       插件页面                                        |
 | :---------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------: |
-| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="日历与系统状态组件面板"> | <img src="docs/assets/screenshots/settings-general.png" width="220" alt="设置与插件页面"> | <img src="docs/assets/screenshots/settings-about.png" width="220" alt="关于与更新页面"> |
+| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="日历与系统状态组件面板"> | <img src="docs/assets/screenshots/settings-general.png" width="220" alt="通用设置页面"> | <img src="docs/assets/screenshots/settings-plugins.png" width="220" alt="插件页面"> |
 
 ## 功能
 
