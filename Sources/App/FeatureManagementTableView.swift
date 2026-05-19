@@ -81,6 +81,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
             return
         }
 
+        guard !coordinator.isDragging else {
+            return
+        }
+
         tableView.reloadData()
         tableView.noteNumberOfRowsChanged()
 
@@ -135,14 +139,27 @@ struct FeatureManagementTableView: NSViewRepresentable {
             return pasteboardItem
         }
 
+        private(set) var isDragging = false
+
         func tableView(
             _ tableView: NSTableView,
             draggingSession session: NSDraggingSession,
             willBeginAt screenPoint: NSPoint,
             forRowIndexes rowIndexes: IndexSet
         ) {
+            isDragging = true
             session.animatesToStartingPositionsOnCancelOrFail = true
             session.draggingFormation = .none
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            draggingSession session: NSDraggingSession,
+            endedAt screenPoint: NSPoint,
+            operation: NSDragOperation
+        ) {
+            isDragging = false
+            tableView.reloadData()
         }
 
         func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
