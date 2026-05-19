@@ -116,12 +116,47 @@ struct ActivityBarProjectStats: Codable, Equatable, Sendable {
     var toolCallCount: Int = 0
 }
 
+enum ActivityBarCodingTool: String, CaseIterable, Codable, Equatable, Sendable {
+    case claudeCode = "Claude Code"
+    case cursor = "Cursor"
+    case codex = "Codex"
+
+    static func displayName(forSessionID sessionID: String) -> String {
+        if sessionID.hasPrefix("cursor-") {
+            return cursor.rawValue
+        }
+
+        if sessionID.hasPrefix("codex-") {
+            return codex.rawValue
+        }
+
+        return claudeCode.rawValue
+    }
+}
+
 struct ActivityBarCodingDailyStats: Codable, Identifiable, Equatable, Sendable {
     let date: String
     var durationSeconds: TimeInterval = 0
     var wordCount: Int = 0
     var toolCallCount: Int = 0
     var perProject: [String: ActivityBarProjectStats] = [:]
+    var perTool: [String: ActivityBarProjectStats] = [:]
+
+    init(
+        date: String,
+        durationSeconds: TimeInterval = 0,
+        wordCount: Int = 0,
+        toolCallCount: Int = 0,
+        perProject: [String: ActivityBarProjectStats] = [:],
+        perTool: [String: ActivityBarProjectStats] = [:]
+    ) {
+        self.date = date
+        self.durationSeconds = durationSeconds
+        self.wordCount = wordCount
+        self.toolCallCount = toolCallCount
+        self.perProject = perProject
+        self.perTool = perTool
+    }
 
     var id: String { date }
 
@@ -134,6 +169,47 @@ struct ActivityBarCodingDailyStats: Codable, Identifiable, Equatable, Sendable {
                 }
                 return $0.stats.durationSeconds > $1.stats.durationSeconds
             }
+    }
+
+    var topTools: [(name: String, stats: ActivityBarProjectStats)] {
+        let knownTools = ActivityBarCodingTool.allCases.map(\.rawValue)
+        let knownRows = knownTools.compactMap { name -> (name: String, stats: ActivityBarProjectStats)? in
+            guard let stats = perTool[name], stats.durationSeconds > 0 || stats.wordCount > 0 || stats.toolCallCount > 0 else {
+                return nil
+            }
+            return (name: name, stats: stats)
+        }
+
+        let customRows = perTool
+            .filter { !knownTools.contains($0.key) }
+            .map { (name: $0.key, stats: $0.value) }
+            .sorted {
+                if $0.stats.durationSeconds == $1.stats.durationSeconds {
+                    return $0.stats.wordCount > $1.stats.wordCount
+                }
+                return $0.stats.durationSeconds > $1.stats.durationSeconds
+            }
+
+        return knownRows + customRows
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case durationSeconds
+        case wordCount
+        case toolCallCount
+        case perProject
+        case perTool
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decode(String.self, forKey: .date)
+        durationSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .durationSeconds) ?? 0
+        wordCount = try container.decodeIfPresent(Int.self, forKey: .wordCount) ?? 0
+        toolCallCount = try container.decodeIfPresent(Int.self, forKey: .toolCallCount) ?? 0
+        perProject = try container.decodeIfPresent([String: ActivityBarProjectStats].self, forKey: .perProject) ?? [:]
+        perTool = try container.decodeIfPresent([String: ActivityBarProjectStats].self, forKey: .perTool) ?? [:]
     }
 }
 

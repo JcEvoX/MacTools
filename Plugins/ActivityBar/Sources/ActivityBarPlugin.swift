@@ -40,7 +40,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     )
 
     let descriptor = PluginComponentDescriptor(
-        span: PluginComponentSpan(width: 4, height: 6)!
+        span: PluginComponentSpan(width: 4, height: 10)!
     )
 
     private let controller: ActivityBarController
@@ -130,7 +130,12 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     }
 
     func makeView(context: PluginComponentContext) -> AnyView {
-        AnyView(ActivityBarComponentView(controller: controller))
+        AnyView(
+            ActivityBarComponentView(
+                controller: controller,
+                dismiss: context.dismiss
+            )
+        )
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {

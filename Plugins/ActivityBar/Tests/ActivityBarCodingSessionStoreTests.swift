@@ -90,4 +90,48 @@ final class ActivityBarCodingSessionStoreTests: XCTestCase {
 
         XCTAssertEqual(store.activeSessionCount, 0)
     }
+
+    func testCodingEventsAggregateByTool() {
+        let storage = ActivityBarMemoryStorage()
+        var now = activityBarTestDate(hour: 10)
+        let store = ActivityBarCodingSessionStore(
+            storage: storage,
+            calendar: activityBarTestCalendar(),
+            dateProvider: { now }
+        )
+
+        store.handleEvent(
+            ActivityBarHookEvent(
+                sessionID: "cursor-session-1",
+                cwd: "/tmp/MacTools",
+                event: .userPromptSubmit,
+                status: .processing,
+                userPrompt: "update the ui",
+                tool: nil,
+                interactive: true
+            )
+        )
+
+        now = now.addingTimeInterval(8)
+        store.handleEvent(
+            ActivityBarHookEvent(
+                sessionID: "cursor-session-1",
+                cwd: "/tmp/MacTools",
+                event: .preToolUse,
+                status: .runningTool,
+                userPrompt: nil,
+                tool: "Read",
+                interactive: true
+            )
+        )
+
+        guard let cursorStats = store.today.perTool["Cursor"] else {
+            XCTFail("Expected Cursor stats to be recorded")
+            return
+        }
+        XCTAssertEqual(cursorStats.wordCount, 3)
+        XCTAssertEqual(cursorStats.toolCallCount, 1)
+        XCTAssertEqual(cursorStats.durationSeconds, 8, accuracy: 0.1)
+        XCTAssertEqual(store.today.topTools.first?.name, "Cursor")
+    }
 }

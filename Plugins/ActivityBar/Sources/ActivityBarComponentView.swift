@@ -1,42 +1,178 @@
 import AppKit
+import Charts
 import SwiftUI
 
-struct ActivityBarComponentView: View {
-    private enum Layout {
-        static let cornerRadius: CGFloat = 10
-        static let cardCornerRadius: CGFloat = 8
-        static let horizontalPadding: CGFloat = 14
-        static let verticalPadding: CGFloat = 10
-        static let sectionSpacing: CGFloat = 8
-        static let iconSize: CGFloat = 26
-        static let accentBlue = Color(nsColor: .systemBlue)
-        static let aiGreen = Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0)
+private struct ActivityBarPanelShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(roundedRect: rect, cornerRadius: 10, style: .continuous)
+    }
+}
+
+private enum ActivityBarTrendMode: String, CaseIterable {
+    case codingTools = "Coding Tools"
+    case input = "Input"
+}
+
+private enum ActivityBarChartRange: String, CaseIterable {
+    case oneDay = "1d"
+    case sevenDays = "7d"
+    case fourteenDays = "14d"
+    case thirtyDays = "30d"
+
+    var dayCount: Int {
+        switch self {
+        case .oneDay:
+            return 1
+        case .sevenDays:
+            return 7
+        case .fourteenDays:
+            return 14
+        case .thirtyDays:
+            return 30
+        }
     }
 
+    var label: String { rawValue }
+}
+
+private enum ActivityBarFunFact {
+    static let secondsPerClick = 0.50
+    static let keysPerPage = 550
+
+    static func forDay(_ stats: ActivityBarDailyStats) -> String? {
+        var facts: [String] = []
+
+        if stats.keystrokes > 0 {
+            let pages = Double(stats.keystrokes) / Double(keysPerPage)
+            if pages >= 1 {
+                let formatted = ActivityBarFormatting.decimal(stats.keystrokes)
+                let fullPages = Int(pages.rounded())
+                facts.append("✍️ You typed \(formatted) keys today. That's about writing \(fullPages) full page\(fullPages == 1 ? "" : "s").")
+            }
+        }
+
+        if stats.pointerClicks > 0 {
+            let clickMins = (Double(stats.pointerClicks) * secondsPerClick) / 60
+            if clickMins >= 1 {
+                let formatted = ActivityBarFormatting.decimal(stats.pointerClicks)
+                let minutes = Int(clickMins.rounded())
+                facts.append("🥁 You clicked \(formatted) times. That's like tapping your desk for about \(minutes) minute\(minutes == 1 ? "" : "s").")
+            }
+        }
+
+        guard !facts.isEmpty else {
+            return nil
+        }
+
+        let hash = stats.date.utf8.reduce(5381) { (($0 << 5) &+ $0) &+ Int($1) }
+        return facts[abs(hash) % facts.count]
+    }
+}
+
+struct ActivityBarComponentView: View {
+    private static let claudeColor = Color(red: 0xCB / 255.0, green: 0x64 / 255.0, blue: 0x41 / 255.0)
+    private static let cursorColor = Color.black
+    private static let codexColor = Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0)
+    private static let visibleCodingTools: [ActivityBarCodingTool] = [.claudeCode, .codex]
+
     @ObservedObject var controller: ActivityBarController
+    let dismiss: () -> Void
+
+    @State private var hoveredDate: String?
+    @State private var hoveredScreenTimeDate: String?
     @State private var expandedAppName: String?
+    @State private var selectedDateOffset = 0
+    @State private var trendMode: ActivityBarTrendMode = .input
+    @AppStorage("activity-bar.stats-expanded") private var statsExpanded = true
+    @AppStorage("activity-bar.chart-range") private var chartRange = ActivityBarChartRange.sevenDays
+
+    init(controller: ActivityBarController, dismiss: @escaping () -> Void = {}) {
+        self.controller = controller
+        self.dismiss = dismiss
+    }
+
+    private var selectedDate: Date {
+        Calendar.current.date(byAdding: .day, value: selectedDateOffset, to: Date()) ?? Date()
+    }
+
+    private var selectedDateKey: String {
+        dateKey(for: selectedDate)
+    }
+
+    private var selectedInputStats: ActivityBarDailyStats {
+        controller.inputStats.stats(for: selectedDateKey)
+    }
+
+    private var selectedCodingStats: ActivityBarCodingDailyStats {
+        controller.codingStats.stats(for: selectedDateKey)
+    }
+
+    private var isViewingToday: Bool {
+        selectedDateOffset == 0
+    }
+
+    private var canGoBack: Bool {
+        let keys = Set(controller.inputStats.sortedDateKeys + controller.codingStats.sortedDateKeys)
+        guard let earliest = keys.sorted().first else {
+            return false
+        }
+
+        return selectedDateKey > earliest
+    }
+
+    private var hasCodingToolsData: Bool {
+        controller.codingStats.days.values.contains { day in
+            hasCodingStats(visibleCodingAggregateStats(in: day))
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
             headerBar
-            inputStatsSection
-            divider
-            aiSection
+            todayStats
+
+            if showsAISection {
+                divider
+                aiSection
+            }
+
             divider
             topAppsSection
+
+            divider
+            statsDisclosure
+            if statsExpanded {
+                if trendMode == .codingTools {
+                    codingToolsChart
+                } else {
+                    weeklyChart
+                    divider
+                    screenTimeSection
+                }
+            }
+
+            divider
+            footerBar
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.regularMaterial, in: ActivityBarPanelShape(cornerRadius: Layout.cornerRadius))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(.regularMaterial, in: ActivityBarPanelShape())
         .overlay {
-            ActivityBarPanelShape(cornerRadius: Layout.cornerRadius)
+            ActivityBarPanelShape()
                 .stroke(Color.black.opacity(0.5), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
-        .onAppear { controller.refresh() }
+        .animation(.easeInOut(duration: 0.2), value: statsExpanded)
+        .animation(.easeInOut(duration: 0.2), value: chartRange)
+        .animation(.easeInOut(duration: 0.2), value: trendMode)
+        .animation(.easeInOut(duration: 0.15), value: selectedDateOffset)
+        .onAppear {
+            controller.refresh()
+            trendMode = hasCodingToolsData ? .codingTools : .input
+        }
     }
 
     private var headerBar: some View {
-        HStack(spacing: 8) {
+        HStack {
             Text("Activity Bar")
                 .font(.title3.bold())
                 .lineLimit(1)
@@ -44,20 +180,40 @@ struct ActivityBarComponentView: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 4) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary.opacity(0.2))
-                    .frame(width: 22, height: 22)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selectedDateOffset -= 1
+                        expandedAppName = nil
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary.opacity(canGoBack ? 0.55 : 0.2))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canGoBack)
 
-                Text("Today")
+                Text(displayDateString)
                     .font(.body)
                     .foregroundStyle(.primary.opacity(0.55))
                     .lineLimit(1)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary.opacity(0.2))
-                    .frame(width: 22, height: 22)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selectedDateOffset += 1
+                        expandedAppName = nil
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary.opacity(isViewingToday ? 0.2 : 0.55))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isViewingToday)
             }
         }
         .padding(.horizontal, 16)
@@ -65,17 +221,19 @@ struct ActivityBarComponentView: View {
         .padding(.bottom, 10)
     }
 
-    private var inputStatsSection: some View {
-        VStack(spacing: Layout.sectionSpacing) {
+    private var todayStats: some View {
+        let day = selectedInputStats
+
+        return VStack(spacing: 8) {
             HStack(spacing: 10) {
                 statCell(
                     icon: "keyboard",
-                    value: ActivityBarFormatting.decimal(controller.todayInputStats.keystrokes),
+                    value: ActivityBarFormatting.decimal(day.keystrokes),
                     label: "Keystrokes"
                 )
                 statCell(
                     icon: "cursorarrow.click.2",
-                    value: ActivityBarFormatting.decimal(controller.todayInputStats.pointerClicks),
+                    value: ActivityBarFormatting.decimal(day.pointerClicks),
                     label: "Clicks"
                 )
             }
@@ -83,48 +241,46 @@ struct ActivityBarComponentView: View {
             HStack(spacing: 10) {
                 statCell(
                     icon: "scroll",
-                    value: ActivityBarFormatting.decimal(controller.todayInputStats.scrollEvents),
+                    value: ActivityBarFormatting.decimal(day.scrollEvents),
                     label: "Scrolls"
                 )
                 statCell(
                     icon: "macwindow.on.rectangle",
-                    value: ActivityBarFormatting.duration(controller.todayInputStats.screenTimeSeconds),
+                    value: ActivityBarFormatting.duration(day.screenTimeSeconds),
                     label: "Screen Time"
                 )
             }
 
-            if let insightText {
-                Text(insightText)
+            if let fact = inputInsightText {
+                Text(fact)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Layout.accentBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous))
+                    .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
             }
         }
-        .padding(.horizontal, Layout.horizontalPadding)
-        .padding(.vertical, Layout.verticalPadding)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
-    private func statCell(icon: String, value: String, label: String, tint: Color = Layout.accentBlue) -> some View {
+    private func statCell(icon: String, value: String, label: String, tint: Color = .blue) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: Layout.iconSize, height: Layout.iconSize)
+                .frame(width: 26, height: 26)
                 .background(tint, in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
                     .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.primary)
-                    .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 
@@ -135,32 +291,29 @@ struct ActivityBarComponentView: View {
                     .minimumScaleFactor(0.8)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous))
+        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private var insightText: String? {
-        let stats = controller.todayInputStats
-
-        if stats.keystrokes >= 550 {
-            let pages = max(Int((Double(stats.keystrokes) / 550.0).rounded()), 1)
-            return "✍️ You typed \(ActivityBarFormatting.decimal(stats.keystrokes)) keys today. That's about writing \(pages) full page\(pages == 1 ? "" : "s")."
+    private var inputInsightText: String? {
+        if let fact = ActivityBarFunFact.forDay(selectedInputStats) {
+            return fact
         }
 
-        if stats.pointerClicks >= 120 {
-            let minutes = max(Int((Double(stats.pointerClicks) * 0.5 / 60.0).rounded()), 1)
-            return "🥁 You clicked \(ActivityBarFormatting.decimal(stats.pointerClicks)) times. That's like tapping your desk for about \(minutes) minute\(minutes == 1 ? "" : "s")."
-        }
-
-        if !controller.isTrackingEnabled {
+        if isViewingToday, !controller.isTrackingEnabled {
             return "Grant Input Monitoring and turn this on to start collecting local stats."
         }
 
         return nil
+    }
+
+    private var showsAISection: Bool {
+        !codingToolRows(for: selectedCodingStats).isEmpty
+            || (isViewingToday && controller.codingStats.activeSessionCount > 0)
     }
 
     private var aiSection: some View {
@@ -170,50 +323,57 @@ struct ActivityBarComponentView: View {
                 .padding(.horizontal, 22)
                 .padding(.bottom, 2)
 
-            codingToolRow(
-                name: "Claude / Cursor / Codex",
-                detail: aiDetailText,
-                duration: controller.todayCodingStats.durationSeconds,
-                tint: Layout.aiGreen
-            )
+            let rows = codingToolRows(for: selectedCodingStats)
+            if rows.isEmpty {
+                codingToolRow(
+                    row: CodingToolDisplayRow(
+                        id: "active-ai",
+                        name: "Claude / Codex",
+                        duration: 0,
+                        detail: "\(controller.codingStats.activeSessionCount) active",
+                        tint: Self.codexColor,
+                        systemImage: "terminal",
+                        iconSize: 13
+                    )
+                )
+            } else {
+                ForEach(rows) { row in
+                    codingToolRow(row: row)
+                }
+            }
+
+            if isViewingToday {
+                aiWeeklyComparison
+            }
         }
         .padding(.vertical, 8)
     }
 
-    private var aiDetailText: String {
-        let wordCount = ActivityBarFormatting.decimal(controller.todayCodingStats.wordCount)
-        let toolCount = ActivityBarFormatting.decimal(controller.todayCodingStats.toolCallCount)
-
-        if controller.codingStats.activeSessionCount > 0 {
-            return "\(controller.codingStats.activeSessionCount) active · \(wordCount) words · \(toolCount) tools"
-        }
-
-        return "\(wordCount) words · \(toolCount) tools"
-    }
-
-    private func codingToolRow(name: String, detail: String, duration: TimeInterval, tint: Color) -> some View {
+    private func codingToolRow(row: CodingToolDisplayRow) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "terminal")
-                .font(.system(size: 12, weight: .semibold))
+            Image(systemName: row.systemImage)
+                .font(.system(size: row.iconSize, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: Layout.iconSize, height: Layout.iconSize)
-                .background(tint, in: Circle())
+                .frame(width: 26, height: 26)
+                .background(row.tint, in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(name)
+                Text(row.name)
                     .font(.body)
-                    .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.primary.opacity(0.55))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+
+                if let detail = row.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.primary.opacity(0.55))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
             }
 
             Spacer(minLength: 8)
 
-            Text(ActivityBarFormatting.duration(duration))
+            Text(ActivityBarFormatting.duration(row.duration))
                 .font(.body.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.primary.opacity(0.55))
                 .lineLimit(1)
@@ -221,8 +381,52 @@ struct ActivityBarComponentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous))
+        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private var aiWeeklyComparison: some View {
+        let avg = aiDailyAvgLastWeek
+        if avg > 0 {
+            let today = visibleCodingAggregateStats(in: controller.codingStats.today).durationSeconds
+            let ratio = today / avg
+            let aboveAvg = ratio >= 1
+            let pct = Int(((ratio - 1) * 100).rounded())
+
+            HStack(spacing: 6) {
+                Image(systemName: aboveAvg ? "arrow.up.right" : "arrow.down.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(aboveAvg ? .green : .primary.opacity(0.45))
+
+                if pct == 0 {
+                    Text("On par with your daily avg (\(shortDuration(avg)))")
+                        .font(.caption)
+                        .foregroundStyle(.primary.opacity(0.55))
+                } else {
+                    Text("\(abs(pct))% \(aboveAvg ? "above" : "below") your daily avg (\(shortDuration(avg)))")
+                        .font(.caption)
+                        .foregroundStyle(.primary.opacity(0.55))
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 4)
+        }
+    }
+
+    private var aiDailyAvgLastWeek: TimeInterval {
+        let today = dateKey(for: Date())
+        let days = controller.codingStats
+            .recentDays(count: 8)
+            .filter { $0.date != today && visibleCodingAggregateStats(in: $0).durationSeconds > 0 }
+
+        guard !days.isEmpty else {
+            return 0
+        }
+
+        return days
+            .map { visibleCodingAggregateStats(in: $0).durationSeconds }
+            .reduce(0, +) / Double(days.count)
     }
 
     private var topAppsSection: some View {
@@ -232,7 +436,7 @@ struct ActivityBarComponentView: View {
                 .padding(.horizontal, 6)
                 .padding(.bottom, 2)
 
-            let apps = Array(controller.todayInputStats.topApps.prefix(5))
+            let apps = Array(selectedInputStats.topApps.prefix(5))
             if apps.isEmpty {
                 Text(controller.isTrackingEnabled ? "No activity yet" : "Turn on tracking to rank your apps")
                     .font(.subheadline)
@@ -242,7 +446,7 @@ struct ActivityBarComponentView: View {
             } else {
                 let maxTime = apps.first?.stats.screenTimeSeconds ?? 1
                 ForEach(apps, id: \.name) { app in
-                    topAppRow(name: app.name, stats: app.stats, maxScreenTime: maxTime)
+                    appRow(name: app.name, stats: app.stats, maxScreenTime: maxTime)
                 }
                 .onAppear {
                     if expandedAppName == nil {
@@ -255,7 +459,7 @@ struct ActivityBarComponentView: View {
         .padding(.vertical, 10)
     }
 
-    private func topAppRow(name: String, stats: ActivityBarAppStats, maxScreenTime: Double) -> some View {
+    private func appRow(name: String, stats: ActivityBarAppStats, maxScreenTime: Double) -> some View {
         let isExpanded = expandedAppName == name
 
         return VStack(spacing: 3) {
@@ -272,7 +476,6 @@ struct ActivityBarComponentView: View {
 
                     Text(name)
                         .font(.body)
-                        .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -287,11 +490,11 @@ struct ActivityBarComponentView: View {
             }
             .buttonStyle(.plain)
 
-            GeometryReader { geometry in
+            GeometryReader { geo in
                 let ratio = CGFloat(stats.screenTimeSeconds) / CGFloat(Swift.max(maxScreenTime, 1))
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Layout.accentBlue.opacity(0.25))
-                    .frame(width: geometry.size.width * ratio, height: 3)
+                    .fill(.blue.opacity(0.25))
+                    .frame(width: geo.size.width * ratio, height: 3)
             }
             .frame(height: 3)
 
@@ -315,6 +518,7 @@ struct ActivityBarComponentView: View {
             Image(systemName: icon)
                 .font(.system(size: 9))
                 .foregroundStyle(.primary.opacity(0.55))
+
             Text(value)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.primary.opacity(0.55))
@@ -322,16 +526,684 @@ struct ActivityBarComponentView: View {
         }
     }
 
+    private var statsDisclosure: some View {
+        HStack {
+            Button {
+                statsExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Trends")
+                        .font(.headline)
+
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary.opacity(0.55))
+                        .rotationEffect(.degrees(statsExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if statsExpanded {
+                Spacer(minLength: 8)
+
+                ForEach(ActivityBarTrendMode.allCases, id: \.self) { mode in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            trendMode = mode
+                            hoveredDate = nil
+                        }
+                    } label: {
+                        Text(mode.rawValue)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.primary.opacity(trendMode == mode ? 1 : 0.35))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var codingToolsChart: some View {
+        let days = controller.codingStats.recentDays(count: chartRange.dayCount, endingAt: selectedDate)
+        let compactMode = chartRange.dayCount > 7
+        let dateLabels = days.map { chartLabel($0.date) }
+        let hasData = days.contains { hasCodingStats(visibleCodingAggregateStats(in: $0)) }
+        let maxMinutes = days
+            .map { day in
+                Swift.max(
+                    toolStats(.claudeCode, in: day).durationSeconds / 60,
+                    toolStats(.codex, in: day).durationSeconds / 60
+                )
+            }
+            .max() ?? 0
+        let yUpperBound = Swift.max(maxMinutes * 1.15, 1)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                rangePickerBar
+                Spacer(minLength: 8)
+                legendDot(color: Self.claudeColor, label: "Claude")
+                legendDot(color: Self.codexColor, label: "Codex")
+            }
+            .padding(.horizontal, 6)
+
+            ZStack {
+                Chart {
+                    if hasData {
+                        ForEach(days) { day in
+                            let d = chartLabel(day.date)
+                            let isHovered = hoveredDate == d
+                            let claudeMins = toolStats(.claudeCode, in: day).durationSeconds / 60
+                            let codexMins = toolStats(.codex, in: day).durationSeconds / 60
+
+                            LineMark(x: .value("Date", d), y: .value("Minutes", claudeMins), series: .value("Tool", "Claude"))
+                                .foregroundStyle(by: .value("Tool", "Claude"))
+                                .interpolationMethod(.catmullRom)
+                            LineMark(x: .value("Date", d), y: .value("Minutes", codexMins), series: .value("Tool", "Codex"))
+                                .foregroundStyle(by: .value("Tool", "Codex"))
+                                .interpolationMethod(.catmullRom)
+
+                            if isHovered {
+                                RuleMark(x: .value("Date", d))
+                                    .foregroundStyle(.gray.opacity(0.3))
+                                    .lineStyle(StrokeStyle(dash: [4, 4]))
+                                    .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                        VStack(spacing: 2) {
+                                            Text(shortDate(day.date))
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(.primary.opacity(0.55))
+                                            HStack(spacing: 6) {
+                                                Text(shortDuration(claudeMins * 60)).foregroundStyle(Self.claudeColor)
+                                                Text(shortDuration(codexMins * 60)).foregroundStyle(Self.codexColor)
+                                            }
+                                            .font(.system(size: 10).bold().monospacedDigit())
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                        .offset(y: 30)
+                                    }
+
+                                chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: 30)
+                                chartPoint(x: d, y: codexMins, color: Self.codexColor, size: 30)
+                            } else if !compactMode {
+                                chartPoint(x: d, y: claudeMins, color: Self.claudeColor, size: 12)
+                                chartPoint(x: d, y: codexMins, color: Self.codexColor, size: 12)
+                            }
+                        }
+                    }
+                }
+                .chartForegroundStyleScale([
+                    "Claude": Self.claudeColor,
+                    "Codex": Self.codexColor,
+                ])
+                .chartLegend(.hidden)
+                .chartYScale(domain: 0...yUpperBound)
+                .chartYAxis {
+                    if hasData {
+                        AxisMarks(position: .leading) { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let minutes = value.as(Double.self) {
+                                    Text(talkAxisLabel(minutes))
+                                        .font(.system(size: 9))
+                                }
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: dateLabels) {
+                                Text(label)
+                                    .font(.system(size: 9))
+                            }
+                        }
+                    }
+                }
+                .chartOverlay { proxy in
+                    if hasData {
+                        chartHoverOverlay(proxy: proxy, labels: dateLabels, hoveredLabel: $hoveredDate)
+                    }
+                }
+
+                if !hasData {
+                    emptyChartMessage("No coding activity")
+                }
+            }
+            .frame(height: 120)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var weeklyChart: some View {
+        let days = controller.inputStats.recentDays(count: chartRange.dayCount, endingAt: selectedDate)
+        let compactMode = chartRange.dayCount > 7
+        let dateLabels = days.map { chartLabel($0.date) }
+        let hasData = days.contains { $0.totalInputs > 0 }
+        let maxInputCount = days
+            .map { day in
+                Swift.max(day.keystrokes, Swift.max(day.pointerClicks, day.scrollEvents))
+            }
+            .max() ?? 0
+        let yUpperBound = Swift.max(Double(maxInputCount) * 1.15, 1)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                rangePickerBar
+                Spacer(minLength: 8)
+                legendDot(color: .blue, label: "Keys")
+                legendDot(color: .orange, label: "Clicks")
+                legendDot(color: .green, label: "Scrolls")
+            }
+            .padding(.horizontal, 6)
+
+            ZStack {
+                Chart {
+                    if hasData {
+                        ForEach(days) { day in
+                            let d = chartLabel(day.date)
+                            let isHovered = hoveredDate == d
+
+                            LineMark(x: .value("Date", d), y: .value("Count", day.keystrokes), series: .value("Metric", "Keystrokes"))
+                                .foregroundStyle(by: .value("Metric", "Keystrokes"))
+                                .interpolationMethod(.catmullRom)
+                            LineMark(x: .value("Date", d), y: .value("Count", day.pointerClicks), series: .value("Metric", "Clicks"))
+                                .foregroundStyle(by: .value("Metric", "Clicks"))
+                                .interpolationMethod(.catmullRom)
+                            LineMark(x: .value("Date", d), y: .value("Count", day.scrollEvents), series: .value("Metric", "Scrolls"))
+                                .foregroundStyle(by: .value("Metric", "Scrolls"))
+                                .interpolationMethod(.catmullRom)
+
+                            if isHovered {
+                                RuleMark(x: .value("Date", d))
+                                    .foregroundStyle(.gray.opacity(0.3))
+                                    .lineStyle(StrokeStyle(dash: [4, 4]))
+                                    .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                        VStack(spacing: 2) {
+                                            Text(shortDate(day.date))
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(.primary.opacity(0.55))
+                                            HStack(spacing: 6) {
+                                                Text("\(day.keystrokes)").foregroundStyle(.blue)
+                                                Text("\(day.pointerClicks)").foregroundStyle(.orange)
+                                                Text("\(day.scrollEvents)").foregroundStyle(.green)
+                                            }
+                                            .font(.system(size: 10).bold().monospacedDigit())
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                                        .offset(y: 30)
+                                    }
+
+                                chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: 30)
+                                chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: 30)
+                                chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: 30)
+                            } else if !compactMode {
+                                chartPoint(x: d, y: Double(day.keystrokes), color: .blue, size: 12)
+                                chartPoint(x: d, y: Double(day.pointerClicks), color: .orange, size: 12)
+                                chartPoint(x: d, y: Double(day.scrollEvents), color: .green, size: 12)
+                            }
+                        }
+                    }
+                }
+                .chartForegroundStyleScale([
+                    "Keystrokes": Color.blue,
+                    "Clicks": Color.orange,
+                    "Scrolls": Color.green,
+                ])
+                .chartLegend(.hidden)
+                .chartYScale(domain: 0...yUpperBound)
+                .chartYAxis {
+                    if hasData {
+                        AxisMarks(position: .leading) { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let count = value.as(Double.self) {
+                                    Text(ActivityBarFormatting.count(Int(count)))
+                                        .font(.system(size: 9))
+                                }
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { value in
+                        AxisValueLabel {
+                            if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: dateLabels) {
+                                Text(label)
+                                    .font(.system(size: 9))
+                            }
+                        }
+                    }
+                }
+                .chartOverlay { proxy in
+                    if hasData {
+                        chartHoverOverlay(proxy: proxy, labels: dateLabels, hoveredLabel: $hoveredDate)
+                    }
+                }
+
+                if !hasData {
+                    emptyChartMessage("No input activity")
+                }
+            }
+            .frame(height: 120)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var screenTimeSection: some View {
+        let days = controller.inputStats.recentDays(count: chartRange.dayCount, endingAt: selectedDate)
+        let compactMode = chartRange.dayCount > 7
+        let labels = days.map { chartLabel($0.date) }
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Screen Time")
+                .font(.headline)
+
+            Chart {
+                ForEach(days) { day in
+                    let d = chartLabel(day.date)
+                    let isHovered = hoveredScreenTimeDate == d
+                    BarMark(
+                        x: .value("Date", d),
+                        y: .value("Duration", day.screenTimeSeconds / 60)
+                    )
+                    .foregroundStyle(isHovered ? .blue.opacity(0.7) : .blue.opacity(0.4))
+                    .cornerRadius(2)
+                    .annotation(position: .top, spacing: 2) {
+                        if isHovered, day.screenTimeSeconds > 0 {
+                            Text(shortDuration(day.screenTimeSeconds))
+                                .font(.system(size: 9).bold().monospacedDigit())
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let minutes = value.as(Double.self) {
+                            Text(talkAxisLabel(minutes))
+                                .font(.system(size: 9))
+                        }
+                    }
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: .automatic) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let label = value.as(String.self), !compactMode || shouldShowXLabel(label, in: labels) {
+                            Text(label)
+                                .font(.system(size: 9))
+                        }
+                    }
+                }
+            }
+            .chartOverlay { proxy in
+                chartHoverOverlay(proxy: proxy, labels: labels, hoveredLabel: $hoveredScreenTimeDate)
+            }
+            .frame(height: 60)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var rangePickerBar: some View {
+        HStack(spacing: 0) {
+            ForEach(ActivityBarChartRange.allCases, id: \.self) { range in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        chartRange = range
+                        hoveredDate = nil
+                        hoveredScreenTimeDate = nil
+                    }
+                } label: {
+                    Text(range.label)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(chartRange == range ? .white : .primary.opacity(0.55))
+                        .background(
+                            chartRange == range ? Color.blue : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func legendDot(color: Color, label: String) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.primary.opacity(0.55))
+                .lineLimit(1)
+        }
+    }
+
+    private func emptyChartMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.primary.opacity(0.4))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func chartPoint(x: String, y: Double, color: Color, size: CGFloat) -> some ChartContent {
+        PointMark(x: .value("Date", x), y: .value("Value", y))
+            .foregroundStyle(color)
+            .symbolSize(size)
+    }
+
+    private func chartHoverOverlay(proxy: ChartProxy, labels: [String], hoveredLabel: Binding<String?>) -> some View {
+        GeometryReader { geo in
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        guard let plotFrame = proxy.plotFrame else {
+                            return
+                        }
+
+                        let frame = geo[plotFrame]
+                        let x = location.x - frame.origin.x
+                        var closest: String?
+                        var closestDist: CGFloat = .infinity
+
+                        for label in labels {
+                            if let position = proxy.position(forX: label) {
+                                let distance = abs(position - x)
+                                if distance < closestDist {
+                                    closestDist = distance
+                                    closest = label
+                                }
+                            }
+                        }
+
+                        hoveredLabel.wrappedValue = closest
+                    case .ended:
+                        hoveredLabel.wrappedValue = nil
+                    }
+                }
+        }
+    }
+
+    private var footerBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                controller.installHooks()
+            } label: {
+                Text("Hooks")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                controller.openInputMonitoringSettings()
+            } label: {
+                Text("Permissions")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button(action: dismiss) {
+                Text("Close")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
     private var divider: some View {
         Divider()
             .padding(.horizontal, 12)
     }
-}
 
-private struct ActivityBarPanelShape: Shape {
-    let cornerRadius: CGFloat
+    private func codingToolRows(for day: ActivityBarCodingDailyStats) -> [CodingToolDisplayRow] {
+        let knownRows = Self.visibleCodingTools.compactMap { tool -> CodingToolDisplayRow? in
+            let stats = toolStats(tool, in: day)
+            guard hasCodingStats(stats) else {
+                return nil
+            }
 
-    func path(in rect: CGRect) -> Path {
-        Path(roundedRect: rect, cornerRadius: cornerRadius, style: .continuous)
+            return displayRow(for: tool, stats: stats)
+        }
+
+        if !knownRows.isEmpty {
+            return knownRows
+        }
+
+        let aggregateStats = ActivityBarProjectStats(
+            durationSeconds: day.durationSeconds,
+            wordCount: day.wordCount,
+            toolCallCount: day.toolCallCount
+        )
+        guard hasCodingStats(aggregateStats) else {
+            return []
+        }
+
+        return [
+            CodingToolDisplayRow(
+                id: "ai-tools",
+                name: "Claude / Codex",
+                duration: aggregateStats.durationSeconds,
+                detail: codingDetailText(for: aggregateStats),
+                tint: Self.codexColor,
+                systemImage: "terminal",
+                iconSize: 13
+            )
+        ]
+    }
+
+    private func displayRow(for tool: ActivityBarCodingTool, stats: ActivityBarProjectStats) -> CodingToolDisplayRow {
+        switch tool {
+        case .claudeCode:
+            return CodingToolDisplayRow(
+                id: tool.rawValue,
+                name: tool.rawValue,
+                duration: stats.durationSeconds,
+                detail: codingDetailText(for: stats),
+                tint: Self.claudeColor,
+                systemImage: "sparkles",
+                iconSize: 12
+            )
+        case .cursor:
+            return CodingToolDisplayRow(
+                id: tool.rawValue,
+                name: tool.rawValue,
+                duration: stats.durationSeconds,
+                detail: codingDetailText(for: stats),
+                tint: Self.cursorColor,
+                systemImage: "cube.fill",
+                iconSize: 13
+            )
+        case .codex:
+            return CodingToolDisplayRow(
+                id: tool.rawValue,
+                name: tool.rawValue,
+                duration: stats.durationSeconds,
+                detail: codingDetailText(for: stats),
+                tint: Self.codexColor,
+                systemImage: "terminal",
+                iconSize: 13
+            )
+        }
+    }
+
+    private func toolStats(_ tool: ActivityBarCodingTool, in day: ActivityBarCodingDailyStats) -> ActivityBarProjectStats {
+        if let stats = day.perTool[tool.rawValue] {
+            return stats
+        }
+
+        if day.perTool.isEmpty, tool == .claudeCode {
+            return ActivityBarProjectStats(
+                durationSeconds: day.durationSeconds,
+                wordCount: day.wordCount,
+                toolCallCount: day.toolCallCount
+            )
+        }
+
+        return ActivityBarProjectStats()
+    }
+
+    private func visibleCodingAggregateStats(in day: ActivityBarCodingDailyStats) -> ActivityBarProjectStats {
+        let visibleToolStats = Self.visibleCodingTools.map { toolStats($0, in: day) }
+        if visibleToolStats.contains(where: { hasCodingStats($0) }) {
+            return visibleToolStats.reduce(ActivityBarProjectStats()) { result, stats in
+                ActivityBarProjectStats(
+                    durationSeconds: result.durationSeconds + stats.durationSeconds,
+                    wordCount: result.wordCount + stats.wordCount,
+                    toolCallCount: result.toolCallCount + stats.toolCallCount
+                )
+            }
+        }
+
+        guard day.perTool.isEmpty else {
+            return ActivityBarProjectStats()
+        }
+
+        return ActivityBarProjectStats(
+            durationSeconds: day.durationSeconds,
+            wordCount: day.wordCount,
+            toolCallCount: day.toolCallCount
+        )
+    }
+
+    private func hasCodingStats(_ stats: ActivityBarProjectStats) -> Bool {
+        stats.durationSeconds > 0 || stats.wordCount > 0 || stats.toolCallCount > 0
+    }
+
+    private func codingDetailText(for stats: ActivityBarProjectStats) -> String {
+        "\(ActivityBarFormatting.decimal(stats.wordCount)) words · \(ActivityBarFormatting.decimal(stats.toolCallCount)) tools"
+    }
+
+    private var displayDateString: String {
+        if isViewingToday {
+            return "Today"
+        }
+
+        if selectedDateOffset == -1 {
+            return "Yesterday"
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: selectedDate)
+    }
+
+    private func shortDate(_ dateString: String) -> String {
+        let parts = dateString.split(separator: "-")
+        guard parts.count == 3 else {
+            return dateString
+        }
+
+        let months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        let monthIndex = Int(parts[1]) ?? 0
+        guard monthIndex >= 1, monthIndex <= 12 else {
+            return dateString
+        }
+
+        return "\(months[monthIndex]) \(parts[2])"
+    }
+
+    private func chartLabel(_ dateString: String) -> String {
+        if chartRange.dayCount <= 7 {
+            return shortDate(dateString)
+        }
+
+        let parts = dateString.split(separator: "-")
+        guard parts.count == 3 else {
+            return dateString
+        }
+
+        let day = Int(parts[2]) ?? 0
+        let monthIndex = Int(parts[1]) ?? 0
+        let months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        if day == 1, monthIndex >= 1, monthIndex <= 12 {
+            return "\(months[monthIndex]) 1"
+        }
+
+        return "\(day)"
+    }
+
+    private func shouldShowXLabel(_ label: String, in allLabels: [String]) -> Bool {
+        guard let index = allLabels.firstIndex(of: label) else {
+            return false
+        }
+
+        let step = chartRange.dayCount <= 14 ? 2 : 5
+        return index % step == 0 || index == allLabels.count - 1
+    }
+
+    private func talkAxisLabel(_ minutes: Double) -> String {
+        if minutes >= 60 {
+            return "\(Int(minutes / 60))h"
+        }
+
+        return "\(Int(minutes))m"
+    }
+
+    private func shortDuration(_ seconds: Double) -> String {
+        let total = max(Int(seconds), 0)
+        let hours = total / 3_600
+        let minutes = (total % 3_600) / 60
+        let secs = total % 60
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+
+        if minutes > 0 {
+            return "\(minutes)m \(secs)s"
+        }
+
+        return "\(secs)s"
+    }
+
+    private func dateKey(for date: Date) -> String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    private struct CodingToolDisplayRow: Identifiable {
+        let id: String
+        let name: String
+        let duration: TimeInterval
+        let detail: String?
+        let tint: Color
+        let systemImage: String
+        let iconSize: CGFloat
     }
 }

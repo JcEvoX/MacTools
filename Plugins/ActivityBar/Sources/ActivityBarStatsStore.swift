@@ -30,6 +30,25 @@ final class ActivityBarStatsStore: ObservableObject {
         days[dateKey(for: dateProvider())] ?? ActivityBarDailyStats(date: dateKey(for: dateProvider()))
     }
 
+    var sortedDateKeys: [String] {
+        days.keys.sorted()
+    }
+
+    func stats(for date: String) -> ActivityBarDailyStats {
+        days[date] ?? ActivityBarDailyStats(date: date)
+    }
+
+    func recentDays(count: Int, endingAt endDate: Date? = nil) -> [ActivityBarDailyStats] {
+        let end = endDate ?? dateProvider()
+        let boundedCount = max(count, 1)
+
+        return (0..<boundedCount).reversed().map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: end) ?? end
+            let key = dateKey(for: date)
+            return stats(for: key)
+        }
+    }
+
     func incrementKeystroke(app: String) {
         mutateToday(app: app) { day, appStats in
             day.keystrokes += 1

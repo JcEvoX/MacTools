@@ -9,6 +9,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
 
     private struct ActiveSession: Equatable {
         var project: String
+        var tool: String
         var status: ActivityBarHookStatus
         var startedAt: Date
         var lastUpdatedAt: Date
@@ -39,19 +40,39 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         days[dateKey(for: dateProvider())] ?? ActivityBarCodingDailyStats(date: dateKey(for: dateProvider()))
     }
 
+    var sortedDateKeys: [String] {
+        days.keys.sorted()
+    }
+
+    func stats(for date: String) -> ActivityBarCodingDailyStats {
+        days[date] ?? ActivityBarCodingDailyStats(date: date)
+    }
+
+    func recentDays(count: Int, endingAt endDate: Date? = nil) -> [ActivityBarCodingDailyStats] {
+        let end = endDate ?? dateProvider()
+        let boundedCount = max(count, 1)
+
+        return (0..<boundedCount).reversed().map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: end) ?? end
+            let key = dateKey(for: date)
+            return stats(for: key)
+        }
+    }
+
     func handleEvent(_ event: ActivityBarHookEvent) {
         let now = dateProvider()
         let project = projectName(from: event.cwd)
         let sessionID = event.sessionID.isEmpty ? "unknown" : event.sessionID
+        let tool = ActivityBarCodingTool.displayName(forSessionID: sessionID)
 
         closeElapsedTime(for: sessionID, now: now)
 
         if let prompt = event.userPrompt, event.event == .userPromptSubmit {
-            addWords(countWords(prompt), project: project)
+            addWords(countWords(prompt), project: project, tool: tool)
         }
 
         if event.event == .preToolUse {
-            addToolCall(project: project)
+            addToolCall(project: project, tool: tool)
         }
 
         switch event.event {
@@ -60,6 +81,7 @@ final class ActivityBarCodingSessionStore: ObservableObject {
         default:
             activeSessions[sessionID] = ActiveSession(
                 project: project,
+                tool: tool,
                 status: event.status,
                 startedAt: activeSessions[sessionID]?.startedAt ?? now,
                 lastUpdatedAt: now
@@ -91,50 +113,57 @@ final class ActivityBarCodingSessionStore: ObservableObject {
 
         let elapsed = now.timeIntervalSince(session.lastUpdatedAt)
         if elapsed > 0.5, session.status != .waitingForInput, session.status != .ended {
-            addDuration(elapsed, project: session.project)
+            addDuration(elapsed, project: session.project, tool: session.tool)
         }
 
         session.lastUpdatedAt = now
         activeSessions[sessionID] = session
     }
 
-    private func addWords(_ count: Int, project: String) {
+    private func addWords(_ count: Int, project: String, tool: String) {
         guard count > 0 else {
             return
         }
 
-        mutateToday(project: project) { day, projectStats in
+        mutateToday(project: project, tool: tool) { day, projectStats, toolStats in
             day.wordCount += count
             projectStats.wordCount += count
+            toolStats.wordCount += count
         }
     }
 
-    private func addToolCall(project: String) {
-        mutateToday(project: project) { day, projectStats in
+    private func addToolCall(project: String, tool: String) {
+        mutateToday(project: project, tool: tool) { day, projectStats, toolStats in
             day.toolCallCount += 1
             projectStats.toolCallCount += 1
+            toolStats.toolCallCount += 1
         }
     }
 
-    private func addDuration(_ seconds: TimeInterval, project: String) {
-        mutateToday(project: project) { day, projectStats in
+    private func addDuration(_ seconds: TimeInterval, project: String, tool: String) {
+        mutateToday(project: project, tool: tool) { day, projectStats, toolStats in
             day.durationSeconds += seconds
             projectStats.durationSeconds += seconds
+            toolStats.durationSeconds += seconds
         }
     }
 
     private func mutateToday(
         project rawProject: String,
-        update: (inout ActivityBarCodingDailyStats, inout ActivityBarProjectStats) -> Void
+        tool rawTool: String,
+        update: (inout ActivityBarCodingDailyStats, inout ActivityBarProjectStats, inout ActivityBarProjectStats) -> Void
     ) {
         let project = rawProject.isEmpty ? "Unknown" : rawProject
+        let tool = rawTool.isEmpty ? ActivityBarCodingTool.claudeCode.rawValue : rawTool
         let key = dateKey(for: dateProvider())
         var day = days[key] ?? ActivityBarCodingDailyStats(date: key)
         var projectStats = day.perProject[project] ?? ActivityBarProjectStats()
+        var toolStats = day.perTool[tool] ?? ActivityBarProjectStats()
 
-        update(&day, &projectStats)
+        update(&day, &projectStats, &toolStats)
 
         day.perProject[project] = projectStats
+        day.perTool[tool] = toolStats
         days[key] = day
     }
 
