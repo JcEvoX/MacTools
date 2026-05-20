@@ -76,11 +76,13 @@ if [[ -n "$KEYCHAIN" ]]; then
     sign_args+=(--keychain "$KEYCHAIN")
 fi
 
-for path in "${SIGN_PATHS[@]}"; do
-    [[ -e "$path" ]] || { echo "Sign path not found: $path" >&2; exit 1; }
-    codesign "${sign_args[@]}" "$path"
-    codesign --verify --strict "$path"
-done
+if ((${#SIGN_PATHS[@]} > 0)); then
+    for path in "${SIGN_PATHS[@]}"; do
+        [[ -e "$path" ]] || { echo "Sign path not found: $path" >&2; exit 1; }
+        codesign "${sign_args[@]}" "$path"
+        codesign --verify --strict "$path"
+    done
+fi
 
 codesign "${sign_args[@]}" "$BUNDLE_PATH"
 codesign --verify --strict --deep "$BUNDLE_PATH"
