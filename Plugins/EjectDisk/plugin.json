@@ -2,7 +2,7 @@
   "id": "eject-disk",
   "displayName": "推出磁盘",
   "summary": "推出所有可移动磁盘",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "EjectDisk.bundle",
