@@ -39,7 +39,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
     private var isEjecting = false
-    private var hasEjectableDisk = false
+    private var ejectableDiskCount: Int = 0
     private var lastErrorMessage: String?
     private var volumeMountObservers: [NSObjectProtocol] = []
 
@@ -48,7 +48,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             subtitle: subtitle,
             isOn: false,
             isExpanded: false,
-            isEnabled: !isEjecting && hasEjectableDisk,
+            isEnabled: !isEjecting && ejectableDiskCount > 0,
             isVisible: true,
             detail: nil,
             errorMessage: lastErrorMessage
@@ -60,9 +60,9 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
-        let hasEjectable = Self.hasEjectableDiskSync()
-        if self.hasEjectableDisk != hasEjectable {
-            self.hasEjectableDisk = hasEjectable
+        let count = Self.ejectableDiskCountSync()
+        if self.ejectableDiskCount != count {
+            self.ejectableDiskCount = count
             self.onStateChange?()
         }
         
@@ -102,9 +102,9 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
     
     private func checkForEjectableDiskAndUpdate() {
-        let hasEjectable = Self.hasEjectableDiskSync()
-        if self.hasEjectableDisk != hasEjectable {
-            self.hasEjectableDisk = hasEjectable
+        let count = Self.ejectableDiskCountSync()
+        if self.ejectableDiskCount != count {
+            self.ejectableDiskCount = count
             self.onStateChange?()
         }
     }
@@ -131,29 +131,28 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: - Private
 
     private var subtitle: String {
-        if isEjecting {
-            return "推出中..."
-        }
-        return metadata.defaultDescription
+        if isEjecting { return "推出中..." }
+        if ejectableDiskCount == 0 { return "无可推出的磁盘" }
+        return "\(ejectableDiskCount) 个可推出的磁盘"
     }
 
-    nonisolated private static func hasEjectableDiskSync() -> Bool {
+    nonisolated private static func ejectableDiskCountSync() -> Int {
         let fileManager = FileManager.default
         let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EjectDiskPlugin")
         
         do {
             let volumesPath = "/Volumes"
             guard fileManager.fileExists(atPath: volumesPath) else {
-                return false
+                return 0
             }
             
             let ejectableVolumes = try getEjectableVolumes(from: volumesPath)
             logger.debug("Found \(ejectableVolumes.count) ejectable volumes")
-            return !ejectableVolumes.isEmpty
+            return ejectableVolumes.count
             
         } catch {
             logger.error("Failed to check ejectable disks: \(error)")
-            return false
+            return 0
         }
     }
     
