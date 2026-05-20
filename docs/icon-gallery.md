@@ -55,21 +55,20 @@
 - 选择新的在线素材后，会清理旧的 `RemoteAssets`，只保留当前选中素材。
 - 最近使用会保留在线素材的本地缩略图和轻量引用；完整帧若已被清理，点击最近使用时会通过 catalog 重新下载。
 
-## Generate Static Assets
+## Local Debug Gallery
 
-本地 Debug：
+本地 Debug 会复制仓库内已提交的 `docs/icon-gallery`，并把 catalog 的 `baseURL` 改成本地 `file://` 地址：
 
 ```bash
 make generate-icon-gallery
 ```
 
-GitHub Pages 静态目录：
+如果需要重写到其它静态目录：
 
 ```bash
 ./scripts/icons/generate-local-icon-gallery.py \
-  --output-dir docs/icon-gallery \
-  --catalog-name catalog.json \
-  --base-url https://ggbond268.github.io/MacTools/icon-gallery/
+  --gallery-dir docs/icon-gallery \
+  --output-dir build/LocalIconGallery
 ```
 
 ## Safety Limits

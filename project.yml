@@ -40,7 +40,6 @@ targets:
       - "**/.gitkeep"
       - MacToolsPluginKit/**
       - "../Plugins/**"
-      - Resources/BuiltinMenuBarAnimations/**
       - Plugins/**/CalendarPluginResources/**
     dependencies:
     - target: MacToolsPluginKit
