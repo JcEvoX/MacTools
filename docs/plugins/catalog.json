@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-18T14:31:55Z",
+  "generatedAt": "2026-05-20T07:06:05Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -14,15 +14,15 @@
       "id": "activity-bar",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "dca02d195a09ed9b8c50eaa5c0152170d72230a51d1ba8a572d21966952ed318",
-        "size": 401558,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/activity-bar.mactoolsplugin.zip"
+        "sha256": "d49cc19a34d111b4c610792dbfd6e3fb036094492df4a33f0d2248975c48f814",
+        "size": 752601,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.5/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.5",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -217,15 +217,15 @@
       "id": "fan-control",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7c038d8a7e531e5bb07cdb096c4549aa0f620e1f9fa32b87dc758e299398bb01",
-        "size": 257103,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/fan-control.mactoolsplugin.zip"
+        "sha256": "7efb09b346af540c4e14df6d6c42240d1cc8dc14ab39a1a516453670198367b3",
+        "size": 338078,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.5/fan-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.5",
       "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -456,6 +456,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "TvyOgCg3h1tRqRyVT8SbFSv8tDCgijuDZpZS+DpBZicnj/IG3mhmp2Fygs9LVYEDSQgOW9JS5ptaAxiCjIvmCQ=="
+    "value": "xhms43sxBdlUdiFJFncXOz3tiK6yIoHt3/PAuz08tWxzbD9s8iJFAsRLPbksHojtLkTpOuRjorLIVinlNhBYDA=="
   }
 }
