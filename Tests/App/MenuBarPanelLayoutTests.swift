@@ -116,7 +116,39 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testPreferredPanelHeightCapsTallFeatureListsAtSharedMaximum() {
+    func testHeightIncludesFeatureContentAndFixedFooter() {
+        let items = [
+            makeItem(controlStyle: .switch, isExpanded: false, secondaryPanel: nil),
+            makeItem(id: "keep-awake", controlStyle: .switch, isExpanded: false, secondaryPanel: nil)
+        ]
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.height(for: items),
+            MenuBarPanelLayout.featureContentHeight(for: items) + MenuBarPanelLayout.fixedFooterHeight
+        )
+        XCTAssertEqual(
+            MenuBarPanelLayout.availableFeatureHeight(forPanelHeight: MenuBarPanelLayout.height(for: items)),
+            MenuBarPanelLayout.featureContentHeight(for: items)
+        )
+    }
+
+    func testPreferredPanelHeightUsesActualFeatureHeightBelowListMaximum() {
+        let items = [
+            makeItem(controlStyle: .switch, isExpanded: false, secondaryPanel: nil),
+            makeItem(id: "keep-awake", controlStyle: .switch, isExpanded: false, secondaryPanel: nil)
+        ]
+
+        XCTAssertLessThan(
+            MenuBarPanelLayout.featureContentHeight(for: items),
+            MenuBarPanelLayout.featureListMaximumHeight
+        )
+        XCTAssertEqual(
+            MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
+            MenuBarPanelLayout.featureContentHeight(for: items) + MenuBarPanelLayout.fixedFooterHeight
+        )
+    }
+
+    func testPreferredPanelHeightCapsTallFeatureListsAtListMaximum() {
         let items = (0..<40).map { index in
             makeItem(
                 id: "plugin-\(index)",
@@ -128,11 +160,11 @@ final class MenuBarPanelLayoutTests: XCTestCase {
 
         XCTAssertEqual(
             MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
-            MenuBarPanelLayout.maximumPanelHeight
+            MenuBarPanelLayout.featureListMaximumHeight + MenuBarPanelLayout.fixedFooterHeight
         )
     }
 
-    func testPreferredPanelHeightRespectsVisibleScreenHeight() {
+    func testFeatureListMaximumRespectsVisibleScreenHeight() {
         let items = (0..<40).map { index in
             makeItem(
                 id: "plugin-\(index)",
@@ -143,11 +175,33 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         }
 
         XCTAssertEqual(
-            min(
-                MenuBarPanelLayout.height(for: items),
-                MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 500)
-            ),
-            452
+            MenuBarPanelLayout.featureListHeight(for: items, screen: nil)
+                + MenuBarPanelLayout.fixedFooterHeight,
+            MenuBarPanelLayout.featureListMaximumHeight + MenuBarPanelLayout.fixedFooterHeight
+        )
+        XCTAssertEqual(
+            MenuBarPanelLayout.maximumFeatureListHeight(visibleFrameHeight: 500)
+                + MenuBarPanelLayout.fixedFooterHeight,
+            375
+        )
+    }
+
+    func testFeaturePanelMaximumUsesThreeQuartersOfVisibleScreenHeight() {
+        XCTAssertEqual(
+            MenuBarPanelLayout.maximumFeatureListHeight(visibleFrameHeight: 1000)
+                + MenuBarPanelLayout.fixedFooterHeight,
+            750
+        )
+    }
+
+    func testComponentPanelMaximumMatchesFeaturePanelScreenRatio() {
+        XCTAssertEqual(
+            MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 1000),
+            750
+        )
+        XCTAssertEqual(
+            MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 500),
+            375
         )
     }
 

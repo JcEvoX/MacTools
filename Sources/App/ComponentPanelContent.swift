@@ -187,7 +187,7 @@ struct ComponentPanelContent: View {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView(.vertical) {
+                ScrollView(.vertical, showsIndicators: false) {
                     ComponentGridView(
                         pluginHost: pluginHost,
                         items: pluginHost.componentItems,
@@ -196,7 +196,7 @@ struct ComponentPanelContent: View {
                         onDismiss: onDismiss
                     )
                 }
-                .scrollIndicators(.automatic)
+                .background(ScrollViewScrollerVisibilityConfigurator())
             }
         }
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
