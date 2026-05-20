@@ -2,7 +2,7 @@
   "id": "middle-click",
   "displayName": "模拟鼠标中键",
   "summary": "触控板轻点模拟鼠标中键",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 1,
   "bundleRelativePath": "MiddleClick.bundle",
