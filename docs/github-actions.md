@@ -132,7 +132,7 @@ git push origin plugins-1.0.1
 
 1. 从 `origin/main` 读取上一版生产 `docs/plugins/catalog.json` 作为基线。
 2. 生成增量发布计划。`auto` 模式会选择新插件和 `plugin.json.version` 高于上一版 catalog 的插件。
-3. 如果插件源码、资源或 `Sources/MacToolsPluginKit` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。
+3. 如果插件自身源码或资源有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` 等共享代码的展示或宿主侧改动默认不会强制所有插件重发；需要全量重发时使用 `mode=all`，需要把特定共享路径视为包变更时使用 `--shared-path`。
 4. 只以 Release 配置构建计划中的插件 target。
 5. 用 Developer ID 重新签名这些插件 bundle，并打包为 `*.mactoolsplugin.zip`。
 6. 创建或更新对应的 `plugins-*` GitHub Release，并只上传本批变化插件的 zip。catalog-only 变化可以创建没有 zip asset 的插件 Release。

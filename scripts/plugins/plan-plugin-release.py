@@ -7,9 +7,7 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_SHARED_PATHS = [
-    "Sources/MacToolsPluginKit",
-]
+DEFAULT_SHARED_PATHS = []
 
 
 def parse_args():
@@ -26,7 +24,10 @@ def parse_args():
         "--shared-path",
         action="append",
         default=[],
-        help="Repository path that forces affected plugins to rebuild when changed.",
+        help=(
+            "Repository path that forces existing plugins to rebuild when changed. "
+            "Repeatable; defaults to none."
+        ),
     )
     return parser.parse_args()
 

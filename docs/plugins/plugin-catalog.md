@@ -126,7 +126,7 @@ Recommended production flow is an incremental batch plugin release:
 2. Push a batch tag such as `plugins-1.0.1`.
 3. The `Plugin Release` GitHub Action reads the current production catalog from `origin/main`.
 4. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
-5. If package-relevant files changed but a plugin version did not increase, the workflow fails before signing or uploading.
+5. If package-relevant files changed inside a plugin but that plugin version did not increase, the workflow fails before signing or uploading. Shared host/PluginKit changes do not force every plugin package to be rebuilt by default; use `mode=all` or pass explicit `--shared-path` values when a shared change really requires repackaging existing plugins.
 6. The workflow builds, signs, zips, and uploads only the selected plugin packages.
 7. The workflow generates a delta catalog for the selected packages, merges those entries into the previous production catalog, and keeps unchanged plugin entries pointing at their existing assets.
 8. The merged catalog is signed and committed back to `docs/plugins/catalog.json`.
