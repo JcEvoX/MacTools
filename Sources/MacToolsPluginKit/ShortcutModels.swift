@@ -231,7 +231,7 @@ public enum ShortcutFormatter {
         var tokens: [String] = []
 
         if binding.modifiers.contains(.control) {
-            tokens.append("CTRL")
+            tokens.append("⌃")
         }
 
         if binding.modifiers.contains(.option) {
@@ -301,7 +301,7 @@ public enum ShortcutFormatter {
         case UInt16(kVK_ANSI_Grave): return "`"
         case UInt16(kVK_Return): return "↩"
         case UInt16(kVK_Tab): return "⇥"
-        case UInt16(kVK_Space): return "Space"
+        case UInt16(kVK_Space): return "␣"
         case UInt16(kVK_Delete): return "⌫"
         case UInt16(kVK_ForwardDelete): return "⌦"
         case UInt16(kVK_Escape): return "ESC"

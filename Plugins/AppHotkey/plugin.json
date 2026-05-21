@@ -1,0 +1,20 @@
+{
+  "id": "app-launcher",
+  "displayName": "应用快捷键",
+  "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "AppHotkey.bundle",
+  "factoryClass": "AppHotkeyPlugin.AppHotkeyPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "AppHotkeyPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": []
+}
