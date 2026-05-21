@@ -1,21 +1,21 @@
 import XCTest
-@testable import HideDockPlugin
+@testable import AutoHideDockPlugin
 
 @MainActor
-final class HideDockPluginTests: XCTestCase {
-    func testMetadataIdentifiesHideDockPlugin() {
-        let plugin = HideDockPlugin(
+final class AutoHideDockPluginTests: XCTestCase {
+    func testMetadataIdentifiesAutoHideDockPlugin() {
+        let plugin = AutoHideDockPlugin(
             commandRunner: MockDockCommandRunner(),
             stateReader: { false }
         )
 
-        XCTAssertEqual(plugin.metadata.id, "hide-dock")
+        XCTAssertEqual(plugin.metadata.id, "auto-hide-dock")
         XCTAssertEqual(plugin.metadata.title, "自动隐藏程序坞")
         XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
     }
 
     func testInitialStateReflectsStateReader() {
-        let plugin = HideDockPlugin(
+        let plugin = AutoHideDockPlugin(
             commandRunner: MockDockCommandRunner(),
             stateReader: { true }
         )
@@ -26,7 +26,7 @@ final class HideDockPluginTests: XCTestCase {
 
     func testSwitchOnUpdatesDockState() {
         let runner = MockDockCommandRunner()
-        let plugin = HideDockPlugin(
+        let plugin = AutoHideDockPlugin(
             commandRunner: runner,
             stateReader: { false }
         )
@@ -41,7 +41,7 @@ final class HideDockPluginTests: XCTestCase {
     func testSwitchFailureKeepsPreviousStateAndSetsError() {
         let runner = MockDockCommandRunner()
         runner.shouldFailSet = true
-        let plugin = HideDockPlugin(
+        let plugin = AutoHideDockPlugin(
             commandRunner: runner,
             stateReader: { false }
         )
@@ -60,7 +60,7 @@ private final class MockDockCommandRunner: DockCommandRunning {
     func setDockAutohide(_ isEnabled: Bool) throws {
         if shouldFailSet {
             throw NSError(
-                domain: "HideDockPluginTests",
+                domain: "AutoHideDockPluginTests",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "set failed"]
             )

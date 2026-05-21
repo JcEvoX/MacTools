@@ -25,7 +25,7 @@ struct ProcessDockCommandRunner: DockCommandRunning {
         if let error {
             let message = (error[NSAppleScript.errorMessage] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(
-                domain: "HideDockPlugin",
+                domain: "AutoHideDockPlugin",
                 code: (error[NSAppleScript.errorNumber] as? Int) ?? 1,
                 userInfo: [NSLocalizedDescriptionKey: message?.isEmpty == false ? message! : "切换 Dock 自动隐藏失败"]
             )
@@ -33,23 +33,23 @@ struct ProcessDockCommandRunner: DockCommandRunning {
     }
 }
 
-public final class HideDockPluginFactory: NSObject, MacToolsPluginBundleFactory {
+public final class AutoHideDockPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        HideDockPluginProvider()
+        AutoHideDockPluginProvider()
     }
 }
 
 @MainActor
-private struct HideDockPluginProvider: PluginProvider {
+private struct AutoHideDockPluginProvider: PluginProvider {
     func makePlugins() -> [any MacToolsPlugin] {
-        [HideDockPlugin()]
+        [AutoHideDockPlugin()]
     }
 }
 
 @MainActor
-final class HideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class AutoHideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     let metadata = PluginMetadata(
-        id: "hide-dock",
+        id: "auto-hide-dock",
         title: "自动隐藏程序坞",
         iconName: "rectangle.bottomthird.inset.filled",
         iconTint: Color(nsColor: .systemBlue),
@@ -66,7 +66,7 @@ final class HideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "HideDockPlugin")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "AutoHideDockPlugin")
     private let commandRunner: any DockCommandRunning
     private let stateReader: () -> Bool
 
@@ -75,7 +75,7 @@ final class HideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     init(
         commandRunner: any DockCommandRunning = ProcessDockCommandRunner(),
-        stateReader: @escaping () -> Bool = { HideDockPlugin.readDockAutohideState() }
+        stateReader: @escaping () -> Bool = { AutoHideDockPlugin.readDockAutohideState() }
     ) {
         self.commandRunner = commandRunner
         self.stateReader = stateReader

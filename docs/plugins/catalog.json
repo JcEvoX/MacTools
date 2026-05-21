@@ -270,18 +270,18 @@
         "configuration": false,
         "primaryPanel": true
       },
-      "displayName": "隐藏 Dock",
-      "id": "hide-dock",
+      "displayName": "自动隐藏程序坞",
+      "id": "auto-hide-dock",
       "minimumHostVersion": "1.0.2",
       "package": {
         "sha256": "6070b0c9df25339e47e5ce846346a0636cb25db72de5e6efc1a912b848c6a683",
         "size": 47485,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/hide-dock.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/auto-hide-dock.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
-      "summary": "隐藏 Dock",
+      "summary": "自动隐藏程序坞，提供更干净的桌面环境",
       "version": "1.0.2"
     },
     {
