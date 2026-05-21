@@ -12,3 +12,4 @@
 - [asmagill/hs.\_asm.undocumented.touchdevice](https://github.com/asmagill/hs._asm.undocumented.touchdevice)
 - [SoloTeamDev/solofan](https://github.com/SoloTeamDev/solofan)
 - [designsbymuzeer/Bye-Mac-App](https://github.com/designsbymuzeer/Bye-Mac-App)
+- [gbammc/Thor](https://github.com/gbammc/Thor)
