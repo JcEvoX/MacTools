@@ -1,0 +1,20 @@
+{
+  "id": "quit-apps",
+  "displayName": "退出应用",
+  "summary": "选择并退出正在运行的应用，或一键退出全部",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "QuitApps.bundle",
+  "factoryClass": "QuitAppsPlugin.QuitAppsPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "QuitAppsPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": []
+}
