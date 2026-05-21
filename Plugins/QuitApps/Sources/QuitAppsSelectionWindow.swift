@@ -309,10 +309,11 @@ private struct AppIconCell: View {
 
                 Text(entry.app.localizedName ?? "App")
                     .font(.system(size: 11))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .foregroundStyle(entry.isSelected ? Color.red : Color.primary)
                     .frame(width: 68)
+                    .help(entry.app.localizedName ?? "App")
             }
         }
         .buttonStyle(.plain)
