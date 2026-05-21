@@ -67,6 +67,12 @@ final class QuitAppsSelectionWindow: NSPanel {
     private let viewModel = QuitAppsViewModel()
     private var launchObserver: (any NSObjectProtocol)?
     private var terminateObserver: (any NSObjectProtocol)?
+    private var onDismiss: (() -> Void)?
+
+    override func cancelOperation(_ sender: Any?) {
+        orderOut(nil)
+        onDismiss?()
+    }
 
     init(onDismiss: @escaping () -> Void) {
         let size = NSSize(width: 360, height: 460)
@@ -77,6 +83,7 @@ final class QuitAppsSelectionWindow: NSPanel {
             defer: false
         )
 
+        self.onDismiss = onDismiss
         isFloatingPanel = true
         level = .floating
         backgroundColor = .clear
