@@ -50,11 +50,11 @@ private struct HideDockPluginProvider: PluginProvider {
 final class HideDockPlugin: MacToolsPlugin, PluginPrimaryPanel {
     let metadata = PluginMetadata(
         id: "hide-dock",
-        title: "隐藏 Dock",
+        title: "自动隐藏程序坞",
         iconName: "rectangle.bottomthird.inset.filled",
         iconTint: Color(nsColor: .systemBlue),
         order: 45,
-        defaultDescription: "自动隐藏 Dock"
+        defaultDescription: "自动隐藏程序坞，提供更干净的桌面环境"
     )
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
