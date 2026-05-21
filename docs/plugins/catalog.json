@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-21T04:16:39Z",
+  "generatedAt": "2026-05-21T08:38:25Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -34,15 +34,15 @@
       "id": "app-hotkey",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "be152083c9c5dd40b2b4d0e7ed19661962fc04b155ad7d7ff4a0755c2f449338",
-        "size": 233038,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/app-hotkey.mactoolsplugin.zip"
+        "sha256": "e695742c57f13576a0d31ba4b3536424b9d48dffdac09349370dba2b9d740291",
+        "size": 232989,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.8/app-hotkey.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.7",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.8",
       "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "capabilities": {
@@ -66,6 +66,46 @@
     },
     {
       "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "displayName": "自动隐藏程序坞",
+      "id": "auto-hide-dock",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "2f5bbf0f834ca9412a329f9d71445e41d7e53da26e6e4aa88ef9ddec9c72a31e",
+        "size": 47877,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.8/auto-hide-dock.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.8",
+      "summary": "自动隐藏程序坞，提供更干净的桌面环境",
+      "version": "1.0.4"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "displayName": "自动隐藏菜单栏",
+      "id": "auto-hide-menu-bar",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "7042f0495892441fc4613e4db3879b01479c650adaadbadbe2ba4c938bb726d7",
+        "size": 48083,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.8/auto-hide-menu-bar.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.8",
+      "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
         "componentPanel": true,
         "configuration": false,
         "primaryPanel": false
@@ -78,7 +118,10 @@
         "size": 294518,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/calendar.mactoolsplugin.zip"
       },
-      "permissions": ["calendarFullAccess", "automation"],
+      "permissions": [
+        "calendarFullAccess",
+        "automation"
+      ],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
       "summary": "查看日期、节假日和系统日程",
@@ -270,26 +313,6 @@
         "configuration": false,
         "primaryPanel": true
       },
-      "displayName": "自动隐藏程序坞",
-      "id": "auto-hide-dock",
-      "minimumHostVersion": "1.0.2",
-      "package": {
-        "sha256": "6070b0c9df25339e47e5ce846346a0636cb25db72de5e6efc1a912b848c6a683",
-        "size": 47485,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/auto-hide-dock.mactoolsplugin.zip"
-      },
-      "permissions": [],
-      "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
-      "summary": "自动隐藏程序坞，提供更干净的桌面环境",
-      "version": "1.0.2"
-    },
-    {
-      "capabilities": {
-        "componentPanel": false,
-        "configuration": false,
-        "primaryPanel": true
-      },
       "displayName": "隐藏刘海",
       "id": "hide-notch",
       "minimumHostVersion": "1.0.2",
@@ -398,7 +421,9 @@
         "size": 104181,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/middle-click.mactoolsplugin.zip"
       },
-      "permissions": ["accessibility"],
+      "permissions": [
+        "accessibility"
+      ],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "触控板轻点模拟鼠标中键",
@@ -438,7 +463,9 @@
         "size": 163209,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/physical-clean-mode.mactoolsplugin.zip"
       },
-      "permissions": ["accessibility"],
+      "permissions": [
+        "accessibility"
+      ],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
       "summary": "屏幕全黑并临时禁用键盘输入",
@@ -454,15 +481,15 @@
       "id": "quit-apps",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "c7f9edb8420c9361a56d1731e0aec856337cf4506afe5e0bc645c6d4bd741476",
-        "size": 167517,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/quit-apps.mactoolsplugin.zip"
+        "sha256": "8d4ff1eda57eed753e8034ae777e77e665cd42ec169d6eff30b66d144ac4eaa1",
+        "size": 168477,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.8/quit-apps.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.7",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.8",
       "summary": "选择并退出正在运行的应用，或一键退出全部",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "capabilities": {
@@ -489,6 +516,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "tpBm8ACiiv/rbsqEfrzqIn1KDSEoPzPr/yceLyeDG96SI+rn/rXbKPrtmCPx89zYrTEkpaAkcQpU2fG4Pxj2AQ=="
+    "value": "1ObYnnbBP79JjIqKmWFekZQNDC1ZBZAdymcxQ7jLPu17Qh4A2ePXKoObTI4cf019Z7MbEkhk4g8VHX4POEHmAQ=="
   }
 }
