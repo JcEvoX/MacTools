@@ -10,7 +10,7 @@ final class HideDockPluginTests: XCTestCase {
         )
 
         XCTAssertEqual(plugin.metadata.id, "hide-dock")
-        XCTAssertEqual(plugin.metadata.title, "隐藏 Dock")
+        XCTAssertEqual(plugin.metadata.title, "自动隐藏程序坞")
         XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .switch)
     }
 
