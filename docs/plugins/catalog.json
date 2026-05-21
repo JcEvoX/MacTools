@@ -31,12 +31,12 @@
         "primaryPanel": true
       },
       "displayName": "应用快捷键",
-      "id": "app-launcher",
+      "id": "app-hotkey",
       "minimumHostVersion": "1.0.2",
       "package": {
         "sha256": "be152083c9c5dd40b2b4d0e7ed19661962fc04b155ad7d7ff4a0755c2f449338",
         "size": 233038,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/app-launcher.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/app-hotkey.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 1,
@@ -78,10 +78,7 @@
         "size": 294518,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/calendar.mactoolsplugin.zip"
       },
-      "permissions": [
-        "calendarFullAccess",
-        "automation"
-      ],
+      "permissions": ["calendarFullAccess", "automation"],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
       "summary": "查看日期、节假日和系统日程",
@@ -401,9 +398,7 @@
         "size": 104181,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/middle-click.mactoolsplugin.zip"
       },
-      "permissions": [
-        "accessibility"
-      ],
+      "permissions": ["accessibility"],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
       "summary": "触控板轻点模拟鼠标中键",
@@ -443,9 +438,7 @@
         "size": 163209,
         "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.4/physical-clean-mode.mactoolsplugin.zip"
       },
-      "permissions": [
-        "accessibility"
-      ],
+      "permissions": ["accessibility"],
       "pluginKitVersion": 1,
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
       "summary": "屏幕全黑并临时禁用键盘输入",

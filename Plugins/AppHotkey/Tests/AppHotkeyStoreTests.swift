@@ -238,7 +238,7 @@ final class AppHotkeyPluginTests: XCTestCase {
     }
 
     private func makePlugin(storage: InMemoryPluginStorage) -> AppHotkeyPlugin {
-        let context = PluginRuntimeContext(pluginID: "app-launcher", storage: storage)
+        let context = PluginRuntimeContext(pluginID: "app-hotkey", storage: storage)
         return AppHotkeyPlugin(context: context)
     }
 
@@ -386,7 +386,7 @@ final class AppHotkeyPluginTests: XCTestCase {
 
     func testMetadataID() {
         let plugin = makePlugin()
-        XCTAssertEqual(plugin.metadata.id, "app-launcher")
+        XCTAssertEqual(plugin.metadata.id, "app-hotkey")
     }
 
     func testPrimaryPanelStateIsVisible() {

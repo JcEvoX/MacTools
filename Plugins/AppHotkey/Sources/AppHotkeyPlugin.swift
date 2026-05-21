@@ -27,7 +27,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
     // MARK: Metadata
 
     let metadata = PluginMetadata(
-        id: "app-launcher",
+        id: "app-hotkey",
         title: "应用快捷键",
         iconName: "keyboard",
         iconTint: Color(nsColor: .systemYellow),
@@ -55,7 +55,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Init
 
-    init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-launcher")) {
+    init(context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "app-hotkey")) {
         self.storage = context.storage
         self.store = AppHotkeyStore(storage: context.storage)
         self.hotkeyManager = AppHotkeyManager()
