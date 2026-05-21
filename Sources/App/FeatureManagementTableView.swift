@@ -310,9 +310,9 @@ private enum FeatureManagementDragPreview {
             .fill()
         }
 
-        drawVisibilitySwitch(
+        drawVisibilityCheckbox(
             isOn: item.isVisible,
-            in: NSRect(x: imageSize.width - 54, y: 22, width: 26, height: 16)
+            in: NSRect(x: imageSize.width - 50, y: 24, width: 14, height: 14)
         )
         drawSymbol(
             "line.3.horizontal",
@@ -362,25 +362,38 @@ private enum FeatureManagementDragPreview {
         tintedSymbol.draw(in: rect)
     }
 
-    private static func drawVisibilitySwitch(isOn: Bool, in rect: NSRect) {
-        let trackColor = isOn
-            ? NSColor.controlAccentColor.withAlphaComponent(0.85)
-            : NSColor.tertiaryLabelColor.withAlphaComponent(0.32)
-        trackColor.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+    private static func drawVisibilityCheckbox(isOn: Bool, in rect: NSRect) {
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
 
-        let knobSize = rect.height - 4
-        let knobX = isOn ? rect.maxX - knobSize - 2 : rect.minX + 2
-        NSColor.white.withAlphaComponent(0.96).setFill()
-        NSBezierPath(
-            ovalIn: NSRect(
-                x: knobX,
-                y: rect.minY + 2,
-                width: knobSize,
-                height: knobSize
-            )
-        )
-        .fill()
+        if isOn {
+            NSColor.controlAccentColor.setFill()
+            path.fill()
+
+            let checkPath = NSBezierPath()
+            checkPath.lineWidth = 1.5
+            checkPath.lineCapStyle = .round
+            checkPath.lineJoinStyle = .round
+            checkPath.move(to: NSPoint(
+                x: rect.minX + rect.width * 0.2,
+                y: rect.midY
+            ))
+            checkPath.line(to: NSPoint(
+                x: rect.minX + rect.width * 0.42,
+                y: rect.minY + rect.height * 0.28
+            ))
+            checkPath.line(to: NSPoint(
+                x: rect.maxX - rect.width * 0.18,
+                y: rect.maxY - rect.height * 0.22
+            ))
+            NSColor.white.setStroke()
+            checkPath.stroke()
+        } else {
+            NSColor.windowBackgroundColor.setFill()
+            path.fill()
+            NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
     }
 }
 
