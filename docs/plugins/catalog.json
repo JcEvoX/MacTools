@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-20T08:46:02Z",
+  "generatedAt": "2026-05-21T04:16:39Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -23,6 +23,26 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.5",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
       "version": "1.0.2"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "displayName": "应用快捷键",
+      "id": "app-launcher",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "be152083c9c5dd40b2b4d0e7ed19661962fc04b155ad7d7ff4a0755c2f449338",
+        "size": 233038,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/app-launcher.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.7",
+      "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
+      "version": "1.0.0"
     },
     {
       "capabilities": {
@@ -433,6 +453,26 @@
     },
     {
       "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "displayName": "退出应用",
+      "id": "quit-apps",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "c7f9edb8420c9361a56d1731e0aec856337cf4506afe5e0bc645c6d4bd741476",
+        "size": 167517,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.7/quit-apps.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.7",
+      "summary": "选择并退出正在运行的应用，或一键退出全部",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
         "componentPanel": true,
         "configuration": false,
         "primaryPanel": false
@@ -456,6 +496,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "jH46E5NVFufiW6QLl1OtEJJM2BzZiNLtqPzvBQE1ZZ3qRelBkcAHAyYEK94Bd59S66G3tJYrxaNjYOlrlggvAg=="
+    "value": "tpBm8ACiiv/rbsqEfrzqIn1KDSEoPzPr/yceLyeDG96SI+rn/rXbKPrtmCPx89zYrTEkpaAkcQpU2fG4Pxj2AQ=="
   }
 }
