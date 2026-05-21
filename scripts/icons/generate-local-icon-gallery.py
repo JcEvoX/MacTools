@@ -4,6 +4,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 
 def copy_gallery(source_dir: Path, output_dir: Path) -> None:
@@ -17,7 +18,7 @@ def copy_gallery(source_dir: Path, output_dir: Path) -> None:
     )
 
 
-def rewrite_catalog(output_dir: Path, catalog_name: str, base_url: str | None) -> Path:
+def rewrite_catalog(output_dir: Path, catalog_name: str, base_url: Optional[str]) -> Path:
     source_catalog = output_dir / "catalog.json"
     target_catalog = output_dir / catalog_name
 
