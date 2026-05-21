@@ -5,24 +5,25 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.5</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.5</link>
-            <sparkle:version>35</sparkle:version>
-            <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.5 -->
+            <title>Version 1.0.6</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.6</link>
+            <sparkle:version>36</sparkle:version>
+            <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.6 -->
 
 ## What's Changed
 ### Other Changes
-* feat: improve description of eject disk plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/62
-* chore: update plugins version by @ayangweb in https://github.com/ggbond268/MacTools/pull/63
-* chore: update plugin version to 1.0.3 by @ayangweb in https://github.com/ggbond268/MacTools/pull/64
+* feat: add quit apps plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/67
+* feat: add app hotkey plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/65
+* fix: replace visibility switch with checkbox in drag preview by @ayangweb in https://github.com/ggbond268/MacTools/pull/69
+* chore: add GitHub Actions workflow for Homebrew Cask updates by @ayangweb in https://github.com/ggbond268/MacTools/pull/71
 
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.4...v1.0.5
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.5...v1.0.6
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Wed, 20 May 2026 13:56:27 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.5/MacTools.dmg" length="4758613" type="application/octet-stream" sparkle:edSignature="MqJr1D+lqDkm3J49GoBCFyZSHPlGlSOdD1JJHMopLXGCHa/mp7YV53jUjpDzmJ4xR62zR3wioSbs1P4QV25lCg==" />
+            <pubDate>Thu, 21 May 2026 04:18:54 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.6/MacTools.dmg" length="4758031" type="application/octet-stream" sparkle:edSignature="82ixoVSCsGmGwYnhDRVJPKZ0n/GnZtsJxsYXsWr08QgWzK4T2oQgQOeKLHGrVsUo+aiUeeeU4ZiVXGFfeZ3lAQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
