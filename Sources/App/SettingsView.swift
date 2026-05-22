@@ -404,36 +404,52 @@ private struct PluginConfigurationDetailPane: View {
     var body: some View {
         Group {
             if let item {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
+                if item.prefersFullHeight {
+                    // 全高度布局：header 固定在顶部，自定义视图填满剩余空间
+                    VStack(alignment: .leading, spacing: 0) {
                         PluginConfigurationHeader(item: item)
-
-                        if !item.settingsCards.isEmpty {
-                            PluginSettingsCardSection(
-                                pluginHost: pluginHost,
-                                cards: item.settingsCards
-                            )
-                        }
-
-                        if !item.permissionCards.isEmpty {
-                            PluginPermissionCardSection(
-                                pluginHost: pluginHost,
-                                cards: item.permissionCards
-                            )
-                        }
-
-                        if !item.shortcutItems.isEmpty {
-                            PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
-                        }
+                            .padding(PluginSettingsTheme.Spacing.pagePadding)
 
                         if item.hasCustomConfiguration {
                             pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                                .padding(.horizontal, PluginSettingsTheme.Spacing.pagePadding)
+                                .padding(.bottom, PluginSettingsTheme.Spacing.pagePadding)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                     }
-                    .padding(PluginSettingsTheme.Spacing.pagePadding)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 18) {
+                            PluginConfigurationHeader(item: item)
+
+                            if !item.settingsCards.isEmpty {
+                                PluginSettingsCardSection(
+                                    pluginHost: pluginHost,
+                                    cards: item.settingsCards
+                                )
+                            }
+
+                            if !item.permissionCards.isEmpty {
+                                PluginPermissionCardSection(
+                                    pluginHost: pluginHost,
+                                    cards: item.permissionCards
+                                )
+                            }
+
+                            if !item.shortcutItems.isEmpty {
+                                PluginShortcutSection(pluginHost: pluginHost, items: item.shortcutItems)
+                            }
+
+                            if item.hasCustomConfiguration {
+                                pluginHost.pluginConfigurationViewItem(for: item.pluginID).content
+                            }
+                        }
+                        .padding(PluginSettingsTheme.Spacing.pagePadding)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .background(SettingsStyle.contentBackground)
                 }
-                .background(SettingsStyle.contentBackground)
             } else {
                 ContentUnavailableView(
                     "暂无可配置插件",
