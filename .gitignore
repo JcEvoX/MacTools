@@ -5,6 +5,7 @@ Configs/GeneratedPlugins.yml
 scripts/release.local.env
 build/
 .build/
+__pycache__/
 .DS_Store
 *.log
 CLAUDE.local.md

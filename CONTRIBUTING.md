@@ -53,8 +53,13 @@
 
 ## Release
 - 发布由维护者执行；不要在普通贡献中创建 tag、发布 GitHub Release 或提交发布产物。
+- 快速发包优先使用 `make release`。命令会交互选择 `app` 或 `plugin`，先分析下一版本的 `patch`/`minor`/`major` 并预览 bump；确认后才 `pull --ff-only`、执行轻量检查、更新并提交版本 bump、创建并推送对应 tag。
+- App 发布会更新 `project.yml` 的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`，推送 `v*.*.*` tag 后由 `Release` workflow 构建、签名、公证并上传 DMG。
+- 插件发布会推送 `plugins-*` 批次 tag。默认 `auto` 模式会按生产 catalog 找出新插件、已 bump 插件和包相关变更插件；需要时自动更新对应 `plugin.json.version`，然后由 `Plugin Release` workflow 构建并合并签名 catalog。
+- 非交互用法示例：`make release ARGS="--type app --level patch --yes"`，或 `make release ARGS="--type plugin --plugin-mode selected --plugin calendar --level patch --yes"`。
+- 预览将执行的步骤可追加 `--dry-run`；正式发布前工作区必须干净。
 - 本地发布前复制 `scripts/release.local.env.sample` 为 `scripts/release.local.env`，至少填写 `DEVELOPER_ID_APPLICATION`。
 - 如需 Apple 公证，首次使用 `xcrun notarytool store-credentials` 保存凭证。
 - 版本号默认读取 `project.yml` 中的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`。
-- 生成本地正式包：`./scripts/release-local.sh`；发布到 GitHub Release 前需先完成 `gh auth login`，再执行 `./scripts/release-local.sh --publish`。
+- 生成本地正式包仍可使用底层脚本：`./scripts/release-local.sh`；发布到 GitHub Release 前需先完成 `gh auth login`，再执行 `./scripts/release-local.sh --publish`。
 - 插件库发布使用 `plugins-*` 批次 tag 触发 `Plugin Release` workflow。默认只构建和上传版本递增的插件，并将新条目合并进生产 catalog；catalog 私钥、Developer ID 证书和 GitHub token 必须来自 CI secrets 或本地环境变量。

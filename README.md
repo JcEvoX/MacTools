@@ -94,6 +94,14 @@ make build-plugin PLUGIN=calendar # 只构建指定插件目录名或插件 ID
 make run                          # 自动使用 build/LocalPlugins/catalog.dev.json
 ```
 
+快速发包：
+
+```bash
+make release # 交互选择 app 或 plugin，先分析并预览 bump，确认后再 pull、检查、bump、提交、打 tag 并 push
+```
+
+App 发布会更新 `project.yml` 并推送 `v*.*.*` tag；插件发布会按生产 catalog 分析需要发布的插件，必要时更新对应 `plugin.json.version`，再推送 `plugins-*` 批次 tag。后续签名、公证、上传 Release 和更新 appcast/catalog 仍由 GitHub Actions 完成。
+
 插件发布通过 `plugins-*` 批次 tag 触发 GitHub Actions。只需要给实际变更的插件递增 `plugin.json.version`；工作流会默认只构建和上传变更插件，合并签名后的 catalog，并保留未变化插件的既有下载链接。
 
 新增和更新插件的简短流程见 [docs/plugins/local-native-plugins.md](docs/plugins/local-native-plugins.md#development-steps)。

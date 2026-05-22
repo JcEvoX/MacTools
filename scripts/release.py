@@ -1,0 +1,785 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PROJECT_SPEC = ROOT_DIR / "project.yml"
+PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
+PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
+PLUGIN_PLAN_PATH = ROOT_DIR / "build/release/plugin-plan.json"
+SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+APP_TAG_RE = re.compile(r"^v(\d+\.\d+\.\d+)$")
+PLUGIN_TAG_RE = re.compile(r"^plugins-(\d+\.\d+\.\d+)$")
+
+
+class ReleaseError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class PluginInfo:
+    id: str
+    directory_name: str
+    display_name: str
+    path: Path
+    manifest_path: Path
+    version: str
+
+
+@dataclass(frozen=True)
+class PluginAnalysis:
+    mode: str
+    selected_ids: list[str]
+    removed_ids: list[str]
+    needs_bump: list[PluginInfo]
+    already_bumped: list[PluginInfo]
+    new_plugins: list[PluginInfo]
+    reasons: dict[str, list[str]]
+
+    @property
+    def release_required(self) -> bool:
+        return bool(
+            self.selected_ids
+            or self.removed_ids
+            or self.needs_bump
+            or self.already_bumped
+            or self.new_plugins
+        )
+
+
+def info(message: str) -> None:
+    print(f"[release] {message}")
+
+
+def fail(message: str) -> None:
+    raise ReleaseError(message)
+
+
+def run(
+    args: list[str],
+    *,
+    cwd: Path = ROOT_DIR,
+    capture: bool = False,
+    dry_run: bool = False,
+    mutates: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    if dry_run and mutates:
+        print("+ " + " ".join(shell_quote(part) for part in args))
+        return subprocess.CompletedProcess(args, 0, "" if capture else None, "")
+
+    kwargs: dict[str, object] = {
+        "cwd": cwd,
+        "text": True,
+        "check": False,
+    }
+    if capture:
+        kwargs["stdout"] = subprocess.PIPE
+        kwargs["stderr"] = subprocess.PIPE
+
+    result = subprocess.run(args, **kwargs)
+    if result.returncode != 0:
+        if capture and result.stderr:
+            sys.stderr.write(result.stderr)
+        command = " ".join(shell_quote(part) for part in args)
+        fail(f"命令失败：{command}")
+    return result
+
+
+def shell_quote(value: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_./:=@%+,-]+", value):
+        return value
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def git(args: list[str], *, capture: bool = True) -> str:
+    result = run(["git", *args], capture=capture)
+    return (result.stdout or "").strip()
+
+
+def require_command(command: str) -> None:
+    if shutil.which(command) is None:
+        fail(f"缺少必要命令：{command}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Interactive release helper for MacTools app and plugin releases."
+    )
+    parser.add_argument("--type", choices=["app", "plugin"], help="发布类型。")
+    parser.add_argument("--level", choices=["patch", "minor", "major"], help="版本递增级别。")
+    parser.add_argument(
+        "--plugin-mode",
+        choices=["auto", "selected", "all"],
+        default=None,
+        help="插件发布模式，默认 auto。",
+    )
+    parser.add_argument(
+        "--plugin",
+        action="append",
+        default=[],
+        help="插件 ID 或目录名；可重复，也可用逗号分隔。仅用于 --plugin-mode selected。",
+    )
+    parser.add_argument("--remote", default="origin", help="Git remote，默认 origin。")
+    parser.add_argument("--branch", default="main", help="发布分支，默认 main。")
+    parser.add_argument("--yes", action="store_true", help="跳过最终确认。")
+    parser.add_argument("--skip-check", action="store_true", help="跳过本地轻量检查。")
+    parser.add_argument("--dry-run", action="store_true", help="只展示将执行的写操作。")
+    return parser.parse_args()
+
+
+def prompt_choice(title: str, choices: list[tuple[str, str]]) -> str:
+    if not sys.stdin.isatty():
+        fail(f"非交互环境需要通过参数指定：{title}")
+
+    print(title)
+    for index, (_, label) in enumerate(choices, start=1):
+        print(f"  {index}. {label}")
+
+    while True:
+        raw = input("> ").strip()
+        if not raw:
+            return choices[0][0]
+        if raw.isdigit():
+            index = int(raw)
+            if 1 <= index <= len(choices):
+                return choices[index - 1][0]
+        for value, label in choices:
+            if raw == value or raw == label:
+                return value
+        print("请输入列表中的编号或值。")
+
+
+def prompt_text(title: str) -> str:
+    if not sys.stdin.isatty():
+        fail(f"非交互环境需要通过参数指定：{title}")
+    while True:
+        raw = input(f"{title}\n> ").strip()
+        if raw:
+            return raw
+        print("输入不能为空。")
+
+
+def confirm(message: str, assume_yes: bool) -> None:
+    if assume_yes:
+        return
+    if not sys.stdin.isatty():
+        fail("非交互环境需要传入 --yes。")
+    raw = input(f"{message} [y/N] ").strip().lower()
+    if raw not in {"y", "yes"}:
+        fail("已取消发布。")
+
+
+def ensure_clean_worktree() -> None:
+    status = git(["status", "--porcelain"])
+    if status:
+        fail(
+            "发布前 Git 工作区必须干净。请先提交或暂存当前改动。\n"
+            + status
+        )
+
+
+def warn_dirty_worktree_for_dry_run() -> None:
+    status = git(["status", "--porcelain"])
+    if status:
+        info("Dry-run: 当前工作区有未提交改动，正式发布前仍需要清理。")
+
+
+def ensure_release_branch(branch: str) -> None:
+    current_branch = git(["branch", "--show-current"])
+    if current_branch != branch:
+        fail(f"当前分支是 {current_branch or '(detached)'}，请切到 {branch} 后再发布。")
+
+
+def fetch_release_refs(remote: str, dry_run: bool) -> None:
+    info(f"Fetching release refs from {remote}")
+    run(["git", "fetch", "--prune", "--tags", remote], dry_run=dry_run, mutates=True)
+
+
+def sync_branch_after_confirm(remote: str, branch: str, dry_run: bool) -> None:
+    info(f"Syncing {remote}/{branch}")
+    run(["git", "pull", "--ff-only", remote, branch], dry_run=dry_run, mutates=True)
+    if dry_run:
+        warn_dirty_worktree_for_dry_run()
+    else:
+        ensure_clean_worktree()
+
+
+def semver_tuple(version: str) -> tuple[int, int, int]:
+    match = SEMVER_RE.fullmatch(version)
+    if not match:
+        fail(f"版本号必须是 x.y.z 格式：{version}")
+    return tuple(int(part) for part in match.groups())
+
+
+def format_semver(value: tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in value)
+
+
+def bump_version(version: str, level: str) -> str:
+    major, minor, patch = semver_tuple(version)
+    if level == "major":
+        return f"{major + 1}.0.0"
+    if level == "minor":
+        return f"{major}.{minor + 1}.0"
+    if level == "patch":
+        return f"{major}.{minor}.{patch + 1}"
+    fail(f"未知版本级别：{level}")
+
+
+def max_version(values: list[str], fallback: str) -> str:
+    if not values:
+        return fallback
+    return format_semver(max(semver_tuple(value) for value in values))
+
+
+def latest_tag_version(pattern: str, tag_re: re.Pattern[str]) -> str | None:
+    raw = git(["tag", "--list", pattern])
+    versions = []
+    for tag in raw.splitlines():
+        match = tag_re.fullmatch(tag.strip())
+        if match:
+            versions.append(match.group(1))
+    if not versions:
+        return None
+    return max_version(versions, "0.0.0")
+
+
+def read_project_versions() -> tuple[str, int]:
+    content = PROJECT_SPEC.read_text(encoding="utf-8")
+    marketing = re.search(r"(?m)^\s*MARKETING_VERSION:\s*([^\s#]+)", content)
+    build = re.search(r"(?m)^\s*CURRENT_PROJECT_VERSION:\s*([0-9]+)", content)
+    if not marketing or not build:
+        fail("无法从 project.yml 读取 MARKETING_VERSION 或 CURRENT_PROJECT_VERSION。")
+    return marketing.group(1), int(build.group(1))
+
+
+def write_project_versions(version: str, build_number: int, dry_run: bool) -> None:
+    if dry_run:
+        print(f"+ update project.yml MARKETING_VERSION={version} CURRENT_PROJECT_VERSION={build_number}")
+        return
+
+    content = PROJECT_SPEC.read_text(encoding="utf-8")
+    content, marketing_count = re.subn(
+        r"(?m)^(\s*MARKETING_VERSION:\s*)[^\s#]+",
+        rf"\g<1>{version}",
+        content,
+        count=1,
+    )
+    content, build_count = re.subn(
+        r"(?m)^(\s*CURRENT_PROJECT_VERSION:\s*)[0-9]+",
+        rf"\g<1>{build_number}",
+        content,
+        count=1,
+    )
+    if marketing_count != 1 or build_count != 1:
+        fail("更新 project.yml 版本号失败。")
+    PROJECT_SPEC.write_text(content, encoding="utf-8")
+
+
+def read_plugins() -> dict[str, PluginInfo]:
+    plugins: dict[str, PluginInfo] = {}
+    for manifest_path in sorted(PLUGIN_SOURCE_DIR.glob("*/plugin.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        plugin_id = manifest["id"]
+        plugins[plugin_id] = PluginInfo(
+            id=plugin_id,
+            directory_name=manifest_path.parent.name,
+            display_name=manifest.get("displayName", plugin_id),
+            path=manifest_path.parent,
+            manifest_path=manifest_path,
+            version=manifest["version"],
+        )
+    return plugins
+
+
+def load_previous_catalog() -> dict[str, dict]:
+    if not PLUGIN_CATALOG.exists():
+        return {}
+    catalog = json.loads(PLUGIN_CATALOG.read_text(encoding="utf-8"))
+    return {entry["id"]: entry for entry in catalog.get("plugins", [])}
+
+
+def plugin_release_tag(entry: dict) -> str | None:
+    package = entry.get("package") or {}
+    candidates = [package.get("url") or "", entry.get("releaseNotesURL") or ""]
+    for value in candidates:
+        match = re.search(r"/releases/(?:download|tag)/([^/]+)", value)
+        if match:
+            return match.group(1)
+    return None
+
+
+def git_ref_exists(ref: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref],
+        cwd=ROOT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def changed_paths_since(ref: str, path: Path) -> list[str]:
+    raw = git(["diff", "--name-only", f"{ref}..HEAD", "--", path.relative_to(ROOT_DIR).as_posix()])
+    result = []
+    for item in raw.splitlines():
+        parts = Path(item).parts
+        if "Tests" in parts:
+            continue
+        result.append(item)
+    return result
+
+
+def normalize_plugin_selection(raw_values: list[str], plugins: dict[str, PluginInfo]) -> list[str]:
+    values: list[str] = []
+    for raw in raw_values:
+        values.extend(part.strip() for part in raw.split(",") if part.strip())
+
+    by_directory = {plugin.directory_name: plugin_id for plugin_id, plugin in plugins.items()}
+    selected: list[str] = []
+    unknown: list[str] = []
+    for value in values:
+        plugin_id = value if value in plugins else by_directory.get(value)
+        if plugin_id is None:
+            unknown.append(value)
+        elif plugin_id not in selected:
+            selected.append(plugin_id)
+
+    if unknown:
+        fail("未知插件：" + ", ".join(unknown))
+    return selected
+
+
+def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
+    plugins = read_plugins()
+    previous_entries = load_previous_catalog()
+    reasons: dict[str, list[str]] = {}
+    selected_ids: list[str] = []
+    needs_bump: list[PluginInfo] = []
+    already_bumped: list[PluginInfo] = []
+    new_plugins: list[PluginInfo] = []
+    removed_ids: list[str] = []
+    errors: list[str] = []
+
+    def select(plugin: PluginInfo, reason: str) -> None:
+        if plugin.id not in selected_ids:
+            selected_ids.append(plugin.id)
+        reasons.setdefault(plugin.id, []).append(reason)
+
+    if mode == "selected":
+        selected_ids = normalize_plugin_selection(selection, plugins)
+        for plugin_id in selected_ids:
+            reasons.setdefault(plugin_id, []).append("selected mode")
+    elif mode == "all":
+        for plugin_id, plugin in sorted(plugins.items()):
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is None:
+                new_plugins.append(plugin)
+            else:
+                previous_version = previous_entry["version"]
+                if semver_tuple(plugin.version) < semver_tuple(previous_version):
+                    errors.append(
+                        f"{plugin_id}: version cannot go backwards "
+                        f"({previous_version} -> {plugin.version})"
+                    )
+                    continue
+                if semver_tuple(plugin.version) > semver_tuple(previous_version):
+                    already_bumped.append(plugin)
+            select(plugin, "all mode")
+    elif not previous_entries:
+        for plugin_id, plugin in sorted(plugins.items()):
+            new_plugins.append(plugin)
+            select(plugin, "no previous catalog")
+    else:
+        removed_ids = sorted(set(previous_entries) - set(plugins))
+        for plugin_id, plugin in sorted(plugins.items()):
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is None:
+                new_plugins.append(plugin)
+                select(plugin, "new plugin")
+                continue
+
+            previous_version = previous_entry["version"]
+            current_version = plugin.version
+            if semver_tuple(current_version) < semver_tuple(previous_version):
+                errors.append(
+                    f"{plugin_id}: version cannot go backwards "
+                    f"({previous_version} -> {current_version})"
+                )
+                continue
+            if semver_tuple(current_version) > semver_tuple(previous_version):
+                already_bumped.append(plugin)
+                select(plugin, f"version {previous_version} -> {current_version}")
+                continue
+
+            tag = plugin_release_tag(previous_entry)
+            if not tag:
+                errors.append(f"{plugin_id}: previous release tag could not be inferred from catalog")
+                continue
+            if not git_ref_exists(tag):
+                errors.append(f"{plugin_id}: previous release tag is not available locally: {tag}")
+                continue
+
+            changed = changed_paths_since(tag, plugin.path)
+            if changed:
+                needs_bump.append(plugin)
+                select(plugin, f"package-relevant changes since {tag}")
+
+    if mode == "selected":
+        for plugin_id in selected_ids:
+            plugin = plugins[plugin_id]
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is None:
+                new_plugins.append(plugin)
+                continue
+
+            previous_version = previous_entry["version"]
+            if semver_tuple(plugin.version) < semver_tuple(previous_version):
+                errors.append(
+                    f"{plugin_id}: version cannot go backwards "
+                    f"({previous_version} -> {plugin.version})"
+                )
+                continue
+            if semver_tuple(plugin.version) > semver_tuple(previous_version):
+                already_bumped.append(plugin)
+                continue
+
+            tag = plugin_release_tag(previous_entry)
+            changed = changed_paths_since(tag, plugin.path) if tag and git_ref_exists(tag) else []
+            if changed:
+                needs_bump.append(plugin)
+
+    if errors:
+        fail("\n".join(errors))
+
+    deduped_selected = sorted(dict.fromkeys(selected_ids))
+    deduped_needs_bump = list({plugin.id: plugin for plugin in needs_bump}.values())
+    deduped_already_bumped = list({plugin.id: plugin for plugin in already_bumped}.values())
+    deduped_new_plugins = list({plugin.id: plugin for plugin in new_plugins}.values())
+
+    return PluginAnalysis(
+        mode=mode,
+        selected_ids=deduped_selected,
+        removed_ids=removed_ids,
+        needs_bump=deduped_needs_bump,
+        already_bumped=deduped_already_bumped,
+        new_plugins=deduped_new_plugins,
+        reasons={plugin_id: reasons.get(plugin_id, []) for plugin_id in deduped_selected},
+    )
+
+
+def write_plugin_versions(plugins: list[PluginInfo], level: str, dry_run: bool) -> dict[str, str]:
+    updated: dict[str, str] = {}
+    for plugin in plugins:
+        next_version = bump_version(plugin.version, level)
+        updated[plugin.id] = next_version
+        if dry_run:
+            print(f"+ update {plugin.manifest_path.relative_to(ROOT_DIR)} version={next_version}")
+            continue
+
+        manifest = json.loads(plugin.manifest_path.read_text(encoding="utf-8"))
+        manifest["version"] = next_version
+        plugin.manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return updated
+
+
+def plugins_requiring_version_bump(mode: str, analysis: PluginAnalysis) -> list[PluginInfo]:
+    if mode == "auto":
+        return analysis.needs_bump
+
+    plugins = read_plugins()
+    previous_entries = load_previous_catalog()
+    result: list[PluginInfo] = []
+    for plugin_id in analysis.selected_ids:
+        plugin = plugins[plugin_id]
+        previous_entry = previous_entries.get(plugin_id)
+        if previous_entry is None:
+            continue
+        if semver_tuple(plugin.version) == semver_tuple(previous_entry["version"]):
+            result.append(plugin)
+    return result
+
+
+def check_tag_available(tag: str, remote: str) -> None:
+    if git_ref_exists(f"refs/tags/{tag}"):
+        fail(f"本地 tag 已存在：{tag}")
+    result = subprocess.run(
+        ["git", "ls-remote", "--exit-code", "--tags", remote, f"refs/tags/{tag}"],
+        cwd=ROOT_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if result.returncode == 0:
+        fail(f"远端 tag 已存在：{tag}")
+    if result.returncode not in {0, 2}:
+        fail(f"无法检查远端 tag：{tag}")
+
+
+def run_app_check(skip_check: bool, dry_run: bool) -> None:
+    if skip_check:
+        info("Skipping app check")
+        return
+    info("Running app build check")
+    run(["make", "build"], dry_run=dry_run, mutates=True)
+
+
+def run_plugin_generate_check(skip_check: bool, dry_run: bool) -> None:
+    if skip_check:
+        info("Skipping plugin check")
+        return
+    info("Running plugin project generation check")
+    run(["make", "generate"], dry_run=dry_run, mutates=True)
+
+
+def run_plugin_plan_check(mode: str, selection: list[str], skip_check: bool, dry_run: bool) -> None:
+    if skip_check:
+        return
+    info("Running plugin release plan check")
+    plan_args = [
+        "scripts/plugins/plan-plugin-release.py",
+        "--mode",
+        mode,
+        "--source-dir",
+        "Plugins",
+        "--previous-catalog",
+        "docs/plugins/catalog.json",
+        "--output",
+        PLUGIN_PLAN_PATH.relative_to(ROOT_DIR).as_posix(),
+    ]
+    if mode == "selected" and selection:
+        plan_args.extend(["--plugins", ",".join(selection)])
+    run(plan_args, dry_run=dry_run, mutates=True)
+
+
+def commit_if_needed(paths: list[Path], message: str, dry_run: bool) -> bool:
+    relative_paths = [path.relative_to(ROOT_DIR).as_posix() for path in paths]
+    if not relative_paths:
+        return False
+    if dry_run:
+        print("+ git add " + " ".join(shell_quote(path) for path in relative_paths))
+        print("+ git commit -m " + shell_quote(message))
+        return True
+    run(["git", "add", *relative_paths], dry_run=dry_run, mutates=True)
+    staged = git(["diff", "--cached", "--name-only"])
+    if not staged:
+        info("No version file changes to commit")
+        return False
+    run(["git", "commit", "-m", message], dry_run=dry_run, mutates=True)
+    return True
+
+
+def push_branch_and_tag(remote: str, branch: str, tag: str, dry_run: bool) -> None:
+    run(["git", "push", remote, f"HEAD:{branch}"], dry_run=dry_run, mutates=True)
+    run(["git", "tag", "-a", tag, "-m", f"Release {tag}"], dry_run=dry_run, mutates=True)
+    run(["git", "push", remote, tag], dry_run=dry_run, mutates=True)
+
+
+def choose_release_type(value: str | None) -> str:
+    if value:
+        return value
+    return prompt_choice(
+        "选择发布类型（回车默认 app）：",
+        [
+            ("app", "app - 发布 MacTools DMG"),
+            ("plugin", "plugin - 发布插件批次"),
+        ],
+    )
+
+
+def choose_plugin_mode(value: str | None, explicit_plugins: list[str]) -> tuple[str, list[str]]:
+    if explicit_plugins:
+        return "selected", explicit_plugins
+
+    if value:
+        mode = value
+    elif sys.stdin.isatty():
+        mode = prompt_choice(
+            "选择插件发布模式（回车默认 auto）：",
+            [
+                ("auto", "auto - 自动发布变化插件"),
+                ("selected", "selected - 指定插件"),
+                ("all", "all - 全量重建插件包"),
+            ],
+        )
+    else:
+        mode = "auto"
+
+    if mode != "selected":
+        return mode, []
+
+    raw_selection = prompt_text("输入插件 ID 或目录名，多个用逗号分隔：")
+    return mode, [raw_selection]
+
+
+def choose_level(value: str | None, base_version: str, title: str) -> str:
+    if value:
+        return value
+    return prompt_choice(
+        title,
+        [
+            ("patch", f"patch -> {bump_version(base_version, 'patch')}"),
+            ("minor", f"minor -> {bump_version(base_version, 'minor')}"),
+            ("major", f"major -> {bump_version(base_version, 'major')}"),
+        ],
+    )
+
+
+def summarize_plugin_analysis(analysis: PluginAnalysis) -> None:
+    if analysis.needs_bump:
+        info(
+            "需要自动 bump 的插件："
+            + ", ".join(f"{plugin.id} {plugin.version}" for plugin in analysis.needs_bump)
+        )
+    if analysis.already_bumped:
+        info(
+            "已手动 bump 的插件："
+            + ", ".join(f"{plugin.id} {plugin.version}" for plugin in analysis.already_bumped)
+        )
+    if analysis.new_plugins:
+        info("新插件：" + ", ".join(plugin.id for plugin in analysis.new_plugins))
+    if analysis.removed_ids:
+        info("将从 catalog 移除：" + ", ".join(analysis.removed_ids))
+
+
+def release_app(args: argparse.Namespace) -> None:
+    current_version, current_build = read_project_versions()
+    latest_tag = latest_tag_version("v*", APP_TAG_RE)
+    base_version = max_version(
+        [value for value in [current_version, latest_tag] if value],
+        current_version,
+    )
+    level = choose_level(args.level, base_version, "选择 app 版本递增级别（回车默认 patch）：")
+    next_version = bump_version(base_version, level)
+    next_build = current_build + 1
+    tag = f"v{next_version}"
+    check_tag_available(tag, args.remote)
+
+    print()
+    print("App 发布计划")
+    print(f"  当前 project.yml: {current_version} ({current_build})")
+    print(f"  最新 app tag: {latest_tag or '(none)'}")
+    print(f"  下一版本: {next_version} ({next_build})")
+    print(f"  tag: {tag}")
+    print(f"  check: {'skip' if args.skip_check else 'make build'}")
+    confirm("确认执行 bump、check、commit、tag 和 push？", args.yes)
+
+    sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
+    current_version_after_sync, current_build_after_sync = read_project_versions()
+    latest_tag_after_sync = latest_tag_version("v*", APP_TAG_RE)
+    base_version_after_sync = max_version(
+        [value for value in [current_version_after_sync, latest_tag_after_sync] if value],
+        current_version_after_sync,
+    )
+    expected_version_after_sync = bump_version(base_version_after_sync, level)
+    if expected_version_after_sync != next_version:
+        fail(
+            "同步远端后计算出的下一版本发生变化："
+            f"{next_version} -> {expected_version_after_sync}。请重新运行 make release。"
+        )
+    next_build = current_build_after_sync + 1
+    check_tag_available(tag, args.remote)
+    run_app_check(args.skip_check, args.dry_run)
+    write_project_versions(next_version, next_build, args.dry_run)
+    commit_if_needed([PROJECT_SPEC], f"chore: release {tag}", args.dry_run)
+    push_branch_and_tag(args.remote, args.branch, tag, args.dry_run)
+    info(f"App release tag pushed: {tag}")
+
+
+def release_plugin(args: argparse.Namespace) -> None:
+    mode, raw_selection = choose_plugin_mode(args.plugin_mode, args.plugin)
+    plugins = read_plugins()
+    selection = normalize_plugin_selection(raw_selection, plugins) if raw_selection else []
+    analysis = analyze_plugins(mode, selection)
+    if not analysis.release_required:
+        fail("未检测到需要发布的插件变化。若要强制发布，请使用 ARGS=\"--type plugin --plugin-mode all\"。")
+
+    latest_batch = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
+    base_version = latest_batch or "0.0.0"
+    level = choose_level(args.level, base_version, "选择插件批次版本递增级别（回车默认 patch）：")
+    next_batch = bump_version(base_version, level)
+    tag = f"plugins-{next_batch}"
+    check_tag_available(tag, args.remote)
+
+    print()
+    print("Plugin 发布计划")
+    print(f"  mode: {mode}")
+    print(f"  最新插件批次 tag: {'plugins-' + latest_batch if latest_batch else '(none)'}")
+    print(f"  下一批次 tag: {tag}")
+    print(f"  将发布插件: {', '.join(analysis.selected_ids) if analysis.selected_ids else '(catalog-only)'}")
+    print(f"  check: {'skip' if args.skip_check else 'make generate + plan-plugin-release'}")
+    summarize_plugin_analysis(analysis)
+    plugins_to_bump = plugins_requiring_version_bump(mode, analysis)
+    if plugins_to_bump:
+        print(
+            "  将自动 bump: "
+            + ", ".join(f"{plugin.id} {plugin.version} -> {bump_version(plugin.version, level)}" for plugin in plugins_to_bump)
+        )
+    confirm("确认执行 bump、check、commit、tag 和 push？", args.yes)
+
+    sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
+    latest_batch_after_sync = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
+    expected_batch_after_sync = bump_version(latest_batch_after_sync or "0.0.0", level)
+    if expected_batch_after_sync != next_batch:
+        fail(
+            "同步远端后计算出的下一插件批次发生变化："
+            f"{next_batch} -> {expected_batch_after_sync}。请重新运行 make release。"
+        )
+    analysis = analyze_plugins(mode, selection)
+    plugins_to_bump = plugins_requiring_version_bump(mode, analysis)
+    check_tag_available(tag, args.remote)
+    run_plugin_generate_check(args.skip_check, args.dry_run)
+    updated_versions = write_plugin_versions(plugins_to_bump, level, args.dry_run)
+    if updated_versions:
+        info(
+            "已更新插件版本："
+            + ", ".join(f"{plugin_id} -> {version}" for plugin_id, version in updated_versions.items())
+        )
+
+    run_plugin_plan_check(mode, selection, args.skip_check, args.dry_run)
+    changed_manifests = [plugin.manifest_path for plugin in plugins_to_bump]
+    made_commit = commit_if_needed(changed_manifests, f"chore: release {tag}", args.dry_run)
+    if not made_commit and not args.dry_run:
+        head = git(["rev-parse", "--short", "HEAD"])
+        info(f"No version bump commit needed; tagging current HEAD {head}.")
+    push_branch_and_tag(args.remote, args.branch, tag, args.dry_run)
+    info(f"Plugin release tag pushed: {tag}")
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        require_command("git")
+        require_command("make")
+        release_type = choose_release_type(args.type)
+        ensure_release_branch(args.branch)
+        if args.dry_run:
+            warn_dirty_worktree_for_dry_run()
+        else:
+            ensure_clean_worktree()
+        fetch_release_refs(args.remote, args.dry_run)
+        if release_type == "app":
+            release_app(args)
+        else:
+            release_plugin(args)
+    except ReleaseError as error:
+        print(f"[release] error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

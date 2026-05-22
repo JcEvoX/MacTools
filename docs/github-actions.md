@@ -89,7 +89,21 @@ PY
 
 ## App 发布方式
 
-`project.yml` 是发布版本源。发布前先更新：
+推荐用 `make release` 触发完整发布准备流程：
+
+```bash
+make release
+```
+
+命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --ff-only`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 和 Homebrew tap 仍由 `Release` workflow 完成。
+
+非交互示例：
+
+```bash
+make release ARGS="--type app --level patch --yes"
+```
+
+`project.yml` 是发布版本源。若需要手动处理，发布前先更新：
 
 ```yaml
 CURRENT_PROJECT_VERSION: 15
@@ -116,6 +130,22 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 也可以在 GitHub Actions 页面手动运行 `Release`，输入已存在的 tag，例如 `v0.9.3`；该 tag 指向的提交里仍必须已经更新 `project.yml`。
 
 ## 插件发布方式
+
+推荐用 `make release` 发布插件批次：
+
+```bash
+make release ARGS="--type plugin"
+```
+
+默认 `auto` 模式会读取生产 `docs/plugins/catalog.json`，找出新插件、已手动 bump 的插件，以及包相关文件变化但版本未递增的插件；对未递增的插件会按选择的 `patch`/`minor`/`major` 自动更新 `plugin.json.version`。随后命令会运行 `make generate` 和增量发布计划检查，提交版本 bump，推送 `plugins-*` 批次 tag。
+
+常用非交互示例：
+
+```bash
+make release ARGS="--type plugin --level patch --yes"
+make release ARGS="--type plugin --plugin-mode selected --plugin calendar --level patch --yes"
+make release ARGS="--type plugin --plugin-mode all --level minor --yes"
+```
 
 插件按批次单独发布，不和 app DMG 混在同一条 Release。默认发布方式是增量发布：只构建和上传本批实际变化的插件包，然后把这些新条目合并进生产 `docs/plugins/catalog.json`。未变化插件会继续保留上一版 catalog 中的 `package.url`、`sha256`、`size` 和 `releaseNotesURL`，所以一个 catalog 可以同时指向多个 `plugins-*` tag。
 

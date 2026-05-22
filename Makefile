@@ -28,7 +28,7 @@ PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_RELEASE_SIGNED_CATALOG ?= docs/plugins/catalog.json
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate-plugin-config generate build build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release-local
+.PHONY: setup generate-plugin-config generate build build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -114,6 +114,9 @@ run-open: build
 
 clean:
 	@rm -rf build $(PROJECT_FILE) $(WORKSPACE_FILE) "$(GENERATED_PLUGIN_PROJECT_CONFIG)"
+
+release:
+	@./scripts/release.py $(ARGS)
 
 release-local:
 	@./scripts/release-local.sh $(ARGS)
