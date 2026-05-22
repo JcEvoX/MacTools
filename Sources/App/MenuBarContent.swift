@@ -375,6 +375,8 @@ struct MenuBarContent: View {
     static let launchControlOpenManagerActionID = "launch-control-open-manager"
     static let fanControlPluginID = "fan-control"
     static let fanControlManagePresetsActionID = "fan-add-preset"
+    static let zshConfigPluginID = "zsh-config"
+    static let zshConfigOpenSettingsActionID = "execute"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -530,6 +532,12 @@ struct MenuBarContent: View {
             return
         }
 
+        if isZshConfigOpenSettingsAction(pluginID: item.id, controlID: controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.zshConfigPluginID)
+            onDismiss()
+            return
+        }
+
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -581,6 +589,11 @@ struct MenuBarContent: View {
             return
         }
 
+        if isZshConfigOpenSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.zshConfigPluginID)
+            return
+        }
+
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -597,6 +610,10 @@ struct MenuBarContent: View {
 
     private func isFanControlManagePresetsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.fanControlPluginID && controlID == Self.fanControlManagePresetsActionID
+    }
+
+    private func isZshConfigOpenSettingsAction(pluginID: String, controlID: String) -> Bool {
+        pluginID == Self.zshConfigPluginID && controlID == Self.zshConfigOpenSettingsActionID
     }
 
     private func presentDiskCleanDetails() {

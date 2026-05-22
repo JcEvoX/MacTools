@@ -1156,7 +1156,8 @@ final class PluginHost: ObservableObject {
                 settingsCards: matchingSettingsCards,
                 permissionCards: matchingPermissionCards,
                 shortcutItems: matchingShortcutItems,
-                hasCustomConfiguration: !configurations.isEmpty
+                hasCustomConfiguration: !configurations.isEmpty,
+                prefersFullHeight: configurations.first?.prefersFullHeight ?? false
             )
         }
     }

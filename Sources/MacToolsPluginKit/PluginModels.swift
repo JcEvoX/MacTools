@@ -103,13 +103,16 @@ public struct PluginConfigurationContext {
 
 public struct PluginConfiguration {
     public let description: String?
+    public let prefersFullHeight: Bool
     public let makeView: (PluginConfigurationContext) -> AnyView
 
     public init<Content: View>(
         description: String? = nil,
+        prefersFullHeight: Bool = false,
         @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
     ) {
         self.description = description
+        self.prefersFullHeight = prefersFullHeight
         self.makeView = { context in
             AnyView(content(context))
         }
@@ -599,6 +602,7 @@ public struct PluginConfigurationItem: Identifiable {
     public let permissionCards: [PluginPermissionCard]
     public let shortcutItems: [ShortcutSettingsItem]
     public let hasCustomConfiguration: Bool
+    public let prefersFullHeight: Bool
 
     public init(
         id: String,
@@ -610,7 +614,8 @@ public struct PluginConfigurationItem: Identifiable {
         settingsCards: [PluginSettingsCard],
         permissionCards: [PluginPermissionCard],
         shortcutItems: [ShortcutSettingsItem],
-        hasCustomConfiguration: Bool
+        hasCustomConfiguration: Bool,
+        prefersFullHeight: Bool = false
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -622,6 +627,7 @@ public struct PluginConfigurationItem: Identifiable {
         self.permissionCards = permissionCards
         self.shortcutItems = shortcutItems
         self.hasCustomConfiguration = hasCustomConfiguration
+        self.prefersFullHeight = prefersFullHeight
     }
 }
 
