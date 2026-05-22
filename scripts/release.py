@@ -8,6 +8,8 @@ import re
 import shutil
 import subprocess
 import sys
+import termios
+import tty
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -138,6 +140,50 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def read_interactive_line(prompt: str) -> str:
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    previous_settings = termios.tcgetattr(fd)
+    value: list[str] = []
+
+    try:
+        tty.setcbreak(fd)
+        while True:
+            char = sys.stdin.read(1)
+            if char == "":
+                sys.stdout.write("\n")
+                fail("已取消发布。")
+            if char == "\x1b":
+                sys.stdout.write("\n")
+                fail("已取消发布。")
+            if char in {"\r", "\n"}:
+                sys.stdout.write("\n")
+                return "".join(value)
+            if char in {"\x03", "\x04"}:
+                sys.stdout.write("\n")
+                fail("已取消发布。")
+            if char in {"\x7f", "\b"}:
+                if value:
+                    value.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+            if char == "\x15":
+                while value:
+                    value.pop()
+                    sys.stdout.write("\b \b")
+                sys.stdout.flush()
+                continue
+            if char.isprintable():
+                value.append(char)
+                sys.stdout.write(char)
+                sys.stdout.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, previous_settings)
+
+
 def prompt_choice(title: str, choices: list[tuple[str, str]]) -> str:
     if not sys.stdin.isatty():
         fail(f"非交互环境需要通过参数指定：{title}")
@@ -147,7 +193,7 @@ def prompt_choice(title: str, choices: list[tuple[str, str]]) -> str:
         print(f"  {index}. {label}")
 
     while True:
-        raw = input("> ").strip()
+        raw = read_interactive_line("> ").strip()
         if not raw:
             return choices[0][0]
         if raw.isdigit():
@@ -157,17 +203,17 @@ def prompt_choice(title: str, choices: list[tuple[str, str]]) -> str:
         for value, label in choices:
             if raw == value or raw == label:
                 return value
-        print("请输入列表中的编号或值。")
+        print("请输入列表中的编号或值，或按 Esc 退出。")
 
 
 def prompt_text(title: str) -> str:
     if not sys.stdin.isatty():
         fail(f"非交互环境需要通过参数指定：{title}")
     while True:
-        raw = input(f"{title}\n> ").strip()
+        raw = read_interactive_line(f"{title}\n> ").strip()
         if raw:
             return raw
-        print("输入不能为空。")
+        print("输入不能为空，或按 Esc 退出。")
 
 
 def confirm(message: str, assume_yes: bool) -> None:
@@ -175,9 +221,13 @@ def confirm(message: str, assume_yes: bool) -> None:
         return
     if not sys.stdin.isatty():
         fail("非交互环境需要传入 --yes。")
-    raw = input(f"{message} [y/N] ").strip().lower()
-    if raw not in {"y", "yes"}:
-        fail("已取消发布。")
+    while True:
+        raw = read_interactive_line(f"{message} [y/N] ").strip().lower()
+        if raw in {"y", "yes"}:
+            return
+        if raw in {"", "n", "no"}:
+            fail("已取消发布。")
+        print("请输入 y 确认，回车取消，或按 Esc 退出。")
 
 
 def ensure_clean_worktree() -> None:
