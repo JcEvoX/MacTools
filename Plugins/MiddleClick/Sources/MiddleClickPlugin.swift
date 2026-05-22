@@ -86,6 +86,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
     private var session: MiddleClickSession?
     private var lastErrorMessage: String?
     private var requiredFingerCount: Int
+    private var wakeObserver: NSObjectProtocol?
 
     // MARK: - Init
 
@@ -274,13 +275,37 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         newSession.requiredFingerCount = requiredFingerCount
         newSession.activate()
         session = newSession
+
+        // 合盖唤醒后 CGEvent tap 与 MTDevice 会失效，需要重新建立 session
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleSystemWake() }
+        }
+
         logger.info("\(self.requiredFingerCount)指中键已启用")
     }
 
     private func stopSession() {
+        if let observer = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            wakeObserver = nil
+        }
         session?.deactivate()
         session = nil
         logger.info("三指中键已停用")
+    }
+
+    private func handleSystemWake() {
+        guard session != nil else { return }
+        logger.info("系统唤醒，重建中键监听 session")
+        session?.deactivate()
+        session = nil
+        wakeObserver = nil
+        startSession()
+        onStateChange?()
     }
 
     // MARK: - AccessibilityPermissionRefreshing
