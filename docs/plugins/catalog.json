@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-21T08:38:25Z",
+  "generatedAt": "2026-05-22T11:33:35Z",
   "minimumHostVersion": "0.15.2",
   "pluginKitVersion": 1,
   "plugins": [
@@ -213,6 +213,26 @@
         "configuration": false,
         "primaryPanel": true
       },
+      "displayName": "显示器休眠",
+      "id": "display-sleep",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "597801a8e7a3c69b7980943d9bfd6f09cfaa0bc97729cc41adfdb4d655ed1819",
+        "size": 40006,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.9/display-sleep.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.9",
+      "summary": "一键让所有显示器立即进入休眠",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
       "displayName": "原彩显示",
       "id": "display-true-color",
       "minimumHostVersion": "1.0.2",
@@ -417,17 +437,17 @@
       "id": "middle-click",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "5666f938a2b60b9db35b3d847376be5d6142a29d5b30ee5194ef9fda59018fb2",
-        "size": 104181,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.6/middle-click.mactoolsplugin.zip"
+        "sha256": "960e9e4663d43a433984d87a4c221f4f8b433ceb3a4cb9c49c3b642ec2c53d0d",
+        "size": 109755,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.9/middle-click.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 1,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.6",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.9",
       "summary": "触控板轻点模拟鼠标中键",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -493,6 +513,26 @@
     },
     {
       "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "displayName": "系统静音",
+      "id": "system-mute",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "cb1f18e307a9da9196d5dbb4ea2c0e23f75e97303f6c256bff7d618419242190",
+        "size": 38326,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.9/system-mute.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.9",
+      "summary": "快速静音或恢复系统音频输出",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
         "componentPanel": true,
         "configuration": false,
         "primaryPanel": false
@@ -510,12 +550,32 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.4",
       "summary": "实时查看系统状态",
       "version": "1.0.2"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "displayName": "zsh 配置",
+      "id": "zsh-config",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "96a549256f05c86dba90fc5550094879b2931ae9ad42f0f2d1f4cb5e28df2158",
+        "size": 428218,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.9/zsh-config.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 1,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.9",
+      "summary": "快速编辑 ~/.zshrc 等 zsh 配置文件，支持内联编辑和常用片段快速插入",
+      "version": "1.0.0"
     }
   ],
   "revoked": [],
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "1ObYnnbBP79JjIqKmWFekZQNDC1ZBZAdymcxQ7jLPu17Qh4A2ePXKoObTI4cf019Z7MbEkhk4g8VHX4POEHmAQ=="
+    "value": "cY15kRTCC6eYOHDvQbso/Zt2HQZ7L+UL5wVQ8RiMvT3Ycjz+cGTcecFaXL1xWavxD8F+5uE50e/u4zha7j+XDA=="
   }
 }
