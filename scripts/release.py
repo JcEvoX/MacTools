@@ -225,9 +225,9 @@ def confirm(message: str, assume_yes: bool) -> None:
         raw = read_interactive_line(f"{message} [y/N] ").strip().lower()
         if raw in {"y", "yes"}:
             return
-        if raw in {"", "n", "no"}:
+        if raw in {"n", "no"}:
             fail("已取消发布。")
-        print("请输入 y 确认，回车取消，或按 Esc 退出。")
+        print("请输入 y 确认，n 取消，或按 Esc 退出。")
 
 
 def ensure_clean_worktree() -> None:
