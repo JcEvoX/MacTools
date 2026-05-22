@@ -56,23 +56,27 @@ jobs:
             exit 1
           fi
 
-          echo "TAG=$TAG"           >> "$GITHUB_OUTPUT"
-          echo "VERSION=$VERSION"   >> "$GITHUB_OUTPUT"
-          echo "SHA256=$SHA256"     >> "$GITHUB_OUTPUT"
-          echo "DOWNLOAD_URL=$DOWNLOAD_URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "TAG=$TAG"
+            echo "VERSION=$VERSION"
+            echo "SHA256=$SHA256"
+            echo "DOWNLOAD_URL=$DOWNLOAD_URL"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check if cask is already up to date
         id: check
         run: |
           CURRENT_VERSION="$(grep -E '^\s+version ' homebrew/Casks/mactools.rb | sed 's/.*version "\(.*\)"/\1/')"
           LATEST_VERSION="${{ steps.latest.outputs.VERSION }}"
-          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST_VERSION"   >> "$GITHUB_OUTPUT"
-          if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
-            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
-          fi
+          {
+            echo "current=$CURRENT_VERSION"
+            echo "latest=$LATEST_VERSION"
+            if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+              echo "up_to_date=true"
+            else
+              echo "up_to_date=false"
+            fi
+          } >> "$GITHUB_OUTPUT"
 
       - name: Update homebrew cask
         if: steps.check.outputs.up_to_date == 'false'
@@ -97,7 +101,7 @@ jobs:
             end
 
             auto_updates true
-            depends_on macos: ">= :sonoma"
+            depends_on macos: :sonoma
 
             app "MacTools.app"
           end
