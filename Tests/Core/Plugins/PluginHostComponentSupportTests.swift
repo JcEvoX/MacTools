@@ -253,8 +253,18 @@ final class PluginHostComponentSupportTests: XCTestCase {
             userDefaults: UserDefaults(suiteName: suiteName)!,
             hostVersion: "1.0.0"
         )
-        let dynamicRecord = installTestPluginPackage(id: "dynamic", bundleName: "Dynamic.bundle", store: store)
-        _ = installTestPluginPackage(id: "second", bundleName: "Second.bundle", store: store)
+        let dynamicRecord = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(primaryPanel: true),
+            store: store
+        )
+        _ = installTestPluginPackage(
+            id: "second",
+            bundleName: "Second.bundle",
+            capabilities: .init(primaryPanel: true),
+            store: store
+        )
         let loader = StubDynamicPluginLoader { records in
             records.map { record in
                 let plugin = record.id == "dynamic" ? firstPlugin : secondPlugin
@@ -275,6 +285,38 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(host.panelItems.map(\.id), ["second"])
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second"])
+        try? FileManager.default.removeItem(at: rootDirectory)
+    }
+
+    func testDynamicPluginConfigurationGetterIsNotReadWhenManifestDoesNotDeclareConfiguration() {
+        let plugin = ConfigurationTrapPlugin(id: "dynamic")
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginHostComponentSupportTests-\(UUID().uuidString)")
+        let store = PluginPackageStore(
+            rootDirectory: rootDirectory,
+            userDefaults: UserDefaults(suiteName: suiteName)!,
+            hostVersion: "1.0.0"
+        )
+        _ = installTestPluginPackage(
+            id: "dynamic",
+            bundleName: "Dynamic.bundle",
+            capabilities: .init(primaryPanel: true, configuration: false),
+            store: store
+        )
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                DynamicPluginLoadResult(record: record, plugins: [plugin], errorMessage: nil)
+            }
+        }
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: loader
+        )
+        let host = makeHost(plugins: [], dynamicPluginManager: manager)
+
+        XCTAssertEqual(host.panelItems.map(\.id), ["dynamic"])
+        XCTAssertTrue(host.pluginConfigurationItems.isEmpty)
+        XCTAssertEqual(plugin.configurationReadCount, 0)
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
@@ -342,6 +384,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
     private func installTestPluginPackage(
         id: String,
         bundleName: String,
+        capabilities: PluginPackageManifest.Capabilities = .init(),
         store: PluginPackageStore
     ) -> PluginPackageRecord {
         let sourceURL = store.rootDirectory
@@ -356,7 +399,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
             displayName: id,
             version: "1.0.0",
             minHostVersion: "0.1.0",
-            bundleRelativePath: bundleName
+            bundleRelativePath: bundleName,
+            capabilities: capabilities
         )
         let data = try? JSONEncoder().encode(manifest)
         try? data?.write(to: sourceURL.appendingPathComponent("plugin.json"))
@@ -519,6 +563,52 @@ private final class MockPrimaryPanelPlugin: MacToolsPlugin, PluginPrimaryPanel {
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class ConfigurationTrapPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    let metadata: PluginMetadata
+    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        controlStyle: .button,
+        menuActionBehavior: .dismissBeforeHandling,
+        buttonTitle: "执行"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    private(set) var configurationReadCount = 0
+
+    init(id: String) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 1,
+            defaultDescription: "Dynamic \(id)"
+        )
+    }
+
+    var primaryPanelState: PluginPanelState {
+        PluginPanelState(
+            subtitle: "Dynamic subtitle",
+            isOn: false,
+            isExpanded: false,
+            isEnabled: true,
+            isVisible: true,
+            detail: nil,
+            errorMessage: nil
+        )
+    }
+
+    var configuration: PluginConfiguration? {
+        configurationReadCount += 1
+        return PluginConfiguration(description: "Should not be read") { _ in
+            Text("Unexpected")
+        }
+    }
+
+    func handleAction(_ action: PluginPanelAction) {}
 }
 
 @MainActor
