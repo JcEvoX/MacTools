@@ -1,8 +1,9 @@
 # GitHub Actions 自动构建
 
-本仓库提供四条流水线：
+本仓库提供五条流水线：
 
 - `Build`：在 `main` push、Pull Request 和手动触发时运行。执行 XcodeGen、Debug 测试，并在非 PR 场景额外编译 unsigned Release app 做配置校验；不上传不可分发的未签名产物。
+- `Prepare Release`：在 GitHub Actions 页面手动触发。输入发布类型、目标版本和是否继续发布；它会检查、bump、提交版本变更、创建 tag，并在需要时显式触发 `Release` 或 `Plugin Release`。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
 - `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
 - `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
@@ -89,7 +90,14 @@ PY
 
 ## App 发布方式
 
-推荐用 `make release` 触发完整发布准备流程：
+推荐用 GitHub Actions 的 `Prepare Release` 触发完整发布准备流程：
+
+1. 打开 `Actions` → `Prepare Release` → `Run workflow`。
+2. `type` 选择 `app`。
+3. `version` 输入目标版本，例如 `1.0.7`，不要带 `v`。
+4. 勾选 `release` 时，准备流程会在创建 `v1.0.7` 后继续触发 `Release` workflow；不勾选时只 bump、提交并打 tag。
+
+本地也可以用 `make release` 执行同样的准备流程：
 
 ```bash
 make release
@@ -100,7 +108,7 @@ make release
 非交互示例：
 
 ```bash
-make release ARGS="--type app --level patch --yes"
+make release ARGS="--type app --version 1.0.7 --yes"
 ```
 
 `project.yml` 是发布版本源。若需要手动处理，发布前先更新：
@@ -131,7 +139,15 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 
 ## 插件发布方式
 
-推荐用 `make release` 发布插件批次：
+推荐用 GitHub Actions 的 `Prepare Release` 发布插件批次：
+
+1. 打开 `Actions` → `Prepare Release` → `Run workflow`。
+2. `type` 选择 `plugin`。
+3. `version` 输入插件批次版本，例如 `1.0.9`，不要带 `plugins-`。
+4. `plugin_mode` 选择 `auto`、`selected` 或 `all`；`selected` 时在 `plugins` 输入插件 ID 或目录名，多个用逗号分隔。
+5. 勾选 `release` 时，准备流程会在创建 `plugins-1.0.9` 后继续触发 `Plugin Release` workflow；不勾选时只 bump、提交并打 tag。
+
+本地也可以用 `make release` 发布插件批次：
 
 ```bash
 make release ARGS="--type plugin"
@@ -142,9 +158,9 @@ make release ARGS="--type plugin"
 常用非交互示例：
 
 ```bash
-make release ARGS="--type plugin --level patch --yes"
-make release ARGS="--type plugin --plugin-mode selected --plugin calendar --level patch --yes"
-make release ARGS="--type plugin --plugin-mode all --level minor --yes"
+make release ARGS="--type plugin --version 1.0.10 --yes"
+make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugin calendar --yes"
+make release ARGS="--type plugin --version 1.1.0 --plugin-mode all --yes"
 ```
 
 插件按批次单独发布，不和 app DMG 混在同一条 Release。默认发布方式是增量发布：只构建和上传本批实际变化的插件包，然后把这些新条目合并进生产 `docs/plugins/catalog.json`。未变化插件会继续保留上一版 catalog 中的 `package.url`、`sha256`、`size` 和 `releaseNotesURL`，所以一个 catalog 可以同时指向多个 `plugins-*` tag。

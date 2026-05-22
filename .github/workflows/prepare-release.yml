@@ -1,0 +1,208 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: "Release type"
+        required: true
+        default: app
+        type: choice
+        options:
+          - app
+          - plugin
+      version:
+        description: "Target version without prefix, for example 1.0.7"
+        required: true
+        type: string
+      release:
+        description: "Trigger release workflow after tag is pushed"
+        required: true
+        default: true
+        type: boolean
+      plugin_mode:
+        description: "Plugin release mode"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - selected
+          - all
+      plugins:
+        description: "Comma-separated plugin IDs or directory names when plugin_mode=selected"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: prepare-release-${{ inputs.type }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare ${{ inputs.type }} release
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    env:
+      CI_BUNDLE_IDENTIFIER_PREFIX: dev.mactools.ci
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ensure main branch
+        run: git checkout main
+
+      - name: Validate inputs
+        env:
+          INPUT_TYPE: ${{ inputs.type }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PLUGIN_MODE: ${{ inputs.plugin_mode }}
+          INPUT_PLUGINS: ${{ inputs.plugins }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version must look like 1.2.3 and must not include v or plugins-." >&2
+            exit 1
+          fi
+
+          if [[ "$INPUT_TYPE" == "app" ]]; then
+            if [[ "$INPUT_PLUGIN_MODE" != "auto" || -n "$INPUT_PLUGINS" ]]; then
+              echo "plugin_mode/plugins are only valid for plugin releases." >&2
+              exit 1
+            fi
+          elif [[ "$INPUT_TYPE" == "plugin" ]]; then
+            if [[ "$INPUT_PLUGIN_MODE" != "selected" && -n "$INPUT_PLUGINS" ]]; then
+              echo "plugins input is only valid when plugin_mode=selected." >&2
+              exit 1
+            fi
+            if [[ "$INPUT_PLUGIN_MODE" == "selected" && -z "$INPUT_PLUGINS" ]]; then
+              echo "plugins input is required when plugin_mode=selected." >&2
+              exit 1
+            fi
+          else
+            echo "Unknown type: $INPUT_TYPE" >&2
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: Write CI local config
+        run: |
+          cat > LocalConfig.xcconfig <<EOF
+          DEVELOPMENT_TEAM =
+          BUNDLE_IDENTIFIER_PREFIX = ${CI_BUNDLE_IDENTIFIER_PREFIX}
+          EOF
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare app release
+        if: inputs.type == 'app'
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          scripts/release.py \
+            --type app \
+            --version "$INPUT_VERSION" \
+            --yes
+
+          {
+            echo "RELEASE_TAG=v${INPUT_VERSION}"
+            echo "RELEASE_WORKFLOW=release.yml"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare plugin release
+        if: inputs.type == 'plugin'
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PLUGIN_MODE: ${{ inputs.plugin_mode }}
+          INPUT_PLUGINS: ${{ inputs.plugins }}
+        run: |
+          set -euo pipefail
+
+          release_args=(
+            --type plugin
+            --version "$INPUT_VERSION"
+            --plugin-mode "$INPUT_PLUGIN_MODE"
+            --yes
+          )
+          if [[ -n "$INPUT_PLUGINS" ]]; then
+            release_args+=(--plugin "$INPUT_PLUGINS")
+          fi
+
+          scripts/release.py "${release_args[@]}"
+
+          {
+            echo "RELEASE_TAG=plugins-${INPUT_VERSION}"
+            echo "RELEASE_WORKFLOW=plugin-release.yml"
+          } >> "$GITHUB_ENV"
+
+      - name: Write summary
+        env:
+          INPUT_TYPE: ${{ inputs.type }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE: ${{ inputs.release }}
+          INPUT_PLUGIN_MODE: ${{ inputs.plugin_mode }}
+          INPUT_PLUGINS: ${{ inputs.plugins }}
+        run: |
+          {
+            echo "## Prepare release"
+            echo ""
+            echo "- Type: \`${INPUT_TYPE}\`"
+            echo "- Version: \`${INPUT_VERSION}\`"
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- Trigger release workflow: \`${INPUT_RELEASE}\`"
+            if [[ "$INPUT_TYPE" == "plugin" ]]; then
+              echo "- Plugin mode: \`${INPUT_PLUGIN_MODE}\`"
+              if [[ -n "$INPUT_PLUGINS" ]]; then
+                echo "- Plugins: \`${INPUT_PLUGINS}\`"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trigger release workflow
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TYPE: ${{ inputs.type }}
+          INPUT_PLUGIN_MODE: ${{ inputs.plugin_mode }}
+          INPUT_PLUGINS: ${{ inputs.plugins }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$INPUT_TYPE" == "app" ]]; then
+            gh workflow run "$RELEASE_WORKFLOW" --ref main -f tag="$RELEASE_TAG"
+          else
+            workflow_args=(
+              --ref main
+              -f tag="$RELEASE_TAG"
+              -f mode="$INPUT_PLUGIN_MODE"
+              -f prerelease=false
+            )
+            if [[ -n "$INPUT_PLUGINS" ]]; then
+              workflow_args+=(-f plugins="$INPUT_PLUGINS")
+            fi
+            gh workflow run "$RELEASE_WORKFLOW" "${workflow_args[@]}"
+          fi
+
+          echo "Triggered ${RELEASE_WORKFLOW} for ${RELEASE_TAG}."

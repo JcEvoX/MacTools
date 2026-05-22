@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -115,6 +116,7 @@ def parse_args() -> argparse.Namespace:
         description="Interactive release helper for MacTools app and plugin releases."
     )
     parser.add_argument("--type", choices=["app", "plugin"], help="发布类型。")
+    parser.add_argument("--version", help="目标版本，不含 v 或 plugins- 前缀。")
     parser.add_argument("--level", choices=["patch", "minor", "major"], help="版本递增级别。")
     parser.add_argument(
         "--plugin-mode",
@@ -233,6 +235,30 @@ def bump_version(version: str, level: str) -> str:
     if level == "patch":
         return f"{major}.{minor}.{patch + 1}"
     fail(f"未知版本级别：{level}")
+
+
+def normalize_requested_version(version: str | None) -> str | None:
+    if version is None:
+        return None
+    normalized = version.strip()
+    if normalized.startswith("plugins-"):
+        normalized = normalized.removeprefix("plugins-")
+    elif normalized.startswith("v"):
+        normalized = normalized.removeprefix("v")
+    semver_tuple(normalized)
+    return normalized
+
+
+def infer_bump_level(base_version: str, target_version: str) -> str:
+    base = semver_tuple(base_version)
+    target = semver_tuple(target_version)
+    if target <= base:
+        fail(f"目标版本必须高于当前基准版本：{base_version} -> {target_version}")
+    if target[0] > base[0]:
+        return "major"
+    if target[1] > base[1]:
+        return "minor"
+    return "patch"
 
 
 def max_version(values: list[str], fallback: str) -> str:
@@ -533,8 +559,34 @@ def run_app_check(skip_check: bool, dry_run: bool) -> None:
     if skip_check:
         info("Skipping app check")
         return
-    info("Running app build check")
-    run(["make", "build"], dry_run=dry_run, mutates=True)
+    if os.environ.get("CI") == "true":
+        info("Running CI app check")
+        run(["make", "generate"], dry_run=dry_run, mutates=True)
+        run(
+            [
+                "xcodebuild",
+                "-project",
+                "MacTools.xcodeproj",
+                "-scheme",
+                "MacTools",
+                "-configuration",
+                "Debug",
+                "-destination",
+                "platform=macOS",
+                "-derivedDataPath",
+                "build/DerivedData",
+                "CODE_SIGNING_ALLOWED=NO",
+                "CODE_SIGNING_REQUIRED=NO",
+                "CODE_SIGN_IDENTITY=",
+                "test",
+                "-quiet",
+            ],
+            dry_run=dry_run,
+            mutates=True,
+        )
+    else:
+        info("Running app build check")
+        run(["make", "build"], dry_run=dry_run, mutates=True)
 
 
 def run_plugin_generate_check(skip_check: bool, dry_run: bool) -> None:
@@ -655,6 +707,14 @@ def summarize_plugin_analysis(analysis: PluginAnalysis) -> None:
         info("将从 catalog 移除：" + ", ".join(analysis.removed_ids))
 
 
+def app_check_label(skip_check: bool) -> str:
+    if skip_check:
+        return "skip"
+    if os.environ.get("CI") == "true":
+        return "make generate + xcodebuild test"
+    return "make build"
+
+
 def release_app(args: argparse.Namespace) -> None:
     current_version, current_build = read_project_versions()
     latest_tag = latest_tag_version("v*", APP_TAG_RE)
@@ -662,8 +722,13 @@ def release_app(args: argparse.Namespace) -> None:
         [value for value in [current_version, latest_tag] if value],
         current_version,
     )
-    level = choose_level(args.level, base_version, "选择 app 版本递增级别（回车默认 patch）：")
-    next_version = bump_version(base_version, level)
+    requested_version = normalize_requested_version(args.version)
+    if requested_version:
+        level = args.level or infer_bump_level(base_version, requested_version)
+        next_version = requested_version
+    else:
+        level = choose_level(args.level, base_version, "选择 app 版本递增级别（回车默认 patch）：")
+        next_version = bump_version(base_version, level)
     next_build = current_build + 1
     tag = f"v{next_version}"
     check_tag_available(tag, args.remote)
@@ -674,7 +739,7 @@ def release_app(args: argparse.Namespace) -> None:
     print(f"  最新 app tag: {latest_tag or '(none)'}")
     print(f"  下一版本: {next_version} ({next_build})")
     print(f"  tag: {tag}")
-    print(f"  check: {'skip' if args.skip_check else 'make build'}")
+    print(f"  check: {app_check_label(args.skip_check)}")
     confirm("确认执行 bump、check、commit、tag 和 push？", args.yes)
 
     sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
@@ -684,12 +749,15 @@ def release_app(args: argparse.Namespace) -> None:
         [value for value in [current_version_after_sync, latest_tag_after_sync] if value],
         current_version_after_sync,
     )
-    expected_version_after_sync = bump_version(base_version_after_sync, level)
-    if expected_version_after_sync != next_version:
-        fail(
-            "同步远端后计算出的下一版本发生变化："
-            f"{next_version} -> {expected_version_after_sync}。请重新运行 make release。"
-        )
+    if requested_version and semver_tuple(next_version) <= semver_tuple(base_version_after_sync):
+        fail(f"同步远端后目标版本不再高于基准版本：{base_version_after_sync} -> {next_version}")
+    if not requested_version:
+        expected_version_after_sync = bump_version(base_version_after_sync, level)
+        if expected_version_after_sync != next_version:
+            fail(
+                "同步远端后计算出的下一版本发生变化："
+                f"{next_version} -> {expected_version_after_sync}。请重新运行 make release。"
+            )
     next_build = current_build_after_sync + 1
     check_tag_available(tag, args.remote)
     run_app_check(args.skip_check, args.dry_run)
@@ -709,8 +777,13 @@ def release_plugin(args: argparse.Namespace) -> None:
 
     latest_batch = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
     base_version = latest_batch or "0.0.0"
-    level = choose_level(args.level, base_version, "选择插件批次版本递增级别（回车默认 patch）：")
-    next_batch = bump_version(base_version, level)
+    requested_version = normalize_requested_version(args.version)
+    if requested_version:
+        level = args.level or infer_bump_level(base_version, requested_version)
+        next_batch = requested_version
+    else:
+        level = choose_level(args.level, base_version, "选择插件批次版本递增级别（回车默认 patch）：")
+        next_batch = bump_version(base_version, level)
     tag = f"plugins-{next_batch}"
     check_tag_available(tag, args.remote)
 
@@ -732,12 +805,15 @@ def release_plugin(args: argparse.Namespace) -> None:
 
     sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
     latest_batch_after_sync = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
-    expected_batch_after_sync = bump_version(latest_batch_after_sync or "0.0.0", level)
-    if expected_batch_after_sync != next_batch:
-        fail(
-            "同步远端后计算出的下一插件批次发生变化："
-            f"{next_batch} -> {expected_batch_after_sync}。请重新运行 make release。"
-        )
+    if requested_version and semver_tuple(next_batch) <= semver_tuple(latest_batch_after_sync or "0.0.0"):
+        fail(f"同步远端后目标插件批次不再高于基准版本：{latest_batch_after_sync} -> {next_batch}")
+    if not requested_version:
+        expected_batch_after_sync = bump_version(latest_batch_after_sync or "0.0.0", level)
+        if expected_batch_after_sync != next_batch:
+            fail(
+                "同步远端后计算出的下一插件批次发生变化："
+                f"{next_batch} -> {expected_batch_after_sync}。请重新运行 make release。"
+            )
     analysis = analyze_plugins(mode, selection)
     plugins_to_bump = plugins_requiring_version_bump(mode, analysis)
     check_tag_available(tag, args.remote)

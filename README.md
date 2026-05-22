@@ -102,6 +102,8 @@ make release # 交互选择 app 或 plugin，先分析并预览 bump，确认后
 
 App 发布会更新 `project.yml` 并推送 `v*.*.*` tag；插件发布会按生产 catalog 分析需要发布的插件，必要时更新对应 `plugin.json.version`，再推送 `plugins-*` 批次 tag。后续签名、公证、上传 Release 和更新 appcast/catalog 仍由 GitHub Actions 完成。
 
+GitHub 页面发包请使用 `Actions` → `Prepare Release`，输入发布类型、目标版本和是否继续 release；不要从 GitHub `Releases` 页面直接创建新 tag。
+
 插件发布通过 `plugins-*` 批次 tag 触发 GitHub Actions。只需要给实际变更的插件递增 `plugin.json.version`；工作流会默认只构建和上传变更插件，合并签名后的 catalog，并保留未变化插件的既有下载链接。
 
 新增和更新插件的简短流程见 [docs/plugins/local-native-plugins.md](docs/plugins/local-native-plugins.md#development-steps)。

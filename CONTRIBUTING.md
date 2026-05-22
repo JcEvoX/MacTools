@@ -53,10 +53,11 @@
 
 ## Release
 - 发布由维护者执行；不要在普通贡献中创建 tag、发布 GitHub Release 或提交发布产物。
+- GitHub 页面发包优先使用 `Actions` → `Prepare Release`。输入 `type`、目标 `version` 和是否 `release`；勾选 `release` 时会在 bump、提交和创建 tag 后继续触发实际发包 workflow。
 - 快速发包优先使用 `make release`。命令会交互选择 `app` 或 `plugin`，先分析下一版本的 `patch`/`minor`/`major` 并预览 bump；确认后才 `pull --ff-only`、执行轻量检查、更新并提交版本 bump、创建并推送对应 tag。
 - App 发布会更新 `project.yml` 的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`，推送 `v*.*.*` tag 后由 `Release` workflow 构建、签名、公证并上传 DMG。
 - 插件发布会推送 `plugins-*` 批次 tag。默认 `auto` 模式会按生产 catalog 找出新插件、已 bump 插件和包相关变更插件；需要时自动更新对应 `plugin.json.version`，然后由 `Plugin Release` workflow 构建并合并签名 catalog。
-- 非交互用法示例：`make release ARGS="--type app --level patch --yes"`，或 `make release ARGS="--type plugin --plugin-mode selected --plugin calendar --level patch --yes"`。
+- 非交互用法示例：`make release ARGS="--type app --version 1.0.7 --yes"`，或 `make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugin calendar --yes"`。
 - 预览将执行的步骤可追加 `--dry-run`；正式发布前工作区必须干净。
 - 本地发布前复制 `scripts/release.local.env.sample` 为 `scripts/release.local.env`，至少填写 `DEVELOPER_ID_APPLICATION`。
 - 如需 Apple 公证，首次使用 `xcrun notarytool store-credentials` 保存凭证。
