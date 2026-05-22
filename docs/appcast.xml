@@ -5,11 +5,11 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.6</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.6</link>
-            <sparkle:version>36</sparkle:version>
-            <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.6 -->
+            <title>Version 1.0.7</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.7</link>
+            <sparkle:version>37</sparkle:version>
+            <sparkle:shortVersionString>1.0.7</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.7 -->
 
 ## What's Changed
 ### Other Changes
@@ -17,13 +17,22 @@
 * feat: add app hotkey plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/65
 * fix: replace visibility switch with checkbox in drag preview by @ayangweb in https://github.com/ggbond268/MacTools/pull/69
 * chore: add GitHub Actions workflow for Homebrew Cask updates by @ayangweb in https://github.com/ggbond268/MacTools/pull/71
+* feat: update name and description for hide dock plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/73
+* fix: update plugin id from "app-launcher" to "app-hotkey" by @ayangweb in https://github.com/ggbond268/MacTools/pull/72
+* refactor: auto hide dock plugin update file name and plugin id by @ayangweb in https://github.com/ggbond268/MacTools/pull/75
+* feat: add auto hide menu bar plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/74
+* feat(quit-apps): support closing the window on esc by @ayangweb in https://github.com/ggbond268/MacTools/pull/76
+* feat: add zsh configuration plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/78
+* fix(middle-click-plugin): add wake observer to handle system wake events by @ayangweb in https://github.com/ggbond268/MacTools/pull/79
+* feat: add display sleep plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/82
+* feat: add system mute plugin by @ayangweb in https://github.com/ggbond268/MacTools/pull/81
 
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.5...v1.0.6
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.5...v1.0.7
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Thu, 21 May 2026 04:18:54 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.6/MacTools.dmg" length="4758031" type="application/octet-stream" sparkle:edSignature="82ixoVSCsGmGwYnhDRVJPKZ0n/GnZtsJxsYXsWr08QgWzK4T2oQgQOeKLHGrVsUo+aiUeeeU4ZiVXGFfeZ3lAQ==" />
+            <pubDate>Fri, 22 May 2026 12:22:52 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.7/MacTools.dmg" length="4761972" type="application/octet-stream" sparkle:edSignature="HISYiP9+fs+xMkhYkMVldZniaYY5ZH4AAlv87tedW81ItEESsvniXdPDTJ/EEI+PIgXeAX53Yx6pbWS4p4rQCQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
