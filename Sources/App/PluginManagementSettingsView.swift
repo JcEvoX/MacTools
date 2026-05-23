@@ -7,6 +7,8 @@ struct PluginManagementSettingsView: View {
 
     @State private var alertMessage: String?
     @State private var activeOperationID: String?
+    @State private var searchText: String = ""
+    @State private var selectedFilter: PluginCategoryFilter = .all
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
@@ -20,21 +22,36 @@ struct PluginManagementSettingsView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(pluginHost.pluginManagementItems) { item in
-                            PluginManagementRow(
-                                item: item,
-                                isBusy: activeOperationID == item.id,
-                                isInteractionDisabled: activeOperationID != nil,
-                                onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
-                                onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
-                                onUninstall: { uninstall(item) },
-                                onRelaunch: { appRelauncher.relaunch() }
-                            )
+                PluginFilterBarView(
+                    searchText: $searchText,
+                    selectedFilter: $selectedFilter,
+                    countsByFilter: countsByFilter
+                )
+
+                if filteredItems.isEmpty {
+                    ContentUnavailableView(
+                        "未找到匹配的插件",
+                        systemImage: "magnifyingglass",
+                        description: Text("尝试调整关键字或切换分类。")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(filteredItems) { item in
+                                PluginManagementRow(
+                                    item: item,
+                                    isBusy: activeOperationID == item.id,
+                                    isInteractionDisabled: activeOperationID != nil,
+                                    onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
+                                    onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
+                                    onUninstall: { uninstall(item) },
+                                    onRelaunch: { appRelauncher.relaunch() }
+                                )
+                            }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }
@@ -59,6 +76,19 @@ struct PluginManagementSettingsView: View {
         } message: {
             Text(alertMessage ?? "")
         }
+    }
+
+    private var filteredItems: [PluginManagementItem] {
+        pluginHost.pluginManagementItems.filter {
+            PluginListFilter.matches(managementItem: $0, query: searchText, filter: selectedFilter)
+        }
+    }
+
+    private var countsByFilter: [PluginCategoryFilter: Int] {
+        PluginListFilter.countsByFilter(
+            managementItems: pluginHost.pluginManagementItems,
+            query: searchText
+        )
     }
 
     private var header: some View {

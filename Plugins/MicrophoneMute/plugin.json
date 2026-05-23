@@ -2,7 +2,7 @@
   "id": "microphone-mute",
   "displayName": "麦克风静音",
   "summary": "快速静音或恢复默认麦克风输入",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MicrophoneMute.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": false
   },
-  "permissions": []
+  "permissions": [],
+  "category": "audio"
 }

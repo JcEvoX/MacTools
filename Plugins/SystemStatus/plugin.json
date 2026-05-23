@@ -2,7 +2,7 @@
   "id": "system-status",
   "displayName": "系统状态",
   "summary": "实时查看系统状态",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "SystemStatus.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": true,
     "configuration": false
   },
-  "permissions": []
+  "permissions": [],
+  "category": "monitoring"
 }

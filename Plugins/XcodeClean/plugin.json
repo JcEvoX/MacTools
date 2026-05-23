@@ -2,7 +2,7 @@
   "id": "xcode-clean",
   "displayName": "Xcode 清理",
   "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "XcodeClean.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "storage"
 }

@@ -22,6 +22,29 @@ struct PluginManagementItem: Identifiable, Equatable {
     let packageURL: URL?
     let requiresRestartToFullyUnload: Bool
     let releaseNotesURL: URL?
+    let category: String?
+
+    init(
+        id: String,
+        title: String,
+        summary: String?,
+        version: String,
+        state: State,
+        packageURL: URL?,
+        requiresRestartToFullyUnload: Bool,
+        releaseNotesURL: URL?,
+        category: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.version = version
+        self.state = state
+        self.packageURL = packageURL
+        self.requiresRestartToFullyUnload = requiresRestartToFullyUnload
+        self.releaseNotesURL = releaseNotesURL
+        self.category = category
+    }
 
     var statusText: String {
         switch state {
@@ -279,6 +302,14 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedCategoriesByID() -> [String: String?] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.category)
+            }
+        )
+    }
+
     /// Deactivate a loaded plugin without unloading it.
     /// Used when the user hides the plugin — it stays in the list but its side effects stop.
     func pausePlugin(_ pluginID: String) {
@@ -432,7 +463,8 @@ final class DynamicPluginManager: ObservableObject {
                         state: catalogSnapshot?.isLocalDevelopment == true ? .localDevelopment : .available,
                         packageURL: nil,
                         requiresRestartToFullyUnload: false,
-                        releaseNotesURL: entry.releaseNotesURL
+                        releaseNotesURL: entry.releaseNotesURL,
+                        category: entry.category
                     )
                 )
             }
@@ -495,7 +527,8 @@ final class DynamicPluginManager: ObservableObject {
             state: state,
             packageURL: record.packageURL,
             requiresRestartToFullyUnload: record.requiresRestartToFullyUnload,
-            releaseNotesURL: catalogEntry?.releaseNotesURL
+            releaseNotesURL: catalogEntry?.releaseNotesURL,
+            category: catalogEntry?.category ?? record.manifest.category
         )
     }
 

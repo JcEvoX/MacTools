@@ -52,6 +52,7 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
     let permissions: [String]
     let package: PluginCatalogPackage
     let releaseNotesURL: URL?
+    let category: String?
 
     init(
         id: String,
@@ -63,7 +64,8 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
         capabilities: PluginPackageManifest.Capabilities = .init(),
         permissions: [String] = [],
         package: PluginCatalogPackage,
-        releaseNotesURL: URL? = nil
+        releaseNotesURL: URL? = nil,
+        category: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -75,6 +77,7 @@ struct PluginCatalogEntry: Codable, Identifiable, Equatable {
         self.permissions = permissions
         self.package = package
         self.releaseNotesURL = releaseNotesURL
+        self.category = category
     }
 }
 

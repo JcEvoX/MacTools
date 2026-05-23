@@ -2,7 +2,7 @@
   "id": "lock-screen",
   "displayName": "锁定屏幕",
   "summary": "一键立即锁定屏幕，进入密码解锁界面",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": false
   },
-  "permissions": []
+  "permissions": [],
+  "category": "system"
 }

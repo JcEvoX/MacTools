@@ -339,6 +339,8 @@ private struct FeatureSettingsDetailPane: View {
 
 private struct InstalledFeaturesSettingsView: View {
     @ObservedObject var pluginHost: PluginHost
+    @State private var searchText: String = ""
+    @State private var selectedFilter: PluginCategoryFilter = .all
 
     var body: some View {
         ScrollView {
@@ -350,6 +352,15 @@ private struct InstalledFeaturesSettingsView: View {
                     iconTint: .green
                 )
 
+                if !pluginHost.featureManagementItems.isEmpty {
+                    PluginFilterBarView(
+                        searchText: $searchText,
+                        selectedFilter: $selectedFilter,
+                        countsByFilter: countsByFilter,
+                        searchPrompt: "搜索已安装插件"
+                    )
+                }
+
                 SettingsCardContainer {
                     if pluginHost.featureManagementItems.isEmpty {
                         ContentUnavailableView(
@@ -358,9 +369,17 @@ private struct InstalledFeaturesSettingsView: View {
                             description: Text("安装插件后，会显示在这里。")
                         )
                         .frame(maxWidth: .infinity, minHeight: 180)
+                    } else if filteredItems.isEmpty {
+                        ContentUnavailableView(
+                            "未找到匹配的插件",
+                            systemImage: "magnifyingglass",
+                            description: Text("尝试调整关键字或切换分类。")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
                     } else {
                         FeatureManagementTableView(
-                            items: pluginHost.featureManagementItems,
+                            items: filteredItems,
+                            isReorderEnabled: !isFiltering,
                             onVisibilityChange: { pluginID, isVisible in
                                 pluginHost.setFeatureVisibility(isVisible, for: pluginID)
                             },
@@ -371,6 +390,13 @@ private struct InstalledFeaturesSettingsView: View {
                         .frame(height: featureManagementListHeight)
                     }
                 }
+
+                if isFiltering && !filteredItems.isEmpty {
+                    Text("筛选中暂时不能拖拽排序，清除关键字或选择「全部」即可重新排序。")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                }
             }
             .padding(PluginSettingsTheme.Spacing.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -378,8 +404,25 @@ private struct InstalledFeaturesSettingsView: View {
         .background(SettingsStyle.contentBackground)
     }
 
+    private var filteredItems: [PluginFeatureManagementItem] {
+        pluginHost.featureManagementItems.filter {
+            PluginListFilter.matches(featureItem: $0, query: searchText, filter: selectedFilter)
+        }
+    }
+
+    private var countsByFilter: [PluginCategoryFilter: Int] {
+        PluginListFilter.countsByFilter(
+            featureItems: pluginHost.featureManagementItems,
+            query: searchText
+        )
+    }
+
+    private var isFiltering: Bool {
+        !PluginListFilter.normalized(searchText).isEmpty || selectedFilter != .all
+    }
+
     private var featureManagementListHeight: CGFloat {
-        FeatureManagementTableView.preferredHeight(for: pluginHost.featureManagementItems.count)
+        FeatureManagementTableView.preferredHeight(for: filteredItems.count)
     }
 }
 

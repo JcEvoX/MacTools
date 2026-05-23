@@ -184,6 +184,7 @@ for raw in packages:
             "size": size,
         },
         "releaseNotesURL": manifest.get("releaseNotesURL") or release_notes_url or None,
+        "category": manifest.get("category"),
     })
 
 if requested_plugin_kit_version is None:

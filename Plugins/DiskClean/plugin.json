@@ -2,7 +2,7 @@
   "id": "disk-clean",
   "displayName": "磁盘清理",
   "summary": "缓存、开发者缓存和浏览器缓存清理",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DiskClean.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "storage"
 }

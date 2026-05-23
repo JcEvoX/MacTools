@@ -74,4 +74,42 @@ final class PluginPackageManifestTests: XCTestCase {
             )
         }
     }
+
+    func testManifestDecodesWithCategory() throws {
+        let json = """
+        {
+          "id": "demo",
+          "displayName": "Demo",
+          "version": "1.0.0",
+          "minHostVersion": "0.15.0",
+          "pluginKitVersion": 1,
+          "bundleRelativePath": "Demo.bundle",
+          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
+          "permissions": [],
+          "category": "display"
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
+        XCTAssertEqual(manifest.category, "display")
+    }
+
+    func testManifestDecodesWithoutCategoryGracefully() throws {
+        // Legacy plugin.json files without category should still decode.
+        let json = """
+        {
+          "id": "demo",
+          "displayName": "Demo",
+          "version": "1.0.0",
+          "minHostVersion": "0.15.0",
+          "pluginKitVersion": 1,
+          "bundleRelativePath": "Demo.bundle",
+          "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
+          "permissions": []
+        }
+        """.data(using: .utf8)!
+
+        let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
+        XCTAssertNil(manifest.category)
+    }
 }

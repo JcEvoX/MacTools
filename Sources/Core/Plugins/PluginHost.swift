@@ -49,6 +49,7 @@ final class PluginHost: ObservableObject {
 
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
+    private var dynamicPluginCategoriesByID: [String: String?] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
@@ -120,6 +121,7 @@ final class PluginHost: ObservableObject {
         if let dynamicPluginManager {
             self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
             self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
+            self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -722,6 +724,7 @@ final class PluginHost: ObservableObject {
 
     private func syncPluginManagementState() {
         dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
+        dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -884,7 +887,8 @@ final class PluginHost: ObservableObject {
                 ),
                 isActive: panelStatesByID[metadata.id]?.isOn == true
                     || componentStatesByID[metadata.id]?.isActive == true,
-                presentation: presentation(for: descriptor)
+                presentation: presentation(for: descriptor),
+                category: dynamicPluginCategoriesByID[metadata.id] ?? nil
             )
         }
 

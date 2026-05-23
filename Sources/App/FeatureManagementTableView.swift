@@ -9,6 +9,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     private static let dragType = NSPasteboard.PasteboardType("com.ggbond.mactools.feature-management-item")
 
     let items: [PluginFeatureManagementItem]
+    var isReorderEnabled: Bool = true
     let onVisibilityChange: (String, Bool) -> Void
     let onMove: (String, Int) -> Void
 
@@ -126,6 +127,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
             let item = parent.items[row]
             view.configure(
                 item: item,
+                showsHandle: parent.isReorderEnabled,
                 onVisibilityChange: { [weak self] isVisible in
                     self?.parent.onVisibilityChange(item.id, isVisible)
                 }
@@ -134,6 +136,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+            guard parent.isReorderEnabled else {
+                return nil
+            }
+
             let pasteboardItem = NSPasteboardItem()
             pasteboardItem.setString(parent.items[row].id, forType: FeatureManagementTableView.dragType)
             return pasteboardItem
@@ -196,6 +202,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
             proposedRow row: Int,
             proposedDropOperation dropOperation: NSTableView.DropOperation
         ) -> NSDragOperation {
+            guard parent.isReorderEnabled else {
+                return []
+            }
+
             guard info.draggingPasteboard.availableType(from: [FeatureManagementTableView.dragType]) != nil else {
                 return []
             }
@@ -211,6 +221,10 @@ struct FeatureManagementTableView: NSViewRepresentable {
             row: Int,
             dropOperation: NSTableView.DropOperation
         ) -> Bool {
+            guard parent.isReorderEnabled else {
+                return false
+            }
+
             guard
                 let draggedID = info.draggingPasteboard.string(forType: FeatureManagementTableView.dragType)
             else {
@@ -422,6 +436,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
     func configure(
         item: PluginFeatureManagementItem,
+        showsHandle: Bool,
         onVisibilityChange: @escaping (Bool) -> Void
     ) {
         visibilityHandler = onVisibilityChange
@@ -436,6 +451,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         iconBackgroundView.layer?.backgroundColor = NSColor(item.iconTint.opacity(0.14)).cgColor
         activeDotView.isHidden = !item.isActive
         visibilityButton.state = item.isVisible ? .on : .off
+        handleImageView.isHidden = !showsHandle
         toolTip = item.title
         visibilityButton.toolTip = item.title
     }

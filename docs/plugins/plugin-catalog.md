@@ -34,7 +34,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
         "sha256": "...",
         "size": 1234567
       },
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1"
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1",
+      "category": "productivity"
     }
   ],
   "revoked": [],
