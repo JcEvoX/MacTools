@@ -1,6 +1,11 @@
 import SwiftUI
 
 struct IPOverviewComponentView: View {
+    private enum Layout {
+        static let leakCardMinimumWidth: CGFloat = 280
+        static let leakCardMaximumWidth: CGFloat = 420
+    }
+
     @ObservedObject var viewModel: IPOverviewViewModel
     let startsInDetails: Bool
     let showsBackButton: Bool
@@ -401,10 +406,7 @@ struct IPOverviewComponentView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 8),
-                GridItem(.flexible(), spacing: 8)
-            ], spacing: 8) {
+            LazyVGrid(columns: leakGridColumns, spacing: 8) {
                 ForEach(results) { result in
                     leakTile(result, showsNAT: showsNAT)
                 }
@@ -412,6 +414,19 @@ struct IPOverviewComponentView: View {
         }
         .padding(10)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var leakGridColumns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(
+                    minimum: Layout.leakCardMinimumWidth,
+                    maximum: Layout.leakCardMaximumWidth
+                ),
+                spacing: 8,
+                alignment: .top
+            )
+        ]
     }
 
     private func leakTile(_ result: IPOverviewLeakTestResult, showsNAT: Bool) -> some View {
@@ -434,14 +449,27 @@ struct IPOverviewComponentView: View {
                     .truncationMode(.middle)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                if showsNAT {
-                    leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    if showsNAT {
+                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
+                    }
+                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
+                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
                 }
-                leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
-                leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    if showsNAT {
+                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
+                    }
+                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
+                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
         }
         .padding(8)
@@ -459,6 +487,7 @@ struct IPOverviewComponentView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func connectivityTile(_ result: IPOverviewConnectivityResult) -> some View {
