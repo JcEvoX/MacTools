@@ -108,7 +108,7 @@ public struct PluginConfiguration {
 
     public init<Content: View>(
         description: String? = nil,
-        prefersFullHeight: Bool,
+        prefersFullHeight: Bool = false,
         @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
     ) {
         self.description = description
@@ -116,17 +116,6 @@ public struct PluginConfiguration {
         self.makeView = { context in
             AnyView(content(context))
         }
-    }
-
-    public init<Content: View>(
-        description: String? = nil,
-        @ViewBuilder content: @escaping (PluginConfigurationContext) -> Content
-    ) {
-        self.init(
-            description: description,
-            prefersFullHeight: false,
-            content: content
-        )
     }
 }
 

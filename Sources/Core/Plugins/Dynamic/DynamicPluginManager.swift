@@ -141,7 +141,9 @@ final class DynamicPluginManager: ObservableObject {
 
             return loadedPluginsByID[record.id] == nil && !deferredPluginIDs.contains(record.id)
         }
-        let loadedResults = pluginLoader.loadInstalledPlugins(from: recordsToLoad)
+        let loadedResults = recordsToLoad.isEmpty
+            ? []
+            : pluginLoader.loadInstalledPlugins(from: recordsToLoad)
         let loadedResultsByID = Dictionary(
             uniqueKeysWithValues: loadedResults.map { ($0.record.id, $0) }
         )
@@ -267,8 +269,12 @@ final class DynamicPluginManager: ObservableObject {
 
     func installedCapabilitiesByID() -> [String: PluginPackageManifest.Capabilities] {
         Dictionary(
-            uniqueKeysWithValues: packageStore.installedRecords().map {
-                ($0.id, $0.manifest.capabilities)
+            uniqueKeysWithValues: packageStore.installedRecords().compactMap { record in
+                guard record.state.isLoadable else {
+                    return nil
+                }
+
+                return (record.id, record.manifest.capabilities)
             }
         )
     }
@@ -499,6 +505,17 @@ final class DynamicPluginManager: ObservableObject {
 
     private func managementItemSort(_ lhs: PluginManagementItem, _ rhs: PluginManagementItem) -> Bool {
         lhs.title.localizedCompare(rhs.title) == .orderedAscending
+    }
+}
+
+private extension PluginPackageRecord.State {
+    var isLoadable: Bool {
+        switch self {
+        case .enabled, .disabled:
+            return true
+        case .incompatible, .failed:
+            return false
+        }
     }
 }
 

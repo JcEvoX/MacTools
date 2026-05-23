@@ -4,7 +4,7 @@
   "summary": "查看日期、节假日和系统日程",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "Calendar.bundle",
   "factoryClass": "CalendarPlugin.CalendarPluginFactory",
   "build": {

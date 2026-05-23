@@ -117,9 +117,20 @@ def read_plugins(source_dir):
             "path": manifest_path.parent.as_posix(),
             "manifestPath": manifest_path.as_posix(),
             "version": manifest["version"],
+            "pluginKitVersion": manifest["pluginKitVersion"],
             "displayName": manifest.get("displayName", plugin_id),
         }
     return plugins
+
+
+def current_plugin_kit_version(plugins):
+    versions = sorted({plugin["pluginKitVersion"] for plugin in plugins.values()})
+    if len(versions) != 1:
+        raise SystemExit(
+            "Plugin manifests must use one pluginKitVersion for a release: "
+            + ", ".join(str(version) for version in versions)
+        )
+    return versions[0]
 
 
 def normalize_selected(raw_values, plugins):
@@ -141,7 +152,9 @@ def normalize_selected(raw_values, plugins):
 
 def plan_release(args):
     plugins = read_plugins(args.source_dir)
+    plugin_kit_version = current_plugin_kit_version(plugins)
     previous_catalog = load_json(args.previous_catalog)
+    previous_catalog_plugin_kit_version = (previous_catalog or {}).get("pluginKitVersion")
     previous_entries = {
         entry["id"]: entry
         for entry in (previous_catalog or {}).get("plugins", [])
@@ -168,15 +181,80 @@ def plan_release(args):
             selected.append(plugin_id)
         reasons.setdefault(plugin_id, []).append(reason)
 
+    def previous_entry_plugin_kit_version(entry):
+        if "pluginKitVersion" in entry:
+            return entry["pluginKitVersion"]
+        if previous_catalog_plugin_kit_version is not None:
+            return previous_catalog_plugin_kit_version
+        raise SystemExit(
+            f"Previous catalog entry is missing pluginKitVersion: {entry.get('id', '(unknown)')}"
+        )
+
+    def handle_plugin_kit_change(plugin_id, plugin, previous_entry, version_cmp):
+        previous_version = previous_entry_plugin_kit_version(previous_entry)
+        if previous_version == plugin["pluginKitVersion"]:
+            return False
+
+        reason = f"pluginKitVersion {previous_version} -> {plugin['pluginKitVersion']}"
+        if version_cmp <= 0:
+            errors.append(
+                f"{plugin_id}: {reason}, but version is still {plugin['version']}. "
+                f"Bump {plugin['manifestPath']} version before publishing a PluginKit update."
+            )
+        else:
+            select(plugin_id, reason)
+        return True
+
+    if (
+        args.mode == "selected"
+        and previous_catalog_plugin_kit_version is not None
+        and previous_catalog_plugin_kit_version != plugin_kit_version
+        and set(selected_inputs) != set(plugins)
+    ):
+        errors.append(
+            "Current pluginKitVersion differs from the previous catalog "
+            f"({previous_catalog_plugin_kit_version} -> {plugin_kit_version}). "
+            "Use --mode all so the catalog cannot mix incompatible plugin packages."
+        )
+
     if args.mode == "all":
         full_release = True
-        for plugin_id in sorted(plugins):
+        for plugin_id, plugin in sorted(plugins.items()):
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is not None:
+                previous_version = previous_entry["version"]
+                current_version = plugin["version"]
+                version_cmp = compare_versions(current_version, previous_version)
+                if version_cmp < 0:
+                    errors.append(
+                        f"{plugin_id}: version cannot go backwards "
+                        f"({previous_version} -> {current_version})"
+                    )
+                    continue
+                handle_plugin_kit_change(plugin_id, plugin, previous_entry, version_cmp)
             select(plugin_id, "all mode")
     elif args.mode == "selected":
         if not selected_inputs:
             raise SystemExit("--mode selected requires --plugins or --plugin")
         for plugin_id in selected_inputs:
             select(plugin_id, "selected mode")
+        for plugin_id in selected_inputs:
+            plugin = plugins[plugin_id]
+            previous_entry = previous_entries.get(plugin_id)
+            if previous_entry is None:
+                continue
+
+            previous_version = previous_entry["version"]
+            current_version = plugin["version"]
+            version_cmp = compare_versions(current_version, previous_version)
+            if version_cmp < 0:
+                errors.append(
+                    f"{plugin_id}: version cannot go backwards "
+                    f"({previous_version} -> {current_version})"
+                )
+                continue
+
+            handle_plugin_kit_change(plugin_id, plugin, previous_entry, version_cmp)
     elif not previous_catalog:
         full_release = True
         for plugin_id in sorted(plugins):
@@ -196,6 +274,8 @@ def plan_release(args):
                     f"{plugin_id}: version cannot go backwards "
                     f"({previous_version} -> {current_version})"
                 )
+                continue
+            if handle_plugin_kit_change(plugin_id, plugin, previous_entry, version_cmp):
                 continue
             if version_cmp > 0:
                 select(plugin_id, f"version {previous_version} -> {current_version}")
@@ -232,6 +312,7 @@ def plan_release(args):
         "mode": args.mode,
         "releaseRequired": bool(selected or removed_plugin_ids),
         "fullRelease": full_release,
+        "pluginKitVersion": plugin_kit_version,
         "selectedPluginIDs": selected,
         "removedPluginIDs": removed_plugin_ids,
         "reasons": {plugin_id: reasons.get(plugin_id, []) for plugin_id in selected},

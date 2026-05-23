@@ -4,7 +4,7 @@
   "summary": "统计输入、前台应用使用时长和 AI 编程活动",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "ActivityBar.bundle",
   "factoryClass": "ActivityBarPlugin.ActivityBarPluginFactory",
   "build": {

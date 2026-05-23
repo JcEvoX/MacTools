@@ -36,6 +36,7 @@ class PluginInfo:
     path: Path
     manifest_path: Path
     version: str
+    plugin_kit_version: int
 
 
 @dataclass(frozen=True)
@@ -326,6 +327,16 @@ def max_version(values: list[str], fallback: str) -> str:
     return format_semver(max(semver_tuple(value) for value in values))
 
 
+def compare_versions(lhs: str, rhs: str) -> int:
+    left = semver_tuple(lhs)
+    right = semver_tuple(rhs)
+    if left < right:
+        return -1
+    if left > right:
+        return 1
+    return 0
+
+
 def latest_tag_version(pattern: str, tag_re: re.Pattern[str]) -> str | None:
     raw = git(["tag", "--list", pattern])
     versions = []
@@ -382,15 +393,30 @@ def read_plugins() -> dict[str, PluginInfo]:
             path=manifest_path.parent,
             manifest_path=manifest_path,
             version=manifest["version"],
+            plugin_kit_version=manifest["pluginKitVersion"],
         )
     return plugins
 
 
-def load_previous_catalog() -> dict[str, dict]:
+def read_previous_catalog() -> dict:
     if not PLUGIN_CATALOG.exists():
         return {}
-    catalog = json.loads(PLUGIN_CATALOG.read_text(encoding="utf-8"))
+    return json.loads(PLUGIN_CATALOG.read_text(encoding="utf-8"))
+
+
+def load_previous_catalog() -> dict[str, dict]:
+    catalog = read_previous_catalog()
     return {entry["id"]: entry for entry in catalog.get("plugins", [])}
+
+
+def current_plugin_kit_version(plugins: dict[str, PluginInfo]) -> int:
+    versions = sorted({plugin.plugin_kit_version for plugin in plugins.values()})
+    if len(versions) != 1:
+        fail(
+            "插件 manifest 必须使用同一个 pluginKitVersion："
+            + ", ".join(str(version) for version in versions)
+        )
+    return versions[0]
 
 
 def plugin_release_tag(entry: dict) -> str | None:
@@ -447,6 +473,9 @@ def normalize_plugin_selection(raw_values: list[str], plugins: dict[str, PluginI
 
 def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
     plugins = read_plugins()
+    plugin_kit_version = current_plugin_kit_version(plugins)
+    previous_catalog = read_previous_catalog()
+    previous_catalog_plugin_kit_version = previous_catalog.get("pluginKitVersion")
     previous_entries = load_previous_catalog()
     reasons: dict[str, list[str]] = {}
     selected_ids: list[str] = []
@@ -461,8 +490,38 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
             selected_ids.append(plugin.id)
         reasons.setdefault(plugin.id, []).append(reason)
 
+    def previous_entry_plugin_kit_version(entry: dict) -> int:
+        if "pluginKitVersion" in entry:
+            return entry["pluginKitVersion"]
+        if previous_catalog_plugin_kit_version is not None:
+            return previous_catalog_plugin_kit_version
+        fail(f"生产 catalog 条目缺少 pluginKitVersion：{entry.get('id', '(unknown)')}")
+
+    def handle_plugin_kit_change(plugin: PluginInfo, previous_entry: dict, version_cmp: int) -> bool:
+        previous_version = previous_entry_plugin_kit_version(previous_entry)
+        if previous_version == plugin.plugin_kit_version:
+            return False
+
+        reason = f"pluginKitVersion {previous_version} -> {plugin.plugin_kit_version}"
+        if version_cmp > 0:
+            already_bumped.append(plugin)
+        else:
+            needs_bump.append(plugin)
+        select(plugin, reason)
+        return True
+
     if mode == "selected":
         selected_ids = normalize_plugin_selection(selection, plugins)
+        if (
+            previous_catalog_plugin_kit_version is not None
+            and previous_catalog_plugin_kit_version != plugin_kit_version
+            and set(selected_ids) != set(plugins)
+        ):
+            errors.append(
+                "当前 PluginKit 版本和生产 catalog 不一致 "
+                f"({previous_catalog_plugin_kit_version} -> {plugin_kit_version})。"
+                "请使用 plugin-mode all 全量重建插件，避免 catalog 混合不兼容插件包。"
+            )
         for plugin_id in selected_ids:
             reasons.setdefault(plugin_id, []).append("selected mode")
     elif mode == "all":
@@ -478,7 +537,15 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
                         f"({previous_version} -> {plugin.version})"
                     )
                     continue
-                if semver_tuple(plugin.version) > semver_tuple(previous_version):
+                handle_plugin_kit_change(
+                    plugin,
+                    previous_entry,
+                    compare_versions(plugin.version, previous_version),
+                )
+                if (
+                    semver_tuple(plugin.version) > semver_tuple(previous_version)
+                    and previous_entry_plugin_kit_version(previous_entry) == plugin.plugin_kit_version
+                ):
                     already_bumped.append(plugin)
             select(plugin, "all mode")
     elif not previous_entries:
@@ -501,6 +568,12 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
                     f"{plugin_id}: version cannot go backwards "
                     f"({previous_version} -> {current_version})"
                 )
+                continue
+            if handle_plugin_kit_change(
+                plugin,
+                previous_entry,
+                compare_versions(current_version, previous_version),
+            ):
                 continue
             if semver_tuple(current_version) > semver_tuple(previous_version):
                 already_bumped.append(plugin)
@@ -534,6 +607,12 @@ def analyze_plugins(mode: str, selection: list[str]) -> PluginAnalysis:
                     f"{plugin_id}: version cannot go backwards "
                     f"({previous_version} -> {plugin.version})"
                 )
+                continue
+            if handle_plugin_kit_change(
+                plugin,
+                previous_entry,
+                compare_versions(plugin.version, previous_version),
+            ):
                 continue
             if semver_tuple(plugin.version) > semver_tuple(previous_version):
                 already_bumped.append(plugin)
@@ -579,6 +658,11 @@ def write_plugin_versions(plugins: list[PluginInfo], level: str, dry_run: bool) 
             encoding="utf-8",
         )
     return updated
+
+
+def refresh_plugins(plugins: list[PluginInfo]) -> list[PluginInfo]:
+    latest = read_plugins()
+    return [latest[plugin.id] for plugin in plugins]
 
 
 def plugins_requiring_version_bump(mode: str, analysis: PluginAnalysis) -> list[PluginInfo]:
@@ -876,7 +960,6 @@ def release_plugin(args: argparse.Namespace) -> None:
     analysis = analyze_plugins(mode, selection)
     plugins_to_bump = plugins_requiring_version_bump(mode, analysis)
     check_tag_available(tag, args.remote)
-    run_plugin_generate_check(args.skip_check, args.dry_run)
     updated_versions = write_plugin_versions(plugins_to_bump, level, args.dry_run)
     if updated_versions:
         info(
@@ -884,6 +967,11 @@ def release_plugin(args: argparse.Namespace) -> None:
             + ", ".join(f"{plugin_id} -> {version}" for plugin_id, version in updated_versions.items())
         )
 
+    if updated_versions:
+        analysis = analyze_plugins(mode, selection)
+        plugins_to_bump = refresh_plugins(plugins_to_bump)
+
+    run_plugin_generate_check(args.skip_check, args.dry_run)
     run_plugin_plan_check(mode, selection, args.skip_check, args.dry_run)
     changed_manifests = [plugin.manifest_path for plugin in plugins_to_bump]
     made_commit = commit_if_needed(changed_manifests, f"chore: release {tag}", args.dry_run)

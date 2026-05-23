@@ -4,7 +4,7 @@
   "summary": "屏幕全黑并临时禁用键盘输入",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "PhysicalCleanMode.bundle",
   "factoryClass": "PhysicalCleanModePlugin.PhysicalCleanModePluginFactory",
   "build": {

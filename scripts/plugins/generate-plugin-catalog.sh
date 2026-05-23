@@ -15,7 +15,7 @@ Options:
   --release-notes-url URL       Optional release notes URL used when plugin.json omits one.
   --catalog-id ID               Defaults to com.ggbond.mactools.plugins.
   --minimum-host-version VER    Defaults to 0.15.2.
-  --plugin-kit-version INT      Defaults to 1.
+  --plugin-kit-version INT      Override catalog PluginKit version; defaults to package manifests.
 
 The script does not sign the catalog. Run sign-plugin-catalog.sh for release catalogs.
 USAGE
@@ -27,7 +27,7 @@ BASE_URL=""
 RELEASE_NOTES_URL=""
 CATALOG_ID="com.ggbond.mactools.plugins"
 MINIMUM_HOST_VERSION="0.15.2"
-PLUGIN_KIT_VERSION="1"
+PLUGIN_KIT_VERSION=""
 PACKAGES=()
 
 while [[ $# -gt 0 ]]; do
@@ -102,6 +102,7 @@ import zipfile
 from datetime import datetime, timezone
 
 mode, output, base_url, release_notes_url, catalog_id, minimum_host_version, plugin_kit_version, *packages = sys.argv[1:]
+requested_plugin_kit_version = int(plugin_kit_version) if plugin_kit_version else None
 
 def directory_metrics(path: pathlib.Path):
     h = hashlib.sha256()
@@ -137,6 +138,7 @@ def package_root(path: pathlib.Path):
     return path
 
 entries = []
+plugin_kit_versions = set()
 for raw in packages:
     package_path = pathlib.Path(raw).expanduser().resolve()
     if not package_path.exists():
@@ -148,6 +150,15 @@ for raw in packages:
         raise SystemExit(f"Missing plugin.json: {root}")
 
     manifest = json.loads(manifest_path.read_text())
+    if "pluginKitVersion" not in manifest:
+        raise SystemExit(f"Missing pluginKitVersion: {manifest_path}")
+    manifest_plugin_kit_version = int(manifest["pluginKitVersion"])
+    plugin_kit_versions.add(manifest_plugin_kit_version)
+    if requested_plugin_kit_version is not None and manifest_plugin_kit_version != requested_plugin_kit_version:
+        raise SystemExit(
+            f"{manifest_path} uses pluginKitVersion {manifest_plugin_kit_version}, "
+            f"but --plugin-kit-version is {requested_plugin_kit_version}"
+        )
     digest, size = directory_metrics(package_path) if package_path.is_dir() else file_metrics(package_path)
     if mode == "debug":
         url = package_path.as_uri()
@@ -160,7 +171,7 @@ for raw in packages:
         "summary": manifest.get("summary", manifest.get("displayName", manifest["id"])),
         "version": manifest["version"],
         "minimumHostVersion": manifest.get("minHostVersion", minimum_host_version),
-        "pluginKitVersion": manifest.get("pluginKitVersion", int(plugin_kit_version)),
+        "pluginKitVersion": manifest_plugin_kit_version,
         "capabilities": manifest.get("capabilities", {
             "primaryPanel": False,
             "componentPanel": False,
@@ -175,12 +186,22 @@ for raw in packages:
         "releaseNotesURL": manifest.get("releaseNotesURL") or release_notes_url or None,
     })
 
+if requested_plugin_kit_version is None:
+    if len(plugin_kit_versions) != 1:
+        raise SystemExit(
+            "Packages must use one pluginKitVersion: "
+            + ", ".join(str(version) for version in sorted(plugin_kit_versions))
+        )
+    catalog_plugin_kit_version = next(iter(plugin_kit_versions))
+else:
+    catalog_plugin_kit_version = requested_plugin_kit_version
+
 catalog = {
     "schemaVersion": 1,
     "catalogID": catalog_id,
     "generatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "minimumHostVersion": minimum_host_version,
-    "pluginKitVersion": int(plugin_kit_version),
+    "pluginKitVersion": catalog_plugin_kit_version,
     "plugins": sorted(entries, key=lambda entry: entry["id"]),
     "revoked": [],
 }

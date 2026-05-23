@@ -4,7 +4,7 @@
   "summary": "触控板轻点模拟鼠标中键",
   "version": "1.0.4",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "MiddleClick.bundle",
   "factoryClass": "MiddleClickPlugin.MiddleClickPluginFactory",
   "build": {
@@ -16,5 +16,7 @@
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": ["accessibility"]
+  "permissions": [
+    "accessibility"
+  ]
 }

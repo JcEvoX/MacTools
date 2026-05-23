@@ -4,7 +4,7 @@
   "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
   "version": "1.0.0",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "XcodeClean.bundle",
   "factoryClass": "XcodeCleanPlugin.XcodeCleanPluginFactory",
   "build": {

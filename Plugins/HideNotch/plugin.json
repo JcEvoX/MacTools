@@ -4,7 +4,7 @@
   "summary": "自动遮挡刘海屏顶部区域",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "HideNotch.bundle",
   "factoryClass": "HideNotchPlugin.HideNotchPluginFactory",
   "build": {

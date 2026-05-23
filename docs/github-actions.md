@@ -103,7 +103,7 @@ PY
 make release
 ```
 
-命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --ff-only`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 和 Homebrew tap 仍由 `Release` workflow 完成。
+命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 和 Homebrew tap 仍由 `Release` workflow 完成。
 
 非交互示例：
 
@@ -153,7 +153,7 @@ Release 工作流会校验 `v0.9.3` 与 `project.yml` 的 `MARKETING_VERSION: 0.
 make release ARGS="--type plugin"
 ```
 
-默认 `auto` 模式会读取生产 `docs/plugins/catalog.json`，找出新插件、已手动 bump 的插件，以及包相关文件变化但版本未递增的插件；对未递增的插件会按选择的 `patch`/`minor`/`major` 自动更新 `plugin.json.version`。随后命令会运行 `make generate` 和增量发布计划检查，提交版本 bump，推送 `plugins-*` 批次 tag。
+默认 `auto` 模式会读取生产 `docs/plugins/catalog.json`，找出新插件、已手动 bump 的插件、`pluginKitVersion` 已变化的插件，以及包相关文件变化但版本未递增的插件；对未递增的插件会按选择的 `patch`/`minor`/`major` 自动更新 `plugin.json.version`。随后命令会运行 `make generate` 和增量发布计划检查，提交版本 bump，推送 `plugins-*` 批次 tag。
 
 常用非交互示例：
 
@@ -167,6 +167,8 @@ make release ARGS="--type plugin --version 1.1.0 --plugin-mode all --yes"
 
 应用内是否显示“可更新”只比较插件版本，不比较 batch tag 或 asset URL。因此只有实际变化的插件需要递增各自 `plugin.json.version`；未变化插件不会因为新批次 tag 而显示可更新或无效。
 
+`pluginKitVersion` 是插件 ABI 边界。升级 PluginKit 时必须全量重建插件包并递增每个插件自己的 `plugin.json.version`，推荐使用 `plugin_mode=all`。发布脚本会禁止把不同 `pluginKitVersion` 的插件混进同一个生产 catalog，避免新宿主加载旧 ABI 插件导致启动崩溃。
+
 推送插件批次 tag：
 
 ```bash
@@ -178,7 +180,7 @@ git push origin plugins-1.0.1
 
 1. 从 `origin/main` 读取上一版生产 `docs/plugins/catalog.json` 作为基线。
 2. 生成增量发布计划。`auto` 模式会选择新插件和 `plugin.json.version` 高于上一版 catalog 的插件。
-3. 如果插件自身源码或资源有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` 等共享代码的展示或宿主侧改动默认不会强制所有插件重发；需要全量重发时使用 `mode=all`，需要把特定共享路径视为包变更时使用 `--shared-path`。
+3. 如果插件自身源码、资源或 `pluginKitVersion` 有包相关变化，但插件版本没有递增，工作流会失败并提示需要 bump 对应 `plugin.json.version`。`MacToolsPluginKit` ABI 变化必须使用 `mode=all` 全量重发；展示或宿主侧改动如果也需要重发，可使用 `mode=all` 或传入特定 `--shared-path`。
 4. 只以 Release 配置构建计划中的插件 target。
 5. 用 Developer ID 重新签名这些插件 bundle，并打包为 `*.mactoolsplugin.zip`。
 6. 创建或更新对应的 `plugins-*` GitHub Release，并只上传本批变化插件的 zip。catalog-only 变化可以创建没有 zip asset 的插件 Release。

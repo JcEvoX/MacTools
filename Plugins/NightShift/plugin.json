@@ -4,7 +4,7 @@
   "summary": "降低蓝光，使屏幕颜色更暖",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "NightShift.bundle",
   "factoryClass": "NightShiftPlugin.NightShiftPluginFactory",
   "build": {

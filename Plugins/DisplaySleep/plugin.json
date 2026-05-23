@@ -4,7 +4,7 @@
   "summary": "一键让所有显示器立即进入休眠",
   "version": "1.0.0",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "DisplaySleep.bundle",
   "factoryClass": "DisplaySleepPlugin.DisplaySleepPluginFactory",
   "build": {

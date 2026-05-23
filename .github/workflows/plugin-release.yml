@@ -129,6 +129,7 @@ jobs:
               env.write(f"PLUGIN_CHANGED_COUNT={len(selected)}\n")
               env.write(f"PLUGIN_REMOVED_COUNT={len(removed)}\n")
               env.write(f"PLUGIN_FULL_RELEASE={'true' if plan.get('fullRelease') else 'false'}\n")
+              env.write(f"PLUGIN_KIT_VERSION={plan.get('pluginKitVersion')}\n")
 
           lines = [
               "## Plugin release plan",
@@ -303,6 +304,7 @@ jobs:
             --previous "$PLUGIN_PREVIOUS_CATALOG_PATH" \
             --updates "$PLUGIN_CATALOG_DELTA_PATH" \
             --plan "$PLUGIN_RELEASE_PLAN_PATH" \
+            --plugin-kit-version "$PLUGIN_KIT_VERSION" \
             --output "$PLUGIN_CATALOG_PATH"
 
           scripts/plugins/sign-plugin-catalog.sh \

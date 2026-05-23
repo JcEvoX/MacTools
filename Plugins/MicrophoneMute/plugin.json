@@ -4,7 +4,7 @@
   "summary": "快速静音或恢复默认麦克风输入",
   "version": "1.0.1",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "MicrophoneMute.bundle",
   "factoryClass": "MicrophoneMutePlugin.MicrophoneMutePluginFactory",
   "build": {

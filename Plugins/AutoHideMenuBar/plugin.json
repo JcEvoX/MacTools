@@ -4,7 +4,7 @@
   "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
   "version": "1.0.0",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "AutoHideMenuBar.bundle",
   "factoryClass": "AutoHideMenuBarPlugin.AutoHideMenuBarPluginFactory",
   "build": {

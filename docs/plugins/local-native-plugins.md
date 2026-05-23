@@ -28,7 +28,7 @@ Example.mactoolsplugin/
   "displayName": "Demo",
   "version": "1.0.0",
   "minHostVersion": "0.15.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "Example.bundle",
   "factoryClass": "Example.ExamplePluginFactory",
   "capabilities": {
@@ -128,8 +128,9 @@ Install and update are staged before moving into `Installed`. Per-plugin runtime
 ## Security Model
 
 - Only local package directories ending in `.mactoolsplugin` are accepted.
-- The manifest ID and bundle relative path are validated before loading code.
+- The manifest ID, versions, and bundle relative path are validated before loading code.
 - Host version and plugin kit version are checked before loading code.
+- Installed packages built for an older PluginKit are kept on disk but marked incompatible and are never passed to the native bundle loader.
 - The plugin bundle signature is validated before loading code.
 - When the host has a Team ID, the plugin bundle must have the same Team ID.
 - Untrusted third-party native plugins should use a future isolated process or XPC model instead of in-process bundle loading.

@@ -16,6 +16,7 @@ def parse_args():
     parser.add_argument("--updates", required=True)
     parser.add_argument("--plan", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--plugin-kit-version", type=int, required=True)
     return parser.parse_args()
 
 
@@ -36,11 +37,11 @@ def unsigned(catalog):
     return result
 
 
-def catalog_field(previous, updates, key, default=None):
-    if previous is not None and key in previous:
-        return previous[key]
+def update_field(previous, updates, key, default=None):
     if updates is not None and key in updates:
         return updates[key]
+    if previous is not None and key in previous:
+        return previous[key]
     return default
 
 
@@ -83,16 +84,33 @@ def main():
     for plugin_id in selected_ids:
         merged_entries[plugin_id] = update_entries[plugin_id]
 
-    schema_version = catalog_field(previous, updates, "schemaVersion", 1)
-    plugin_kit_version = catalog_field(previous, updates, "pluginKitVersion", 1)
+    schema_version = update_field(previous, updates, "schemaVersion", 1)
+    plugin_kit_version = update_field(previous, updates, "pluginKitVersion", args.plugin_kit_version)
+    if plugin_kit_version != args.plugin_kit_version:
+        raise SystemExit(
+            "Merged catalog pluginKitVersion does not match the expected release version "
+            f"({plugin_kit_version} != {args.plugin_kit_version})."
+        )
+    incompatible_entries = sorted(
+        entry["id"]
+        for entry in merged_entries.values()
+        if entry.get("pluginKitVersion", plugin_kit_version) != plugin_kit_version
+    )
+    if incompatible_entries:
+        raise SystemExit(
+            "Merged catalog would mix pluginKitVersion values. "
+            "Rebuild these plugins for the current PluginKit: "
+            + ", ".join(incompatible_entries)
+        )
+
     catalog = {
         "schemaVersion": schema_version,
-        "catalogID": catalog_field(previous, updates, "catalogID", DEFAULT_CATALOG_ID),
+        "catalogID": update_field(previous, updates, "catalogID", DEFAULT_CATALOG_ID),
         "generatedAt": now_iso8601(),
-        "minimumHostVersion": catalog_field(previous, updates, "minimumHostVersion", "0.15.2"),
+        "minimumHostVersion": update_field(previous, updates, "minimumHostVersion", "0.15.2"),
         "pluginKitVersion": plugin_kit_version,
         "plugins": sorted(merged_entries.values(), key=lambda entry: entry["id"]),
-        "revoked": catalog_field(previous, updates, "revoked", []),
+        "revoked": update_field(previous, updates, "revoked", []),
     }
 
     output = Path(args.output)

@@ -4,7 +4,7 @@
   "summary": "清空废纸篓中的所有项目",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "EmptyTrash.bundle",
   "factoryClass": "EmptyTrashPlugin.EmptyTrashPluginFactory",
   "build": {

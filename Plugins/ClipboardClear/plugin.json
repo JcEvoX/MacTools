@@ -4,7 +4,7 @@
   "summary": "一键清空当前剪贴板内容",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "ClipboardClear.bundle",
   "factoryClass": "ClipboardClearPlugin.ClipboardClearPluginFactory",
   "build": {

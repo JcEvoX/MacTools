@@ -4,7 +4,7 @@
   "summary": "自动调节显示器颜色以适应环境光",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayTrueColor.bundle",
   "factoryClass": "DisplayTrueColorPlugin.DisplayTrueColorPluginFactory",
   "build": {

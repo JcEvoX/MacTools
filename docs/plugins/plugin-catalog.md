@@ -14,7 +14,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   "catalogID": "com.ggbond.mactools.plugins",
   "generatedAt": "2026-05-16T12:00:00Z",
   "minimumHostVersion": "0.15.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "plugins": [
     {
       "id": "com.ggbond.mactools.demo",
@@ -22,7 +22,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
       "summary": "示例插件",
       "version": "1.0.0",
       "minimumHostVersion": "0.15.2",
-      "pluginKitVersion": 1,
+      "pluginKitVersion": 2,
       "capabilities": {
         "primaryPanel": true,
         "componentPanel": false,
@@ -128,7 +128,7 @@ Recommended production flow is an incremental batch plugin release:
 4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
 5. The `Plugin Release` GitHub Action reads the current production catalog from `origin/main`.
 6. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
-7. If package-relevant files changed inside a plugin but that plugin version did not increase, the workflow fails before signing or uploading. Shared host/PluginKit changes do not force every plugin package to be rebuilt by default; use `mode=all` or pass explicit `--shared-path` values when a shared change really requires repackaging existing plugins.
+7. If package-relevant files changed inside a plugin or its `pluginKitVersion` changed but that plugin version did not increase, the workflow fails before signing or uploading. PluginKit ABI changes require a full `mode=all` rebuild; other shared host changes can use `mode=all` or explicit `--shared-path` values when they really require repackaging existing plugins.
 8. The workflow builds, signs, zips, and uploads only the selected plugin packages.
 9. The workflow generates a delta catalog for the selected packages, merges those entries into the previous production catalog, and keeps unchanged plugin entries pointing at their existing assets.
 10. The merged catalog is signed and committed back to `docs/plugins/catalog.json`.
@@ -145,6 +145,8 @@ GitHub Release: plugins-1.0.1
 ```
 
 Unchanged plugin entries remain valid because the catalog preserves their previous URLs, checksums, and versions. They are not shown as updates in the app unless their catalog version is higher than the installed version.
+
+`pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase so installed users see an update. The catalog merge step rejects mixed PluginKit versions.
 
 When a full rebuild is needed, run the `Plugin Release` workflow manually with `mode=all`. To publish a controlled subset, use `mode=selected` and pass comma-separated plugin IDs or directory names in `plugins`.
 
@@ -198,6 +200,7 @@ scripts/plugins/merge-plugin-catalog.py \
   --previous docs/plugins/catalog.json \
   --updates build/PluginRelease/catalog.delta.json \
   --plan build/PluginRelease/plan.json \
+  --plugin-kit-version 2 \
   --output build/PluginRelease/catalog.merged.json
 
 scripts/plugins/generate-plugin-catalog.sh \

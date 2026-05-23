@@ -63,6 +63,34 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertFalse(record.requiresRestartToFullyUnload)
     }
 
+    func testInstallRejectsPreviousPluginKitPackage() throws {
+        let sourceURL = try makePackage(
+            id: "com.example.demo",
+            pluginKitVersion: 1
+        )
+        let store = makeStore()
+
+        XCTAssertThrowsError(try store.installPackage(from: sourceURL)) { error in
+            XCTAssertEqual(error as? PluginPackageManifestError, .unsupportedPluginKitVersion(1))
+        }
+    }
+
+    func testExistingPreviousPluginKitPackageIsMarkedIncompatible() throws {
+        let sourceURL = try makePackage(
+            id: "com.example.demo",
+            pluginKitVersion: 1
+        )
+        let store = makeStore()
+        let installedURL = store.installedDirectory
+            .appendingPathComponent("com.example.demo", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        try FileManager.default.copyItem(at: sourceURL, to: installedURL)
+
+        let record = try XCTUnwrap(store.installedRecords().first)
+
+        XCTAssertEqual(record.state, .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。"))
+    }
+
     func testUninstallDeletesPackageAndCanRemoveStorage() throws {
         let sourceURL = try makePackage(id: "com.example.demo")
         let store = makeStore()
@@ -115,7 +143,8 @@ final class PluginPackageStoreTests: XCTestCase {
     private func makePackage(
         id: String,
         version: String = "1.0.0",
-        bundleRelativePath: String = "Demo.bundle"
+        bundleRelativePath: String = "Demo.bundle",
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion
     ) throws -> URL {
         let packageURL = temporaryRoot
             .appendingPathComponent("Source", isDirectory: true)
@@ -134,6 +163,7 @@ final class PluginPackageStoreTests: XCTestCase {
             displayName: "Demo",
             version: version,
             minHostVersion: "0.1.0",
+            pluginKitVersion: pluginKitVersion,
             bundleRelativePath: bundleRelativePath
         )
         let data = try JSONEncoder().encode(manifest)

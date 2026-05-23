@@ -4,7 +4,7 @@
   "summary": "阻止系统空闲休眠，允许显示器息屏",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "KeepAwake.bundle",
   "factoryClass": "KeepAwakePlugin.KeepAwakePluginFactory",
   "build": {

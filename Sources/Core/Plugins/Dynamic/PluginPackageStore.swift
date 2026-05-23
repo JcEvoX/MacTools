@@ -92,14 +92,20 @@ final class PluginPackageStore {
             .filter { $0.pathExtension == "mactoolsplugin" }
             .compactMap { packageURL in
                 do {
-                    let manifest = try PluginPackageManifestLoader.load(
-                        from: packageURL,
-                        hostVersion: hostVersion
-                    )
+                    let manifest = try PluginPackageManifestLoader.decode(from: packageURL)
+                    try PluginPackageManifestLoader.validatePackageIdentity(manifest)
                     let bundleURL = packageURL.appendingPathComponent(manifest.bundleRelativePath)
                     let state: PluginPackageRecord.State
 
-                    if fileManager.fileExists(atPath: bundleURL.path) {
+                    if manifest.pluginKitVersion != PluginPackageManifestLoader.supportedPluginKitVersion {
+                        state = .incompatible(
+                            "插件 SDK 版本不兼容，已安装版本为 \(manifest.pluginKitVersion)，当前支持版本为 \(PluginPackageManifestLoader.supportedPluginKitVersion)。请更新插件。"
+                        )
+                    } else if !PluginVersionComparator.isVersion(hostVersion, atLeast: manifest.minHostVersion) {
+                        state = .incompatible(
+                            "插件需要 MacTools \(manifest.minHostVersion) 或更高版本，当前版本为 \(hostVersion)。"
+                        )
+                    } else if fileManager.fileExists(atPath: bundleURL.path) {
                         state = disabledPluginIDs.contains(manifest.id) ? .disabled : .enabled
                     } else {
                         state = .failed("插件入口不存在：\(bundleURL.path)")

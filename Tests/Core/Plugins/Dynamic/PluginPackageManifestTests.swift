@@ -15,6 +15,21 @@ final class PluginPackageManifestTests: XCTestCase {
         XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0"))
     }
 
+    func testManifestValidationRejectsPreviousPluginKitVersion() {
+        let manifest = PluginPackageManifest(
+            id: "com.example.demo",
+            displayName: "Demo",
+            version: "1.0.0",
+            minHostVersion: "0.15.0",
+            pluginKitVersion: 1,
+            bundleRelativePath: "Demo.bundle"
+        )
+
+        XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0")) { error in
+            XCTAssertEqual(error as? PluginPackageManifestError, .unsupportedPluginKitVersion(1))
+        }
+    }
+
     func testManifestValidationRejectsUnsafeBundlePath() {
         let manifest = PluginPackageManifest(
             id: "com.example.demo",
@@ -26,6 +41,20 @@ final class PluginPackageManifestTests: XCTestCase {
 
         XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0")) { error in
             XCTAssertEqual(error as? PluginPackageManifestError, .invalidBundleRelativePath("../Demo.bundle"))
+        }
+    }
+
+    func testManifestValidationRejectsInvalidVersion() {
+        let manifest = PluginPackageManifest(
+            id: "com.example.demo",
+            displayName: "Demo",
+            version: "1.0-beta",
+            minHostVersion: "0.15.0",
+            bundleRelativePath: "Demo.bundle"
+        )
+
+        XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0")) { error in
+            XCTAssertEqual(error as? PluginPackageManifestError, .invalidVersion("1.0-beta"))
         }
     }
 

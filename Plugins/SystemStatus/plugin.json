@@ -4,7 +4,7 @@
   "summary": "实时查看系统状态",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "SystemStatus.bundle",
   "factoryClass": "SystemStatusPlugin.SystemStatusPluginFactory",
   "build": {

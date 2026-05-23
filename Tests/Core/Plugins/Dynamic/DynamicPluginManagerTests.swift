@@ -67,7 +67,7 @@ final class DynamicPluginManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.loadInstalledPlugins().map(\.metadata.id), ["com.example.demo"])
 
-        XCTAssertEqual(loader.receivedRecordIDBatches, [["com.example.demo"], []])
+        XCTAssertEqual(loader.receivedRecordIDBatches, [["com.example.demo"]])
         XCTAssertTrue(plugin.deactivationReasons.isEmpty)
     }
 
@@ -137,7 +137,6 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty)
         XCTAssertEqual(loader.receivedRecordIDBatches, [
             ["com.example.alpha", "com.example.beta"],
-            [],
         ])
         XCTAssertEqual(pluginChangeBatches, [[]])
         XCTAssertEqual(alphaPlugin.deactivationReasons, [.updating])
@@ -223,6 +222,32 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
     }
 
+    func testPreviousPluginKitPackageIsNotPassedToLoader() throws {
+        let sourceURL = try makePackage(
+            id: "com.example.demo",
+            version: "1.0.0",
+            pluginKitVersion: 1
+        )
+        let store = makeStore()
+        let installedURL = store.installedDirectory
+            .appendingPathComponent("com.example.demo", isDirectory: true)
+            .appendingPathExtension("mactoolsplugin")
+        try FileManager.default.copyItem(at: sourceURL, to: installedURL)
+        let loader = StubDynamicPluginLoader { _ in
+            XCTFail("Incompatible plugin packages must not be passed to the dynamic loader.")
+            return []
+        }
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+
+        XCTAssertTrue(manager.loadInstalledPlugins().isEmpty)
+        XCTAssertTrue(loader.receivedRecordIDBatches.isEmpty)
+        XCTAssertTrue(manager.installedCapabilitiesByID().isEmpty)
+        XCTAssertEqual(
+            manager.pluginManagementItems.first?.state,
+            .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。")
+        )
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,
@@ -235,7 +260,8 @@ final class DynamicPluginManagerTests: XCTestCase {
         id: String,
         version: String = "1.0.0",
         displayName: String = "Demo",
-        bundleRelativePath: String = "Demo.bundle"
+        bundleRelativePath: String = "Demo.bundle",
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion
     ) throws -> URL {
         let packageURL = temporaryRoot
             .appendingPathComponent("Source", isDirectory: true)
@@ -250,6 +276,7 @@ final class DynamicPluginManagerTests: XCTestCase {
             displayName: displayName,
             version: version,
             minHostVersion: "0.1.0",
+            pluginKitVersion: pluginKitVersion,
             bundleRelativePath: bundleRelativePath
         )
         let data = try JSONEncoder().encode(manifest)

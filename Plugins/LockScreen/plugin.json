@@ -4,7 +4,7 @@
   "summary": "一键立即锁定屏幕，进入密码解锁界面",
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
-  "pluginKitVersion": 1,
+  "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",
   "factoryClass": "LockScreenPlugin.LockScreenPluginFactory",
   "build": {
