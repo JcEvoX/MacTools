@@ -257,8 +257,17 @@ def fetch_release_refs(remote: str, dry_run: bool) -> None:
 
 
 def sync_branch_after_confirm(remote: str, branch: str, dry_run: bool) -> None:
-    info(f"Syncing {remote}/{branch}")
-    run(["git", "pull", "--ff-only", remote, branch], dry_run=dry_run, mutates=True)
+    info(f"Rebasing local commits onto {remote}/{branch}")
+    command = ["git", "pull", "--rebase", remote, branch]
+    if dry_run:
+        run(command, dry_run=dry_run, mutates=True)
+    else:
+        result = subprocess.run(command, cwd=ROOT_DIR, text=True, check=False)
+        if result.returncode != 0:
+            fail(
+                "同步远端失败。若 rebase 发生冲突，请解决冲突后执行 "
+                "`git rebase --continue`，或执行 `git rebase --abort` 回到发布前状态后重新运行 make release。"
+            )
     if dry_run:
         warn_dirty_worktree_for_dry_run()
     else:
