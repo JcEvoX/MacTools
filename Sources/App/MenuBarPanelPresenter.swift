@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum MenuBarPanelWindowRegistry {
@@ -33,6 +34,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let featureHostingController: NSHostingController<MenuBarContent>
     private let componentHostingController: NSHostingController<ComponentPanelContent>
     private var appearanceObserver: NSObjectProtocol?
+    private var componentItemsObserver: AnyCancellable?
 
     init(
         pluginHost: PluginHost,
@@ -74,6 +76,7 @@ final class MenuBarPanelPresenter: NSObject {
         configure(featurePopover, contentViewController: featureHostingController)
         configure(componentPopover, contentViewController: componentHostingController)
         observeAppearancePreference()
+        observeComponentItems()
         applyCurrentAppearance()
         prewarm()
     }
@@ -83,6 +86,7 @@ final class MenuBarPanelPresenter: NSObject {
             if let appearanceObserver {
                 NotificationCenter.default.removeObserver(appearanceObserver)
             }
+            componentItemsObserver?.cancel()
         }
     }
 
@@ -224,6 +228,16 @@ final class MenuBarPanelPresenter: NSObject {
         }
     }
 
+    private func observeComponentItems() {
+        componentItemsObserver = pluginHost.$componentItems
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.resizeComponentPopoverIfNeeded()
+                }
+            }
+    }
+
     private func applyCurrentAppearance() {
         let preference = AppAppearancePreference.stored()
         preference.apply(to: featureHostingController.view)
@@ -243,6 +257,33 @@ final class MenuBarPanelPresenter: NSObject {
         }
 
         featurePopover.contentSize = NSSize(width: width, height: height)
+    }
+
+    private func resizeComponentPopoverIfNeeded() {
+        guard componentPopover.isShown else {
+            return
+        }
+
+        let height = ComponentPanelLayout.preferredPanelHeight(
+            for: pluginHost.componentItems,
+            screen: componentPopover.contentViewController?.view.window?.screen ?? NSScreen.main
+        )
+        let width = ComponentPanelLayout.panelWidth
+        let currentSize = componentPopover.contentSize
+        guard
+            abs(currentSize.width - width) > 0.5
+                || abs(currentSize.height - height) > 0.5
+        else {
+            return
+        }
+
+        componentHostingController.rootView = ComponentPanelContent(
+            pluginHost: pluginHost,
+            panelHeight: height,
+            isPanelVisible: true,
+            onDismiss: onDismiss
+        )
+        componentPopover.contentSize = NSSize(width: width, height: height)
     }
 }
 
