@@ -8,7 +8,7 @@ final class IPOverviewPluginTests: XCTestCase {
         let plugin = IPOverviewPlugin()
 
         XCTAssertEqual(plugin.metadata.id, "ip-overview")
-        XCTAssertEqual(plugin.metadata.title, "IP 概览")
+        XCTAssertEqual(plugin.metadata.title, "IP 检测")
     }
 
     func testPluginUsesPrimaryPanelAndConfiguration() {

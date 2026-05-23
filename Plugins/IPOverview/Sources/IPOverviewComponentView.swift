@@ -47,7 +47,7 @@ struct IPOverviewComponentView: View {
                         .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("IP 概览")
+                        Text("IP 检测")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                         Text(viewModel.snapshot.preferredGeoInfo?.locationText ?? "公网、归属地与连通性")

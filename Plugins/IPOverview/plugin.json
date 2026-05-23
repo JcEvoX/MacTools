@@ -1,8 +1,8 @@
 {
   "id": "ip-overview",
-  "displayName": "IP 概览",
+  "displayName": "IP 检测",
   "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.10",
   "pluginKitVersion": 2,
   "bundleRelativePath": "IPOverview.bundle",

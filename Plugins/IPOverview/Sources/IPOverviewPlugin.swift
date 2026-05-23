@@ -29,7 +29,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     let metadata = PluginMetadata(
         id: "ip-overview",
-        title: "IP 概览",
+        title: "IP 检测",
         iconName: "network",
         iconTint: Color(nsColor: .systemBlue),
         order: 12,
