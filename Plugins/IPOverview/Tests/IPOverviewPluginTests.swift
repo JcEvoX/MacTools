@@ -11,28 +11,35 @@ final class IPOverviewPluginTests: XCTestCase {
         XCTAssertEqual(plugin.metadata.title, "IP 概览")
     }
 
-    func testPluginIsComponentOnly() {
+    func testPluginUsesPrimaryPanelAndConfiguration() {
         let plugin = IPOverviewPlugin()
 
-        XCTAssertNil(plugin.primaryPanel)
-        XCTAssertNotNil(plugin.componentPanel)
+        XCTAssertNotNil(plugin.primaryPanel)
+        XCTAssertNil(plugin.componentPanel)
+        XCTAssertNotNil(plugin.configuration)
     }
 
-    func testComponentUsesCompactLandingSpan() {
+    func testPrimaryPanelStartsCollapsed() {
         let plugin = IPOverviewPlugin()
 
-        XCTAssertEqual(plugin.descriptor.span, .fourByTwo)
+        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
+        XCTAssertFalse(plugin.primaryPanelState.isExpanded)
+        XCTAssertNil(plugin.primaryPanelState.detail)
     }
 
-    func testComponentExpandsForDetails() {
+    func testPrimaryPanelExpandsWithActions() {
         let viewModel = IPOverviewViewModel(storage: IPOverviewPluginTestStorage())
         let plugin = IPOverviewPlugin(viewModel: viewModel)
 
-        XCTAssertEqual(plugin.descriptor.span, .fourByTwo)
+        plugin.handleAction(.setDisclosureExpanded(true))
 
-        viewModel.showDetails()
-
-        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 8)!)
+        XCTAssertTrue(plugin.primaryPanelState.isExpanded)
+        XCTAssertEqual(plugin.primaryPanelState.detail?.primaryControls.map(\.id), [
+            IPOverviewPlugin.ControlID.refresh,
+            IPOverviewPlugin.ControlID.copyIP,
+            IPOverviewPlugin.ControlID.copyReport,
+            IPOverviewPlugin.ControlID.openDetails
+        ])
     }
 }
 

@@ -2,9 +2,21 @@ import SwiftUI
 
 struct IPOverviewComponentView: View {
     @ObservedObject var viewModel: IPOverviewViewModel
+    let startsInDetails: Bool
+    let showsBackButton: Bool
     @State private var customName = ""
     @State private var customURL = ""
     @State private var addError = ""
+
+    init(
+        viewModel: IPOverviewViewModel,
+        startsInDetails: Bool = false,
+        showsBackButton: Bool = true
+    ) {
+        self.viewModel = viewModel
+        self.startsInDetails = startsInDetails
+        self.showsBackButton = showsBackButton
+    }
 
     var body: some View {
         Group {
@@ -16,6 +28,9 @@ struct IPOverviewComponentView: View {
         }
         .onAppear {
             viewModel.refreshIfNeeded()
+            if startsInDetails {
+                viewModel.showDetails()
+            }
         }
     }
 
@@ -92,13 +107,15 @@ struct IPOverviewComponentView: View {
 
     private var detailHeader: some View {
         HStack(spacing: 8) {
-            Button {
-                viewModel.showSummary()
-            } label: {
-                Image(systemName: "chevron.left")
+            if showsBackButton {
+                Button {
+                    viewModel.showSummary()
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .help("返回概览")
             }
-            .buttonStyle(.borderless)
-            .help("返回概览")
 
             Text("IP 详情")
                 .font(.headline)

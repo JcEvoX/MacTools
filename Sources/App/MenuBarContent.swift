@@ -379,6 +379,8 @@ struct MenuBarContent: View {
     static let zshConfigOpenSettingsActionID = "execute"
     static let batteryChargeLimitPluginID = "battery-charge-limit"
     static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
+    static let ipOverviewPluginID = "ip-overview"
+    static let ipOverviewOpenDetailsActionID = "ip-overview-open-details"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -540,6 +542,12 @@ struct MenuBarContent: View {
             return
         }
 
+        if isIPOverviewOpenDetailsAction(pluginID: item.id, controlID: controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
+            onDismiss()
+            return
+        }
+
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -601,6 +609,11 @@ struct MenuBarContent: View {
             return
         }
 
+        if isIPOverviewOpenDetailsAction(pluginID: action.pluginID, controlID: action.controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
+            return
+        }
+
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -625,6 +638,10 @@ struct MenuBarContent: View {
 
     private func isBatteryChargeLimitManageSettingsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
+    }
+
+    private func isIPOverviewOpenDetailsAction(pluginID: String, controlID: String) -> Bool {
+        pluginID == Self.ipOverviewPluginID && controlID == Self.ipOverviewOpenDetailsActionID
     }
 
     private func presentDiskCleanDetails() {

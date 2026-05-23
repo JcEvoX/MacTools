@@ -2,7 +2,7 @@
   "id": "ip-overview",
   "displayName": "IP 概览",
   "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.10",
   "pluginKitVersion": 2,
   "bundleRelativePath": "IPOverview.bundle",
@@ -12,9 +12,9 @@
     "scheme": "IpOverviewPlugin"
   },
   "capabilities": {
-    "primaryPanel": false,
-    "componentPanel": true,
-    "configuration": false
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
   },
   "permissions": []
 }
