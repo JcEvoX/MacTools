@@ -3,11 +3,11 @@ import XCTest
 @testable import MacTools
 
 final class MenuBarStatusItemControllerTests: XCTestCase {
-    func testNilEventDefaultsToFeaturePanel() {
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: nil), .featurePanel)
+    func testNilEventDefaultsToComponentPanel() {
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: nil), .componentPanel)
     }
 
-    func testLeftMouseDownOpensFeaturePanelImmediately() {
+    func testLeftMouseDownOpensComponentPanelImmediately() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseDown,
             location: .zero,
@@ -20,10 +20,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
     }
 
-    func testLeftMouseUpStillOpensFeaturePanelForProgrammaticFallback() {
+    func testLeftMouseUpStillOpensComponentPanelForProgrammaticFallback() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -36,10 +36,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
     }
 
-    func testRightMouseDownOpensComponentPanelImmediately() {
+    func testRightMouseDownOpensFeaturePanelImmediately() {
         let event = NSEvent.mouseEvent(
             with: .rightMouseDown,
             location: .zero,
@@ -52,10 +52,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    func testRightMouseUpStillOpensComponentPanelForProgrammaticFallback() {
+    func testRightMouseUpStillOpensFeaturePanelForProgrammaticFallback() {
         let event = NSEvent.mouseEvent(
             with: .rightMouseUp,
             location: .zero,
@@ -68,10 +68,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    func testControlClickOpensComponentPanel() {
+    func testControlClickOpensFeaturePanel() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -84,6 +84,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 }

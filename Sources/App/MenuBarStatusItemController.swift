@@ -9,16 +9,16 @@ enum MenuBarStatusItemInvocation: Equatable {
 
     static func invocation(for event: NSEvent?) -> MenuBarStatusItemInvocation {
         guard let event else {
-            return .featurePanel
+            return .componentPanel
         }
 
         if event.type == .rightMouseDown
             || event.type == .rightMouseUp
             || event.modifierFlags.contains(.control) {
-            return .componentPanel
+            return .featurePanel
         }
 
-        return .featurePanel
+        return .componentPanel
     }
 }
 
