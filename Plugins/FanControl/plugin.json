@@ -2,7 +2,7 @@
   "id": "fan-control",
   "displayName": "风扇控制",
   "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FanControl.bundle",
@@ -21,5 +21,6 @@
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "system"
 }

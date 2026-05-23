@@ -2,7 +2,7 @@
   "id": "display-sleep",
   "displayName": "显示器休眠",
   "summary": "一键让所有显示器立即进入休眠",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplaySleep.bundle",
@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": false
   },
-  "permissions": []
+  "permissions": [],
+  "category": "display"
 }

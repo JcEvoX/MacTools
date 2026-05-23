@@ -36,9 +36,12 @@ Example.mactoolsplugin/
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "productivity"
 }
 ```
+
+`category` is optional and is used by the marketplace and "已安装" list to group plugins. Supported values: `display`, `audio`, `system`, `storage`, `productivity`, `monitoring`. Unknown or omitted values fall back to "其他".
 
 The plugin bundle must expose a factory that conforms to `MacToolsPluginBundleFactory`. The factory returns a `PluginProvider`, and the provider returns exactly one `MacToolsPlugin` instance for the package.
 

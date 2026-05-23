@@ -23,6 +23,7 @@ struct PluginPackageManifest: Codable, Equatable {
     let factoryClass: String?
     let capabilities: Capabilities
     let permissions: [String]
+    let category: String?
 
     init(
         id: String,
@@ -33,7 +34,8 @@ struct PluginPackageManifest: Codable, Equatable {
         bundleRelativePath: String,
         factoryClass: String? = nil,
         capabilities: Capabilities = Capabilities(),
-        permissions: [String] = []
+        permissions: [String] = [],
+        category: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -44,6 +46,7 @@ struct PluginPackageManifest: Codable, Equatable {
         self.factoryClass = factoryClass
         self.capabilities = capabilities
         self.permissions = permissions
+        self.category = category
     }
 }
 

@@ -2,7 +2,7 @@
   "id": "fix-damaged-app",
   "displayName": "修复损坏应用",
   "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FixDamagedApp.bundle",
@@ -14,7 +14,8 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": true,
-    "configuration": false
+    "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "productivity"
 }

@@ -569,6 +569,7 @@ public struct PluginFeatureManagementItem: Identifiable {
     public let isVisible: Bool
     public let isActive: Bool
     public let presentation: PluginFeaturePresentation
+    public let category: String?
 
     public init(
         id: String,
@@ -578,7 +579,8 @@ public struct PluginFeatureManagementItem: Identifiable {
         iconTint: Color,
         isVisible: Bool,
         isActive: Bool,
-        presentation: PluginFeaturePresentation
+        presentation: PluginFeaturePresentation,
+        category: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -588,6 +590,7 @@ public struct PluginFeatureManagementItem: Identifiable {
         self.isVisible = isVisible
         self.isActive = isActive
         self.presentation = presentation
+        self.category = category
     }
 }
 
