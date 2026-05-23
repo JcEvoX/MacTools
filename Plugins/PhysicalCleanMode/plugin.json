@@ -2,7 +2,7 @@
   "id": "physical-clean-mode",
   "displayName": "清洁模式",
   "summary": "屏幕全黑并临时禁用键盘输入",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "PhysicalCleanMode.bundle",

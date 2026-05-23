@@ -2,7 +2,7 @@
   "id": "zsh-config",
   "displayName": "zsh 配置",
   "summary": "快速编辑 ~/.zshrc 等 zsh 配置文件，支持内联编辑和常用片段快速插入",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ZshConfig.bundle",
