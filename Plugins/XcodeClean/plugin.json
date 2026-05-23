@@ -1,0 +1,20 @@
+{
+  "id": "xcode-clean",
+  "displayName": "Xcode 清理",
+  "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "XcodeClean.bundle",
+  "factoryClass": "XcodeCleanPlugin.XcodeCleanPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "XcodeCleanPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": []
+}
