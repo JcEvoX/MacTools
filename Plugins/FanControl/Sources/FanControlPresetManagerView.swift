@@ -25,7 +25,7 @@ struct FanControlPresetManagerView: View {
                 ForEach(FanControlPresetStore.builtInPresets) { preset in
                     BuiltInPresetRow(preset: preset, fanSnapshot: fanSnapshot)
                     if preset.id != FanControlPresetStore.builtInPresets.last?.id {
-                        Divider().padding(.leading, 16)
+                        PluginSettingsListDivider()
                     }
                 }
             }
@@ -61,7 +61,7 @@ struct FanControlPresetManagerView: View {
                             onDelete: { presetStore.deleteCustomPreset(id: preset.id) }
                         )
                         if preset.id != presetStore.customPresets.last?.id {
-                            Divider().padding(.leading, 16)
+                            PluginSettingsListDivider()
                         }
                     }
                 }
@@ -75,13 +75,13 @@ struct FanControlPresetManagerView: View {
             Spacer()
             VStack(spacing: 8) {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 28))
+                    .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
                     .foregroundStyle(.secondary)
                 Text("点击「添加」创建自定义转速预设")
                     .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 24)
+            .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
         .pluginSettingsCardBackground(.host)
@@ -107,10 +107,10 @@ private struct BuiltInPresetRow: View {
     let fanSnapshot: FanSnapshot
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                 Text(preset.name)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Text(subtitle)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
@@ -125,8 +125,7 @@ private struct BuiltInPresetRow: View {
                     Capsule().fill(Color(nsColor: .quaternaryLabelColor).opacity(0.4))
                 )
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        .pluginSettingsListRowPadding()
     }
 
     private var subtitle: String {
@@ -190,11 +189,10 @@ private struct CustomPresetRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            // Name row
-            HStack(spacing: 6) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 TextField("预设名称", text: $nameText)
                     .textFieldStyle(.plain)
-                    .font(PluginSettingsTheme.Typography.rowTitle)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(
@@ -232,8 +230,7 @@ private struct CustomPresetRow: View {
                 .help("删除此预设")
             }
 
-            // RPM slider row
-            HStack(spacing: 10) {
+            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 Slider(
                     value: $sliderValue,
                     in: Double(FanRPMLimits.absoluteMin)...sliderMax,
@@ -251,8 +248,7 @@ private struct CustomPresetRow: View {
                     .frame(width: 80, alignment: .trailing)
             }
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+        .pluginSettingsListRowPadding(interactive: true)
         .contentShape(Rectangle())
         .onTapGesture { resignFocus() }
         // Sync external changes (e.g. from panel slider) back to local state

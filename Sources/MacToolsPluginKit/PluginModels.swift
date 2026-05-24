@@ -650,6 +650,8 @@ public struct PluginPermissionCard: Identifiable {
     public let permissionID: String
     public let title: String
     public let description: String
+    public let iconSystemImage: String
+    public let iconVisualScale: CGFloat
     public let statusText: String
     public let statusSystemImage: String
     public let statusTone: PluginStatusTone
@@ -662,6 +664,8 @@ public struct PluginPermissionCard: Identifiable {
         permissionID: String,
         title: String,
         description: String,
+        iconSystemImage: String,
+        iconVisualScale: CGFloat = 1,
         statusText: String,
         statusSystemImage: String,
         statusTone: PluginStatusTone,
@@ -673,6 +677,8 @@ public struct PluginPermissionCard: Identifiable {
         self.permissionID = permissionID
         self.title = title
         self.description = description
+        self.iconSystemImage = iconSystemImage
+        self.iconVisualScale = iconVisualScale
         self.statusText = statusText
         self.statusSystemImage = statusSystemImage
         self.statusTone = statusTone

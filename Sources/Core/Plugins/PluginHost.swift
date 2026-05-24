@@ -937,6 +937,8 @@ final class PluginHost: ObservableObject {
                     permissionID: requirement.id,
                     title: requirement.title,
                     description: requirement.description,
+                    iconSystemImage: permissionIconName(for: requirement.kind),
+                    iconVisualScale: permissionIconVisualScale(for: requirement.kind),
                     statusText: state.statusText ?? (state.isGranted ? "已授权" : "未授权"),
                     statusSystemImage: state.statusSystemImage ?? (state.isGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"),
                     statusTone: state.statusTone ?? (state.isGranted ? .positive : .caution),
@@ -1475,6 +1477,26 @@ final class PluginHost: ObservableObject {
             return isGranted ? "检查授权状态" : "请求授权"
         case .automation:
             return "打开设置"
+        }
+    }
+
+    private func permissionIconName(for kind: PluginPermissionKind) -> String {
+        switch kind {
+        case .accessibility:
+            return "accessibility"
+        case .calendarFullAccess:
+            return "calendar"
+        case .automation:
+            return "cursorarrow.click.2"
+        }
+    }
+
+    private func permissionIconVisualScale(for kind: PluginPermissionKind) -> CGFloat {
+        switch kind {
+        case .accessibility:
+            return 1.18
+        case .calendarFullAccess, .automation:
+            return 1
         }
     }
 }

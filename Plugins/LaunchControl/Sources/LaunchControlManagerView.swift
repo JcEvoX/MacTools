@@ -198,7 +198,7 @@ struct LaunchControlManagerView: View {
     private var placeholder: some View {
         VStack(spacing: 10) {
             Image(systemName: "list.bullet.rectangle")
-                .font(.system(size: 30, weight: .regular))
+                .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon, weight: .regular))
                 .foregroundStyle(.secondary)
             Text(controller.snapshot.isRefreshing ? "正在读取启动项" : "选择一个启动项")
                 .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))

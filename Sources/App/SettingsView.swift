@@ -49,18 +49,21 @@ private struct PermissionSettingsRow: View {
     let onAction: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: card.statusSystemImage)
-                .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
-                .foregroundStyle(statusColor)
-                .frame(width: PluginSettingsTheme.Size.rowIcon)
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: card.iconSystemImage)
+                .pluginSettingsRowIconStyle(visualScale: card.iconVisualScale)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
                     Text(card.title)
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                    Text(card.statusText)
+                    Label {
+                        Text(card.statusText)
+                            .lineLimit(1)
+                    } icon: {
+                        Image(systemName: card.statusSystemImage)
+                    }
                         .font(PluginSettingsTheme.Typography.secondaryLabel)
                         .foregroundStyle(statusColor)
                 }
@@ -572,7 +575,7 @@ private struct PluginSettingsCardSection: View {
                     )
 
                     if index < cards.count - 1 {
-                        SettingsSectionDivider()
+                        PluginSettingsListDivider()
                     }
                 }
             }
@@ -651,7 +654,7 @@ private struct PluginPermissionCardSection: View {
                     .padding(.vertical, 10)
 
                     if index < cards.count - 1 {
-                        SettingsSectionDivider()
+                        PluginSettingsListDivider()
                     }
                 }
             }
@@ -697,15 +700,6 @@ private struct PluginConfigurationSection<Content: View>: View {
                 content
             }
         }
-    }
-}
-
-private struct SettingsSectionDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(SettingsStyle.separator)
-            .frame(height: 1)
-            .padding(.horizontal, 16)
     }
 }
 

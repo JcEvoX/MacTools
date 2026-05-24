@@ -122,7 +122,7 @@ struct ShortcutSettingsRowsView: View {
                 )
 
                 if index < items.count - 1 {
-                    ShortcutSettingsDivider()
+                    PluginSettingsListDivider()
                 }
             }
         }
@@ -199,18 +199,8 @@ private struct ShortcutSettingsRow: View {
                 .frame(width: ShortcutSettingsLayout.controlColumnWidth)
             }
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+        .pluginSettingsListRowPadding(interactive: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct ShortcutSettingsDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(SettingsStyle.separator)
-            .frame(height: 1)
-            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
     }
 }
 
@@ -277,9 +267,8 @@ private struct ShortcutActionGroup: View {
 
 private struct ShortcutActionDivider: View {
     var body: some View {
-        Rectangle()
-            .fill(SettingsStyle.separator)
-            .frame(width: 1, height: 18)
+        PluginSettingsListDivider(.vertical)
+            .frame(height: 18)
             .padding(.vertical, 5)
     }
 }

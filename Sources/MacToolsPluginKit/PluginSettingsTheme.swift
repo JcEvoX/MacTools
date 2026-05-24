@@ -35,6 +35,10 @@ public enum PluginSettingsTheme {
             .caption2.weight(.medium)
         }
 
+        public static var rowIcon: Font {
+            .caption.weight(.semibold)
+        }
+
         public static var controlLabel: Font {
             .callout
         }
@@ -74,6 +78,7 @@ public enum PluginSettingsTheme {
         public static let rowIcon: CGFloat = 18
         public static let controlHeight: CGFloat = 30
         public static let metricIcon: CGFloat = 36
+        public static let emptyStateIcon: CGFloat = 28
     }
 
     public enum Palette {
@@ -162,6 +167,11 @@ public enum PluginSettingsCardBackgroundStyle {
     case recessed
 }
 
+public enum PluginSettingsListDividerStyle {
+    case horizontal
+    case vertical
+}
+
 public struct PluginSettingsCardBackground: ViewModifier {
     private let style: PluginSettingsCardBackgroundStyle
 
@@ -199,11 +209,75 @@ public struct PluginSettingsCardBackground: ViewModifier {
 
 }
 
+public struct PluginSettingsListDivider: View {
+    private let style: PluginSettingsListDividerStyle
+    private let leadingInset: CGFloat
+    private let trailingInset: CGFloat
+
+    public init(
+        _ style: PluginSettingsListDividerStyle = .horizontal,
+        leadingInset: CGFloat = PluginSettingsTheme.Spacing.rowHorizontal,
+        trailingInset: CGFloat = PluginSettingsTheme.Spacing.rowHorizontal
+    ) {
+        self.style = style
+        self.leadingInset = leadingInset
+        self.trailingInset = trailingInset
+    }
+
+    public var body: some View {
+        switch style {
+        case .horizontal:
+            Rectangle()
+                .fill(PluginSettingsTheme.Palette.separator)
+                .frame(height: PluginSettingsTheme.Stroke.standard)
+                .padding(.leading, leadingInset)
+                .padding(.trailing, trailingInset)
+        case .vertical:
+            Rectangle()
+                .fill(PluginSettingsTheme.Palette.separator)
+                .frame(width: PluginSettingsTheme.Stroke.standard)
+        }
+    }
+}
+
 public extension View {
     func pluginSettingsCardBackground(
         _ style: PluginSettingsCardBackgroundStyle = .host
     ) -> some View {
         modifier(PluginSettingsCardBackground(style))
+    }
+
+    func pluginSettingsRowIconStyle(visualScale: CGFloat = 1) -> some View {
+        pluginSettingsRowIconStyle(
+            HierarchicalShapeStyle.secondary,
+            visualScale: visualScale
+        )
+    }
+
+    func pluginSettingsRowIconStyle<S: ShapeStyle>(
+        _ foregroundStyle: S,
+        visualScale: CGFloat = 1
+    ) -> some View {
+        self
+            .font(PluginSettingsTheme.Typography.rowIcon)
+            .foregroundStyle(foregroundStyle)
+            .symbolRenderingMode(.monochrome)
+            .scaleEffect(visualScale)
+            .frame(
+                width: PluginSettingsTheme.Size.rowIcon,
+                height: PluginSettingsTheme.Size.rowIcon
+            )
+    }
+
+    func pluginSettingsListRowPadding(interactive: Bool = false) -> some View {
+        self
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            .padding(
+                .vertical,
+                interactive
+                    ? PluginSettingsTheme.Spacing.interactiveRowVertical
+                    : PluginSettingsTheme.Spacing.rowVertical
+            )
     }
 }
 

@@ -184,14 +184,12 @@ struct ZshConfigEditorView: View {
                 withAnimation(.easeInOut(duration: 0.15)) { showFileInfo.toggle() }
             } label: {
                 Image(systemName: showFileInfo ? "info.circle.fill" : "info.circle")
-                    .font(.system(size: 14))
-                    .foregroundStyle(showFileInfo ? Color.accentColor : .secondary)
+                    .pluginSettingsRowIconStyle(showFileInfo ? Color.accentColor : .secondary)
             }
             .buttonStyle(.plain)
             .help("查看加载时机与推荐用途")
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        .pluginSettingsListRowPadding()
         .pluginSettingsCardBackground(.host)
 
         if showFileInfo {
@@ -202,7 +200,7 @@ struct ZshConfigEditorView: View {
     private var fileInfoPanel: some View {
         VStack(alignment: .leading, spacing: 6) {
             infoRow(label: "加载时机", value: store.selectedType.whenLoaded)
-            Divider()
+            PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
             infoRow(label: "推荐用途", value: store.selectedType.recommendedUse)
         }
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
@@ -264,7 +262,7 @@ struct ZshConfigEditorView: View {
                             ProgressView().controlSize(.mini)
                         } else if store.lastSaveSucceeded {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(PluginSettingsTheme.Typography.statusBadge)
                         }
                         Text(store.hasUnsavedChanges ? "保存*" : (store.lastSaveSucceeded ? "已保存" : "保存"))
                     }
@@ -300,7 +298,7 @@ struct ZshConfigEditorView: View {
     private func notExistBanner(status: ZshFileStatus) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "doc.badge.plus")
-                .font(.system(size: 32))
+                .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon + 4))
                 .foregroundStyle(.tertiary)
             VStack(spacing: 5) {
                 Text("文件尚不存在")
@@ -335,7 +333,7 @@ struct ZshConfigEditorView: View {
             // 插入目标提示
             HStack(spacing: 6) {
                 Image(systemName: "arrow.right.circle")
-                    .font(.system(size: 12))
+                    .font(PluginSettingsTheme.Typography.statusBadge)
                     .foregroundStyle(.secondary)
                 Text("插入到 \(store.selectedType.filename)")
                     .font(PluginSettingsTheme.Typography.rowDescription)
@@ -365,7 +363,7 @@ struct ZshConfigEditorView: View {
                         }
                     }
                     if index < ZshSnippet.all.count - 1 {
-                        Divider()
+                        PluginSettingsListDivider()
                     }
                 }
             }
@@ -388,9 +386,7 @@ struct ZshConfigEditorView: View {
         } label: {
             HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 Image(systemName: snippet.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
-                    .frame(width: 20)
+                    .pluginSettingsRowIconStyle(isActive ? Color.accentColor : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(snippet.title)
                         .font(PluginSettingsTheme.Typography.rowTitle)
@@ -401,13 +397,12 @@ struct ZshConfigEditorView: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(PluginSettingsTheme.Typography.statusBadge)
                     .foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(isActive ? 90 : 0))
                     .animation(.easeInOut(duration: 0.2), value: isActive)
             }
-            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-            .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+            .pluginSettingsListRowPadding()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -443,14 +438,17 @@ struct ZshConfigEditorView: View {
         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
         .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
         .background(PluginSettingsTheme.Palette.cardBackground)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) {
+            PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
+        }
     }
 
     // MARK: - Helper Views
 
     private var readOnlyBadge: some View {
         HStack(spacing: 4) {
-            Image(systemName: "lock").font(.system(size: 11))
+            Image(systemName: "lock")
+                .font(PluginSettingsTheme.Typography.statusBadge)
             Text("只读").font(PluginSettingsTheme.Typography.statusBadge)
         }
         .foregroundStyle(.secondary)
@@ -465,7 +463,7 @@ struct ZshConfigEditorView: View {
     private func errorBanner(message: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
+                .font(PluginSettingsTheme.Typography.statusBadge)
                 .foregroundStyle(.red)
             Text(message)
                 .font(PluginSettingsTheme.Typography.rowDescription)
@@ -480,7 +478,7 @@ struct ZshConfigEditorView: View {
     private var savedHintBanner: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 12))
+                .font(PluginSettingsTheme.Typography.statusBadge)
                 .foregroundStyle(.green)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 6) {
@@ -629,4 +627,3 @@ struct ZshConfigEditorView: View {
         }
     }
 }
-

@@ -44,11 +44,11 @@ private struct ShortcutRecorderPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(displayState.previewText)
-                .font(.system(size: 13, weight: .medium))
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
                 .foregroundStyle(Color.accentColor)
                 .lineLimit(1)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .padding(.horizontal, PluginSettingsTheme.Spacing.rowContentControl)
+                .padding(.vertical, PluginSettingsTheme.Spacing.controlCluster)
                 .frame(minWidth: 130, alignment: .center)
                 .background(
                     RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
@@ -68,16 +68,16 @@ private struct ShortcutRecorderPopoverView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .font(.system(size: 10))
-                .padding(.top, 8)
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .padding(.top, PluginSettingsTheme.Spacing.controlCluster)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: -6)),
                     removal: .opacity
                 ))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowContentControl)
         .frame(minWidth: 160)
     }
 }
@@ -322,13 +322,13 @@ struct AppHotkeyManagerView: View {
             Spacer()
             VStack(spacing: 8) {
                 Image(systemName: "keyboard")
-                    .font(.system(size: 28))
+                    .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
                     .foregroundStyle(.secondary)
                 Text("点击「添加」选择应用并绑定快捷键")
                     .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 24)
+            .padding(.vertical, PluginSettingsTheme.Spacing.pagePadding)
             Spacer()
         }
         .pluginSettingsCardBackground(.host)
@@ -359,7 +359,7 @@ struct AppHotkeyManagerView: View {
                     }
                 )
                 if entry.id != store.entries.last?.id {
-                    Divider().padding(.leading, 52)
+                    PluginSettingsListDivider()
                 }
             }
         }
@@ -412,17 +412,32 @@ private struct AppShortcutEntryRow: View {
             .replacingOccurrences(of: "None", with: "未设置")
     }
 
+    private var subtitle: String {
+        guard let url = entry.bundleURL else {
+            return "应用路径不可用"
+        }
+
+        return url.path(percentEncoded: false)
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(nsImage: appIcon)
                 .resizable()
-                .frame(width: 28, height: 28)
+                .frame(width: PluginSettingsTheme.Size.rowIcon, height: PluginSettingsTheme.Size.rowIcon)
 
-            Text(entry.displayName)
-                .font(PluginSettingsTheme.Typography.rowTitle)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(entry.displayName)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .lineLimit(1)
 
-            Spacer()
+                Text(subtitle)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             ShortcutRecorderBadge(
                 text: shortcutText,
@@ -432,26 +447,23 @@ private struct AppShortcutEntryRow: View {
                 onEndRecording: onEndRecording
             )
 
-            // 清除快捷键（仅已设置时显示）
             if entry.shortcut != nil {
                 Button(action: onClearShortcut) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .pluginSettingsRowIconStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("清除快捷键")
             }
 
-            // 删除整条绑定
             Button(action: onDelete) {
                 Image(systemName: "trash")
-                    .foregroundStyle(.red.opacity(0.8))
+                    .pluginSettingsRowIconStyle(.red.opacity(0.8))
             }
             .buttonStyle(.plain)
             .help("删除此绑定")
         }
-        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        .pluginSettingsListRowPadding()
     }
 }
 
@@ -467,11 +479,11 @@ private struct ShortcutRecorderBadge: View {
     var body: some View {
         Button { isPresented = true } label: {
             Text(text)
-                .font(.system(size: 13, design: .monospaced))
+                .font(PluginSettingsTheme.Typography.monospacedValue)
                 .foregroundStyle(text == "未设置" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                 .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, PluginSettingsTheme.Spacing.sectionHeaderContent)
+                .padding(.vertical, PluginSettingsTheme.Spacing.controlCluster - 3)
                 .frame(minWidth: 90, alignment: .center)
                 .background(
                     RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
