@@ -106,7 +106,12 @@ copy_package_to_installed_store() {
 }
 
 discover_plugin_records() {
-    python3 - "$SOURCE_DIR" "$PRODUCTS_DIR" "${PLUGIN_FILTERS[@]}" <<'PY'
+    local plugin_filters_serialized=""
+    for plugin_filter in "${PLUGIN_FILTERS[@]-}"; do
+        plugin_filters_serialized+=$'\n'"$plugin_filter"
+    done
+
+    python3 - "$SOURCE_DIR" "$PRODUCTS_DIR" "$plugin_filters_serialized" <<'PY'
 import hashlib
 import json
 import os
@@ -115,7 +120,8 @@ import sys
 
 source_dir = pathlib.Path(sys.argv[1])
 products_dir = pathlib.Path(sys.argv[2])
-filters = set(sys.argv[3:])
+serialized_filters = sys.argv[3] if len(sys.argv) > 3 else ""
+filters = {item for item in serialized_filters.splitlines() if item}
 
 def emit_error(message: str) -> None:
     print(message, file=sys.stderr)
@@ -276,9 +282,14 @@ while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bund
     packages+=("$package_path")
 done < <(discover_plugin_records)
 
+plugin_filter_count=0
+for _plugin_filter in "${PLUGIN_FILTERS[@]-}"; do
+    plugin_filter_count=$((plugin_filter_count + 1))
+done
+
 if [[ ${#packages[@]} -eq 0 ]]; then
-    if [[ ${#PLUGIN_FILTERS[@]} -gt 0 ]]; then
-        echo "No plugin matched requested filters in $SOURCE_DIR: ${PLUGIN_FILTERS[*]}" >&2
+    if [[ "$plugin_filter_count" -gt 0 ]]; then
+        echo "No plugin matched requested filters in $SOURCE_DIR: ${PLUGIN_FILTERS[*]-}" >&2
     else
         echo "No plugins found in $SOURCE_DIR." >&2
     fi
