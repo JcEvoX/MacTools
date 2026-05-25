@@ -85,71 +85,13 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 PACKAGES_DIR="$OUTPUT_DIR/Packages"
 CATALOG_PATH="$OUTPUT_DIR/catalog.dev.json"
+STATE_DIR="$OUTPUT_DIR/.sync-state"
 
 mkdir -p "$PACKAGES_DIR"
+mkdir -p "$STATE_DIR"
 if [[ "$SKIP_INSTALL" != "1" ]]; then
     mkdir -p "$INSTALL_DIR"
 fi
-
-json_value() {
-    local file="$1"
-    local expression="$2"
-    python3 - "$file" "$expression" <<'PY'
-import json
-import sys
-
-path, expression = sys.argv[1:]
-data = json.load(open(path))
-value = data
-for part in expression.split("."):
-    if not part:
-        continue
-    if isinstance(value, dict):
-        value = value.get(part)
-    else:
-        value = None
-        break
-if value is None:
-    print("")
-else:
-    print(value)
-PY
-}
-
-discover_candidates() {
-    if [[ -f "$SOURCE_DIR/plugin.json" ]]; then
-        printf '%s\n' "$SOURCE_DIR"
-        return
-    fi
-
-    find "$SOURCE_DIR" -maxdepth 3 -name plugin.json -print \
-        | while IFS= read -r path; do
-            dirname "$path"
-        done \
-        | sort -u
-}
-
-matches_filter() {
-    local candidate="$1"
-
-    if [[ ${#PLUGIN_FILTERS[@]} -eq 0 ]]; then
-        return 0
-    fi
-
-    local basename
-    basename="$(basename "$candidate")"
-
-    local id
-    id="$(json_value "$candidate/plugin.json" "id")"
-
-    local filter
-    for filter in "${PLUGIN_FILTERS[@]}"; do
-        [[ "$basename" == "$filter" ]] && return 0
-        [[ -n "$id" && "$id" == "$filter" ]] && return 0
-    done
-
-    return 1
-}
 
 copy_package_to_installed_store() {
     local package_path="$1"
@@ -163,40 +105,176 @@ copy_package_to_installed_store() {
     mv "$staging" "$destination"
 }
 
+discover_plugin_records() {
+    python3 - "$SOURCE_DIR" "$PRODUCTS_DIR" "${PLUGIN_FILTERS[@]}" <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import sys
+
+source_dir = pathlib.Path(sys.argv[1])
+products_dir = pathlib.Path(sys.argv[2])
+filters = set(sys.argv[3:])
+
+def emit_error(message: str) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+
+def validate_field(value: str) -> str:
+    if "\t" in value or "\n" in value:
+        emit_error(f"Unsupported tab or newline in plugin sync field: {value!r}")
+    return value
+
+def discover_candidates() -> list[pathlib.Path]:
+    if (source_dir / "plugin.json").is_file():
+        return [source_dir]
+
+    candidates = []
+    for root, dirs, files in os.walk(source_dir):
+        root_path = pathlib.Path(root)
+        depth = len(root_path.relative_to(source_dir).parts)
+        if depth >= 3:
+            dirs[:] = []
+        if "plugin.json" in files:
+            candidates.append(root_path)
+
+    return sorted(set(candidates), key=lambda path: path.name.lower())
+
+def input_fingerprint(manifest: pathlib.Path, bundle: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+
+    def is_ignored(path: pathlib.Path) -> bool:
+        relative_parts = path.relative_to(bundle).parts
+        return "_CodeSignature" in relative_parts
+
+    def update_file(label: str, path: pathlib.Path) -> None:
+        stat = path.lstat()
+        digest.update(label.encode("utf-8"))
+        digest.update(b"\0file\0")
+        digest.update(oct(stat.st_mode & 0o7777).encode("utf-8"))
+        digest.update(b"\0")
+        with path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+
+    def update_symlink(label: str, path: pathlib.Path) -> None:
+        stat = path.lstat()
+        digest.update(label.encode("utf-8"))
+        digest.update(b"\0symlink\0")
+        digest.update(oct(stat.st_mode & 0o7777).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(os.readlink(path).encode("utf-8"))
+        digest.update(b"\0")
+
+    update_file("plugin.json", manifest)
+
+    for path in sorted(bundle.rglob("*"), key=lambda item: item.relative_to(bundle).as_posix()):
+        if is_ignored(path):
+            continue
+
+        relative = path.relative_to(bundle).as_posix()
+        if path.is_symlink():
+            update_symlink(relative, path)
+        elif path.is_file():
+            update_file(relative, path)
+
+    return digest.hexdigest()
+
+records = []
+for plugin_root in discover_candidates():
+    manifest = plugin_root / "plugin.json"
+    with manifest.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    plugin_id = data.get("id") or ""
+    bundle_relative_path = data.get("bundleRelativePath") or ""
+    if not plugin_id or not bundle_relative_path:
+        emit_error(f"plugin.json must include id and bundleRelativePath: {manifest}")
+
+    if filters and plugin_root.name not in filters and plugin_id not in filters:
+        continue
+
+    bundle_name = pathlib.Path(bundle_relative_path).name
+    bundle_path = products_dir / bundle_name
+    if not bundle_path.is_dir():
+        emit_error(
+            f"Built plugin bundle not found for {plugin_id}: {bundle_path}\n"
+            "Run 'make build' and ensure the plugin target is included in the MacTools scheme."
+        )
+
+    records.append((
+        str(plugin_root),
+        str(manifest),
+        plugin_id,
+        bundle_relative_path,
+        bundle_name,
+        str(bundle_path),
+        input_fingerprint(manifest, bundle_path),
+    ))
+
+if not records:
+    if filters:
+        emit_error(f"No plugin matched requested filters in {source_dir}: {' '.join(sorted(filters))}")
+    emit_error(f"No plugins found in {source_dir}.")
+
+for record in records:
+    print("\t".join(validate_field(field) for field in record))
+PY
+}
+
+state_file_for_plugin() {
+    local plugin_id="$1"
+    local safe_name
+    safe_name="$(printf '%s' "$plugin_id" | tr -c 'A-Za-z0-9._-' '_')"
+    printf '%s/%s.sha256\n' "$STATE_DIR" "$safe_name"
+}
+
+package_is_complete() {
+    local package_path="$1"
+    local bundle_relative_path="$2"
+
+    [[ -f "$package_path/plugin.json" && -d "$package_path/$bundle_relative_path" ]]
+}
+
 packages=()
-while IFS= read -r plugin_root; do
+synced_count=0
+installed_count=0
+skipped_count=0
+while IFS=$'\t' read -r plugin_root manifest plugin_id bundle_relative_path bundle_name bundle_path fingerprint; do
     [[ -n "$plugin_root" ]] || continue
-    matches_filter "$plugin_root" || continue
-
-    manifest="$plugin_root/plugin.json"
-    plugin_id="$(json_value "$manifest" "id")"
-    bundle_relative_path="$(json_value "$manifest" "bundleRelativePath")"
-    bundle_name="$(basename "$bundle_relative_path")"
-
-    if [[ -z "$plugin_id" || -z "$bundle_relative_path" ]]; then
-        echo "plugin.json must include id and bundleRelativePath: $manifest" >&2
-        exit 1
-    fi
-
-    bundle_path="$PRODUCTS_DIR/$bundle_name"
-    if [[ ! -d "$bundle_path" ]]; then
-        echo "Built plugin bundle not found for $plugin_id: $bundle_path" >&2
-        echo "Run 'make build' and ensure the plugin target is included in the MacTools scheme." >&2
-        exit 1
-    fi
 
     package_path="$PACKAGES_DIR/$plugin_id.mactoolsplugin"
-    rm -rf "$package_path"
-    mkdir -p "$package_path/$(dirname "$bundle_relative_path")"
-    ditto "$manifest" "$package_path/plugin.json"
-    ditto "$bundle_path" "$package_path/$bundle_relative_path"
+    state_path="$(state_file_for_plugin "$plugin_id")"
+    previous_fingerprint=""
+    package_synced=0
+    if [[ -f "$state_path" ]]; then
+        previous_fingerprint="$(<"$state_path")"
+    fi
+
+    if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! package_is_complete "$package_path" "$bundle_relative_path"; then
+        rm -rf "$package_path"
+        mkdir -p "$package_path/$(dirname "$bundle_relative_path")"
+        ditto "$manifest" "$package_path/plugin.json"
+        ditto "$bundle_path" "$package_path/$bundle_relative_path"
+        printf '%s\n' "$fingerprint" > "$state_path"
+        synced_count=$((synced_count + 1))
+        package_synced=1
+    else
+        skipped_count=$((skipped_count + 1))
+    fi
 
     if [[ "$SKIP_INSTALL" != "1" ]]; then
-        copy_package_to_installed_store "$package_path" "$plugin_id"
+        install_path="$INSTALL_DIR/$plugin_id.mactoolsplugin"
+        if [[ "$package_synced" == "1" || ! -d "$install_path" ]]; then
+            copy_package_to_installed_store "$package_path" "$plugin_id"
+            installed_count=$((installed_count + 1))
+        fi
     fi
 
     packages+=("$package_path")
-done < <(discover_candidates)
+done < <(discover_plugin_records)
 
 if [[ ${#packages[@]} -eq 0 ]]; then
     if [[ ${#PLUGIN_FILTERS[@]} -gt 0 ]]; then
@@ -212,13 +290,16 @@ for package in "${packages[@]}"; do
     catalog_args+=(--package "$package")
 done
 
-"$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
-    --mode debug \
-    --output "$CATALOG_PATH" \
-    "${catalog_args[@]}"
+if [[ "$synced_count" -gt 0 || ! -f "$CATALOG_PATH" ]]; then
+    "$REPO_ROOT/scripts/plugins/generate-plugin-catalog.sh" \
+        --mode debug \
+        --output "$CATALOG_PATH" \
+        "${catalog_args[@]}"
+fi
 
-echo "Synced ${#packages[@]} debug plugin package(s)."
+echo "Synced $synced_count changed debug plugin package(s); skipped $skipped_count unchanged."
 echo "Catalog: $CATALOG_PATH"
 if [[ "$SKIP_INSTALL" != "1" ]]; then
+    echo "Installed $installed_count debug plugin package(s)."
     echo "Installed store: $INSTALL_DIR"
 fi
