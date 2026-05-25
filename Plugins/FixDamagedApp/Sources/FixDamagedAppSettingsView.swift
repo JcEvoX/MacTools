@@ -19,7 +19,7 @@ struct FixDamagedAppSettingsView: View {
 
             HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 Image(systemName: "hand.draw")
-                    .pluginSettingsRowIconStyle(.secondary, visualScale: 0.78)
+                    .pluginSettingsRowIconStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                     Text("拖动检测")

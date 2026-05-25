@@ -5,6 +5,11 @@ struct MiddleClickSettingsView: View {
     let selectedCount: Int
     let onCountChange: (Int) -> Void
 
+    private enum Icon {
+        static let title = "hand.tap"
+        static let fingerCount = "hand.raised"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             Label("设置", systemImage: "gearshape")
@@ -13,8 +18,13 @@ struct MiddleClickSettingsView: View {
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    Label("手指数量", systemImage: "hand.tap")
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                        Image(systemName: Icon.title)
+                            .pluginSettingsRowIconStyle()
+
+                        Text("手指数量")
+                            .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    }
 
                     Text("用指定数量的手指在触控板上轻点，将模拟鼠标中键点击")
                         .font(PluginSettingsTheme.Typography.rowDescription)
@@ -26,6 +36,7 @@ struct MiddleClickSettingsView: View {
                         FingerCountButton(
                             count: count,
                             isSelected: selectedCount == count,
+                            iconSystemName: Icon.fingerCount,
                             action: {
                                 onCountChange(count)
                             }
@@ -43,16 +54,14 @@ struct MiddleClickSettingsView: View {
 private struct FingerCountButton: View {
     let count: Int
     let isSelected: Bool
+    let iconSystemName: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                Image(systemName: "hand.raised")
-                    .pluginSettingsRowIconStyle(
-                        isSelected ? Color.accentColor : Color.primary,
-                        visualScale: 0.78
-                    )
+                Image(systemName: iconSystemName)
+                    .pluginSettingsRowIconStyle(isSelected ? Color.accentColor : Color.primary)
 
                 Text("\(count)指")
                     .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
