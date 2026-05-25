@@ -18,17 +18,20 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()
+    private let launchAtLoginController = LaunchAtLoginController()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppAppearancePreference.applyStoredPreference()
+        launchAtLoginController.refreshStatus()
 
         let windowRouter = AppWindowRouter(
             pluginHost: pluginHost,
             appUpdater: appUpdater,
             menuBarIconSettings: menuBarIconSettings,
-            menuBarIconGallery: menuBarIconGallery
+            menuBarIconGallery: menuBarIconGallery,
+            launchAtLoginController: launchAtLoginController
         )
         self.windowRouter = windowRouter
         statusItemController = MenuBarStatusItemController(

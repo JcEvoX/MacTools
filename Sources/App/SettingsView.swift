@@ -15,12 +15,14 @@ struct SettingsView: View {
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
+    @ObservedObject var launchAtLoginController: LaunchAtLoginController
 
     var body: some View {
         TabView(selection: $pluginHost.selectedSettingsDestination) {
             GeneralSettingsView(
                 menuBarIconSettings: menuBarIconSettings,
-                menuBarIconGallery: menuBarIconGallery
+                menuBarIconGallery: menuBarIconGallery,
+                launchAtLoginController: launchAtLoginController
             )
                 .tag(SettingsDestination.general)
                 .tabItem {
@@ -92,10 +94,17 @@ private struct PermissionSettingsRow: View {
 struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
+    @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
 
     var body: some View {
         Form {
+            Section {
+                LaunchAtLoginSettingsRow(controller: launchAtLoginController)
+            } header: {
+                Text("启动")
+            }
+            
             Section {
                 AppearanceSettingsRow(selection: appearancePreferenceBinding)
             } header: {
@@ -163,6 +172,63 @@ private struct AppearanceSettingsRow: View {
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
         .help("设置应用外观")
+    }
+}
+
+private struct LaunchAtLoginSettingsRow: View {
+    @ObservedObject var controller: LaunchAtLoginController
+    @State private var toggleID = UUID()
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "power")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("开机时启动")
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text(subtitle)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(controller.lastErrorMessage == nil ? .secondary : Color.orange)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("开机时启动 MacTools", isOn: enabledBinding)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .id(toggleID)
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .help("登录系统时自动启动 MacTools 并显示在菜单栏。")
+        .onAppear {
+            DispatchQueue.main.async {
+                toggleID = UUID()
+            }
+        }
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding {
+            controller.isEnabled
+        } set: { newValue in
+            controller.setEnabled(newValue)
+        }
+    }
+
+    private var subtitle: String {
+        controller.lastErrorMessage ?? "登录系统时自动启动 MacTools 并显示在菜单栏。"
     }
 }
 
