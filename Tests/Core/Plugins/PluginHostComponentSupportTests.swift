@@ -81,7 +81,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(host.permissionCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.permissionCards.map(\.iconSystemImage), ["accessibility"])
-        XCTAssertEqual(host.permissionCards.map(\.iconVisualScale), [1.18])
+        XCTAssertEqual(host.permissionCards.map(\.iconVisualScale), [1.0])
         XCTAssertEqual(host.settingsCards.map(\.pluginID), ["component"])
         XCTAssertEqual(host.shortcutItems.map(\.pluginID), ["component"])
         XCTAssertEqual(host.pluginConfigurationItems.map(\.id), ["component"])
