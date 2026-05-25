@@ -71,9 +71,17 @@ To add a plugin, create `Plugins/<PluginName>/plugin.json`, `Sources/`, and `Bun
 make run
 ```
 
+In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
+
 If the plugin needs extra frameworks, private include paths, bundle resources, helper/tool targets, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`. If the plugin package contains an extra executable inside the bundle resources, declare it in `plugin.json.package.signPaths` so release packaging signs it before signing the bundle.
 
-To test the plugin as a dynamic local package, build its package and Debug catalog first:
+To resynchronize already-built Debug plugin bundles without launching the app:
+
+```bash
+make sync-debug-plugins
+```
+
+To test the standalone plugin package build path, build its package and Debug catalog explicitly:
 
 ```bash
 make build-plugin PLUGIN=<plugin directory or id>

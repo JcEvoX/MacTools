@@ -11,7 +11,7 @@
 - 需要 Xcode 和 `xcodegen`，项目最低支持 macOS 14.0。
 - 首次初始化：运行 `make setup`，再编辑 `LocalConfig.xcconfig` 填写 `DEVELOPMENT_TEAM` 和 `BUNDLE_IDENTIFIER_PREFIX`。
 - 常用命令：`make generate` 生成 Xcode 项目，`make build` 编译校验，`make run` 本地运行。
-- 插件开发：`make build-plugin` 构建 `Plugins/` 下的本地插件并生成 Debug catalog；`make build-plugin PLUGIN=<目录名或插件 ID>` 只构建一个插件。
+- 插件开发：`make run` 会增量编译 App 和插件，并把最新 Debug 插件包同步到本地开发市场；`make sync-debug-plugins` 可只同步已编译插件。`make build-plugin` 保留给单独验证动态包或发布链路使用。
 - 不要提交本地或生成文件：`MacTools.xcodeproj`、`MacTools.xcworkspace`、`LocalConfig.xcconfig`、`build/`、`scripts/release.local.env`。
 
 ## 项目结构

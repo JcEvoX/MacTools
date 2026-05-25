@@ -85,15 +85,16 @@ brew info --cask ggbond268/mactools/mactools
 make setup      # 生成 LocalConfig.xcconfig，请填写 DEVELOPMENT_TEAM 与 BUNDLE_IDENTIFIER_PREFIX
 make generate   # 使用 XcodeGen 生成 MacTools.xcodeproj
 make build      # 编译校验
-make run        # 本地运行
+make run        # 本地运行，并同步最新 Debug 插件到本地开发市场
 ```
 
 开发或调试本地插件：
 
 ```bash
-make build-plugin                 # 构建 Plugins/ 下的所有本地插件并生成 Debug catalog
-make build-plugin PLUGIN=calendar # 只构建指定插件目录名或插件 ID
-make run                          # 自动使用 build/LocalPlugins/catalog.dev.json
+make run                          # 增量编译 App 和插件，同步 Debug 插件包并启动
+make sync-debug-plugins           # 只同步已编译的 Debug 插件包和 catalog，不启动 App
+make build-plugin                 # 单独构建插件包，用于验证动态包/发布链路
+make build-plugin PLUGIN=calendar # 只单独构建指定插件目录名或插件 ID
 ```
 
 快速发包：

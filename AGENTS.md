@@ -31,8 +31,9 @@
 - `project.yml` 是 XcodeGen 的根项目源文件；插件 target/scheme 由 `scripts/plugins/generate-plugin-project-config.rb` 扫描 `Plugins/*/plugin.json` 后生成到本地 `Configs/GeneratedPlugins.yml`，该生成文件不提交。
 - 生成项目：`make generate`。不要直接运行裸 `xcodegen generate`，否则可能缺少最新插件生成配置。
 - 编译校验：`make build`。
-- 本地运行：`make run`。
-- 构建本地插件并生成 Debug catalog：`make build-plugin`。
+- 本地运行：`make run`，会同步最新 Debug 插件包并生成本地开发 catalog。
+- 只同步已编译的 Debug 插件包和本地开发 catalog：`make sync-debug-plugins`。
+- 单独构建本地插件包并生成 Debug catalog：`make build-plugin`。
 - 构建指定插件：`make build-plugin PLUGIN=<插件目录名或插件 ID>`。
 - 运行完整测试：`xcodebuild -project MacTools.xcodeproj -scheme MacTools -configuration Debug -derivedDataPath build/DerivedData test -quiet`。
 - 运行单个测试类：在完整测试命令后加 `-only-testing:MacToolsTests/<TestClassName>`。

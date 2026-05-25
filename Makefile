@@ -17,6 +17,8 @@ PLUGIN_PROJECT_SOURCE_DIR ?= Plugins
 GENERATED_PLUGIN_PROJECT_CONFIG := Configs/GeneratedPlugins.yml
 LOCAL_PLUGIN_BUILD_DIR ?= build/LocalPlugins
 LOCAL_PLUGIN_CATALOG := $(LOCAL_PLUGIN_BUILD_DIR)/catalog.dev.json
+DEBUG_BUILD_PRODUCTS_DIR := $(DERIVED_DATA)/Build/Products/Debug
+DEBUG_PLUGIN_INSTALL_DIR ?= $(HOME)/Library/Application Support/MacTools Dev/Plugins/Installed
 LOCAL_ICON_GALLERY_DIR ?= build/LocalIconGallery
 LOCAL_ICON_GALLERY_CATALOG := $(LOCAL_ICON_GALLERY_DIR)/catalog.dev.json
 PLUGIN_RELEASE_REPO ?= ggbond268/MacTools
@@ -28,7 +30,7 @@ PLUGIN_RELEASE_CATALOG ?= $(PLUGIN_RELEASE_DIST_DIR)/catalog.json
 PLUGIN_RELEASE_SIGNED_CATALOG ?= docs/plugins/catalog.json
 PLUGIN_RELEASE_BASE_URL ?= https://github.com/$(PLUGIN_RELEASE_REPO)/releases/download/$(PLUGIN_RELEASE_TAG)
 
-.PHONY: setup generate-plugin-config generate build build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release release-local
+.PHONY: setup generate-plugin-config generate build sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release run run-open clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -49,6 +51,19 @@ generate: generate-plugin-config
 
 build: generate
 	@$(XCODEBUILD) -project $(PROJECT_FILE) -scheme $(PROJECT_NAME) -configuration Debug -destination "$(BUILD_DESTINATION)" -derivedDataPath $(DERIVED_DATA) build -quiet
+
+sync-debug-plugins: build
+	@if [ -n "$(PLUGIN)" ]; then \
+		PLUGIN_ARGS=(--plugin "$(PLUGIN)"); \
+	else \
+		PLUGIN_ARGS=(); \
+	fi; \
+	./scripts/plugins/sync-debug-plugins.sh \
+		--source-dir "$(LOCAL_PLUGIN_SOURCE_DIR)" \
+		--products-dir "$(DEBUG_BUILD_PRODUCTS_DIR)" \
+		--output-dir "$(LOCAL_PLUGIN_BUILD_DIR)" \
+		--install-dir "$(DEBUG_PLUGIN_INSTALL_DIR)" \
+		$${PLUGIN_ARGS[@]}
 
 build-plugin: generate
 	@if [ -n "$(PLUGIN)" ]; then \
@@ -83,7 +98,7 @@ package-plugins-release: generate
 		--xcodebuild "$(XCODEBUILD)" \
 		--release-notes-url "https://github.com/$(PLUGIN_RELEASE_REPO)/releases/tag/$(PLUGIN_RELEASE_TAG)"
 
-run: build generate-icon-gallery
+run: sync-debug-plugins generate-icon-gallery
 	@CATALOG_URL="$(MACTOOLS_PLUGIN_CATALOG_URL)"; \
 	ICON_CATALOG_URL="$(MACTOOLS_ICON_CATALOG_URL)"; \
 	if [ -z "$$CATALOG_URL" ] && [ -f "$(LOCAL_PLUGIN_CATALOG)" ]; then \
