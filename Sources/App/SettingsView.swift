@@ -177,10 +177,6 @@ private struct FeatureSettingsView: View {
             )
             .frame(width: 220)
 
-            Rectangle()
-                .fill(SettingsStyle.separator)
-                .frame(width: 1)
-
             FeatureSettingsDetailPane(pluginHost: pluginHost)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
