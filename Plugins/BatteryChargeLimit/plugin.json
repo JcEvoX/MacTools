@@ -1,0 +1,26 @@
+{
+  "id": "battery-charge-limit",
+  "displayName": "电池充电上限",
+  "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "BatteryChargeLimit.bundle",
+  "factoryClass": "BatteryChargeLimitPlugin.BatteryChargeLimitPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "BatteryChargeLimitPlugin"
+  },
+  "package": {
+    "signPaths": [
+      "BatteryChargeLimit.bundle/Contents/Resources/SMCHelper/mactools-battery-smc-helper"
+    ]
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "system"
+}

@@ -377,6 +377,8 @@ struct MenuBarContent: View {
     static let fanControlManagePresetsActionID = "fan-add-preset"
     static let zshConfigPluginID = "zsh-config"
     static let zshConfigOpenSettingsActionID = "execute"
+    static let batteryChargeLimitPluginID = "battery-charge-limit"
+    static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -594,6 +596,11 @@ struct MenuBarContent: View {
             return
         }
 
+        if isBatteryChargeLimitManageSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
+            pluginHost.presentPluginConfiguration(pluginID: Self.batteryChargeLimitPluginID)
+            return
+        }
+
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -614,6 +621,10 @@ struct MenuBarContent: View {
 
     private func isZshConfigOpenSettingsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.zshConfigPluginID && controlID == Self.zshConfigOpenSettingsActionID
+    }
+
+    private func isBatteryChargeLimitManageSettingsAction(pluginID: String, controlID: String) -> Bool {
+        pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
     }
 
     private func presentDiskCleanDetails() {
