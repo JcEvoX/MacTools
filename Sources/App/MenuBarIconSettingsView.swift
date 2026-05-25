@@ -58,6 +58,7 @@ struct MenuBarIconSettingsView: View {
 private struct MenuBarIconEditorControls: View {
     @ObservedObject var iconSettings: MenuBarIconSettings
     @ObservedObject var gallery: MenuBarIconGalleryLibrary
+    @State private var sliderID = UUID()
 
     private let rowLabelWidth: CGFloat = 76
     private let contentWidth: CGFloat = 520
@@ -205,6 +206,11 @@ private struct MenuBarIconEditorControls: View {
             Spacer(minLength: 0)
         }
         .frame(width: contentWidth, height: PluginSettingsTheme.Size.controlHeight, alignment: .leading)
+        .onAppear {
+            DispatchQueue.main.async {
+                sliderID = UUID()
+            }
+        }
     }
 
     private var isManualAnimationSpeed: Bool {
@@ -221,6 +227,7 @@ private struct MenuBarIconEditorControls: View {
         )
         .labelsHidden()
         .frame(width: manualSpeedSliderWidth)
+        .id(sliderID)
     }
 
     private func selectMedia() {
