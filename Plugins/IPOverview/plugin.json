@@ -1,0 +1,21 @@
+{
+  "id": "ip-overview",
+  "displayName": "IP 检测",
+  "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
+  "version": "1.0.8",
+  "minHostVersion": "1.0.10",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "IPOverview.bundle",
+  "factoryClass": "IPOverviewPlugin.IPOverviewPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "IpOverviewPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "monitoring"
+}
