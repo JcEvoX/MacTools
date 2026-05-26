@@ -1,0 +1,21 @@
+{
+  "id": "stage-manager",
+  "displayName": "台前调度",
+  "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "StageManager.bundle",
+  "factoryClass": "StageManagerPlugin.StageManagerPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "StageManagerPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": false
+  },
+  "permissions": [],
+  "category": "display"
+}
