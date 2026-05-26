@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-25T02:49:27Z",
+  "generatedAt": "2026-05-26T03:56:56Z",
   "minimumHostVersion": "1.0.11",
   "pluginKitVersion": 2,
   "plugins": [
@@ -354,15 +354,15 @@
       "id": "fix-damaged-app",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "05e926ab7e9e8d56526274df2d1e99e832c4b9e0af5c265c30f2a7347bfee63c",
-        "size": 183456,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/fix-damaged-app.mactoolsplugin.zip"
+        "sha256": "71e02a37efee1bb057ff60d45da80e30c17dc0c7b11fcedba9169a4a4c7d1d80",
+        "size": 183437,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.12/fix-damaged-app.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.12",
       "summary": "移除隔离属性，解决「已损坏」或「不受信任」提示",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -384,6 +384,27 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
       "summary": "自动遮挡刘海屏顶部区域",
       "version": "1.0.4"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "monitoring",
+      "displayName": "IP 检测",
+      "id": "ip-overview",
+      "minimumHostVersion": "1.0.10",
+      "package": {
+        "sha256": "e5364eb21228709110e8fbb96fb18f09908dc9f446753299a8964873e0a4b371",
+        "size": 531601,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.12/ip-overview.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.12",
+      "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -480,17 +501,17 @@
       "id": "middle-click",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "d4ebdb486964d3d19f82cbd121afcfa8c42fbb156727f3e1ba6ec9480af142c2",
-        "size": 110895,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/middle-click.mactoolsplugin.zip"
+        "sha256": "7fc8dbf2ebdd2388fc3a2d4f2632e75f51a462dd360def89f2766e69e0d7507a",
+        "size": 114956,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.12/middle-click.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.12",
       "summary": "触控板轻点模拟鼠标中键",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -556,6 +577,27 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
       "summary": "选择并退出正在运行的应用，或一键退出全部",
       "version": "1.0.3"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": false,
+        "primaryPanel": true
+      },
+      "category": "display",
+      "displayName": "台前调度",
+      "id": "stage-manager",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "30e3dae12915313240c3b0b54df113ef1ad944f378b5c16cb9a539fb0aff7cda",
+        "size": 46546,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.12/stage-manager.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.12",
+      "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
+      "version": "1.0.0"
     },
     {
       "capabilities": {
@@ -646,6 +688,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "C93LMtKEGCpf9KzQm7gA/5+dUMDOIsCHXN3sTjkmVTBwmojatxzav7BTp83xlO5rrtEzNWetaLKM8YvX7Km1AQ=="
+    "value": "ST7y13ltwwSo3tY57MI44xP9LFY1dELAUjhJkAMqVRsr6246Ap4SDeipO4aZvPAToz6Crpj/vwHb2nxNNnwyAw=="
   }
 }
