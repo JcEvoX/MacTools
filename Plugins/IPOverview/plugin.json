@@ -16,5 +16,6 @@
     "componentPanel": false,
     "configuration": true
   },
-  "permissions": []
+  "permissions": [],
+  "category": "monitoring"
 }
