@@ -793,7 +793,7 @@ struct AboutSettingsView: View {
 
             Text(AppMetadata.appName)
                 .font(.system(size: 22, weight: .bold))
-                .padding(.top, 18)
+                .padding(.top, 8)
 
             Text("版本 \(AppMetadata.versionDescription)")
                 .font(.title3)
@@ -892,21 +892,23 @@ private struct AboutUpdatePrimaryButtonStyle: ButtonStyle {
 }
 
 private struct AppIconPreview: View {
+    private static let iconSize: CGFloat = 82
+
     var body: some View {
-        Group {
-            if let appIcon = AppMetadata.appIcon {
-                Image(nsImage: appIcon)
-                    .resizable()
-            } else {
-                Image(systemName: "wrench.and.screwdriver.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .padding(12)
-                    .foregroundStyle(.secondary)
-                    .background(PluginSettingsTheme.Palette.nativeCardBackground)
-            }
+        if let appIcon = AppMetadata.appIcon {
+            Image(nsImage: appIcon)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Self.iconSize, height: Self.iconSize)
+        } else {
+            Image(systemName: "wrench.and.screwdriver.fill")
+                .resizable()
+                .scaledToFit()
+                .padding(12)
+                .foregroundStyle(.secondary)
+                .background(PluginSettingsTheme.Palette.nativeCardBackground)
+                .frame(width: Self.iconSize, height: Self.iconSize)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-        .frame(width: 64, height: 64)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
