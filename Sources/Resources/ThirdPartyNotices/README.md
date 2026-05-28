@@ -14,3 +14,4 @@
 - [designsbymuzeer/Bye-Mac-App](https://github.com/designsbymuzeer/Bye-Mac-App)
 - [gbammc/Thor](https://github.com/gbammc/Thor)
 - [lihaoyun6/AirBattery](https://github.com/lihaoyun6/AirBattery)
+- [SuveenE/activity-bar](https://github.com/SuveenE/activity-bar)
