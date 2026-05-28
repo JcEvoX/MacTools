@@ -1,0 +1,20 @@
+{
+  "id": "device-battery",
+  "displayName": "设备电量",
+  "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 1,
+  "bundleRelativePath": "DeviceBattery.bundle",
+  "factoryClass": "DeviceBatteryPlugin.DeviceBatteryPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "DeviceBatteryPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": false,
+    "componentPanel": true,
+    "configuration": true
+  },
+  "permissions": []
+}
