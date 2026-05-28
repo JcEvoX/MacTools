@@ -139,7 +139,7 @@ struct DeviceBatterySettingsView: View {
         case .grid:
             return "list.bullet.rectangle"
         case .list:
-            return "list.bullet"
+            return "gauge.with.dots.needle.67percent"
         case .showcase:
             return "rectangle.inset.filled"
         }
