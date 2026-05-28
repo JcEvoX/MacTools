@@ -143,6 +143,16 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertTrue(RapooDeviceCatalog.isSupportedMouseProductID(5139))
     }
 
+    func testAirPodsPartSymbolsUseOwnPartNameInsteadOfParentCaseName() {
+        let caseItem = makeAirPodsPart(name: "AirPods Pro 2 充电盒", parentName: "AirPods Pro 2")
+        let leftItem = makeAirPodsPart(name: "AirPods Pro 2 左耳", parentName: "AirPods Pro 2 充电盒")
+        let rightItem = makeAirPodsPart(name: "AirPods Pro 2 右耳", parentName: "AirPods Pro 2 充电盒")
+
+        XCTAssertEqual(deviceSymbolName(for: caseItem), "airpods.chargingcase")
+        XCTAssertEqual(deviceSymbolName(for: leftItem), "airpod.left")
+        XCTAssertEqual(deviceSymbolName(for: rightItem), "airpod.right")
+    }
+
     private func makePlugin(items: [DeviceBatteryItem] = []) -> DeviceBatteryPlugin {
         DeviceBatteryPlugin(
             context: makeContext(),
@@ -158,6 +168,22 @@ final class DeviceBatteryPluginTests: XCTestCase {
         return PluginRuntimeContext(
             pluginID: "device-battery",
             storage: UserDefaultsPluginStorage(pluginID: "device-battery", userDefaults: defaults)
+        )
+    }
+
+    private func makeAirPodsPart(name: String, parentName: String?) -> DeviceBatteryItem {
+        DeviceBatteryItem(
+            id: name,
+            name: name,
+            model: nil,
+            kind: .airPodsPart,
+            level: 88,
+            chargeState: .normal,
+            parentName: parentName,
+            source: "test",
+            lastUpdated: Date(),
+            isConnected: true,
+            detail: nil
         )
     }
 }

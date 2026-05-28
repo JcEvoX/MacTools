@@ -564,7 +564,7 @@ private func deviceDetailText(for item: DeviceBatteryItem) -> String {
     return item.chargeState.title == "正常" ? "已连接" : item.chargeState.title
 }
 
-private func deviceSymbolName(for item: DeviceBatteryItem) -> String {
+func deviceSymbolName(for item: DeviceBatteryItem) -> String {
     let haystack = [
         item.name,
         item.model,
@@ -581,8 +581,15 @@ private func deviceSymbolName(for item: DeviceBatteryItem) -> String {
     case .rapooMouse:
         return "computermouse.fill"
     case .airPodsPart:
-        if haystack.contains("case") || haystack.contains("充电盒") {
+        let ownName = item.name.lowercased()
+        if ownName.contains("case") || ownName.contains("充电盒") {
             return "airpods.chargingcase"
+        }
+        if ownName.contains("左耳") || ownName.contains("left") || ownName.contains("🄻") {
+            return "airpod.left"
+        }
+        if ownName.contains("右耳") || ownName.contains("right") || ownName.contains("🅁") {
+            return "airpod.right"
         }
         return "airpodspro"
     case .bluetooth, .magicAccessory, .other:
