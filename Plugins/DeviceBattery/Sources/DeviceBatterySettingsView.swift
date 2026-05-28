@@ -34,8 +34,10 @@ struct DeviceBatterySettingsView: View {
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(minHeight: 58, alignment: .topLeading)
                         .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
                         .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
                         .contentShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous))
@@ -143,4 +145,3 @@ struct DeviceBatterySettingsView: View {
         }
     }
 }
-

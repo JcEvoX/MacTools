@@ -19,11 +19,11 @@ enum DeviceBatteryLayoutMode: String, CaseIterable, Equatable {
     var subtitle: String {
         switch self {
         case .grid:
-            return "多设备均衡展示"
+            return "圆环显示设备名"
         case .list:
-            return "适合扫读和长名称"
+            return "长设备名更清楚"
         case .showcase:
-            return "突出低电量或主设备"
+            return "突出主设备"
         }
     }
 }

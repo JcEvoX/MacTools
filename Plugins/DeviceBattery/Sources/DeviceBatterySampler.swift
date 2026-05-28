@@ -59,12 +59,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             isCharged: isCharged,
             powerSource: powerSource
         )
-        let name = description[kIOPSNameKey] as? String
+        let name = internalBatteryDisplayName(rawName: description[kIOPSNameKey] as? String)
 
         return [
             DeviceBatteryItem(
                 id: "internal-battery",
-                name: name?.isEmpty == false ? name! : "MacBook 电池",
+                name: name,
                 model: nil,
                 kind: .internalBattery,
                 level: level,
@@ -106,6 +106,22 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         }
 
         return "\(chargeState.title) \(minutes / 60)小时\(minutes % 60)分"
+    }
+
+    private static func internalBatteryDisplayName(rawName: String?) -> String {
+        let cleanedName = rawName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let lowercasedName = cleanedName.lowercased()
+        let isSystemIdentifier = cleanedName.isEmpty
+            || lowercasedName.contains("internal")
+            || lowercasedName == "battery"
+            || lowercasedName.contains("battery-")
+
+        if !isSystemIdentifier {
+            return cleanedName
+        }
+
+        let hostName = Host.current().localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return hostName.isEmpty ? "Mac 电池" : hostName
     }
 
     private static func collectBluetoothProfile() -> BluetoothProfile {
