@@ -63,6 +63,69 @@ jobs:
             test \
             -quiet
 
+      - name: Package Debug app artifact
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          PRODUCTS_DIR="${DERIVED_DATA}/Build/Products/Debug"
+          APP_PATH="${PRODUCTS_DIR}/MacTools Dev.app"
+          ARTIFACT_ROOT="build/debug-artifact/MacTools-Debug"
+
+          find "$PRODUCTS_DIR" -maxdepth 1 -name "*.bundle" -type d -print0 | while IFS= read -r -d '' bundle; do
+            codesign --force --deep --sign - "$bundle"
+            codesign --verify --deep --strict "$bundle"
+          done
+
+          if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
+            find "$APP_PATH/Contents/Frameworks" -type d \( -name "*.framework" -o -name "*.xpc" \) -print0 | while IFS= read -r -d '' item; do
+              codesign --force --deep --sign - "$item"
+            done
+          fi
+
+          codesign --force --deep --sign - --entitlements Configs/MacTools.entitlements "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+
+          ./scripts/plugins/sync-debug-plugins.sh \
+            --source-dir Plugins \
+            --products-dir "$PRODUCTS_DIR" \
+            --output-dir build/LocalPlugins \
+            --skip-install
+
+          rm -rf build/debug-artifact
+          mkdir -p "$ARTIFACT_ROOT"
+          ditto "$APP_PATH" "$ARTIFACT_ROOT/MacTools Dev.app"
+          ditto build/LocalPlugins "$ARTIFACT_ROOT/LocalPlugins"
+
+          cat > "$ARTIFACT_ROOT/run-debug.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ROOT="$(cd "$(dirname "$0")" && pwd)"
+          export MACTOOLS_PLUGIN_CATALOG_URL="file://$ROOT/LocalPlugins/catalog.dev.json"
+          open "$ROOT/MacTools Dev.app"
+          EOF
+          chmod +x "$ARTIFACT_ROOT/run-debug.sh"
+
+          cat > "$ARTIFACT_ROOT/README.txt" <<'EOF'
+          This is an unsigned Debug build for local testing.
+
+          Run ./run-debug.sh to launch MacTools Dev with the bundled local plugin catalog.
+          If macOS blocks the app because it was downloaded from the internet, remove quarantine:
+
+              xattr -dr com.apple.quarantine "MacTools Dev.app"
+
+          Then run ./run-debug.sh again.
+          EOF
+
+          (cd build/debug-artifact && ditto -c -k --sequesterRsrc --keepParent MacTools-Debug MacTools-Debug.zip)
+
+      - name: Upload Debug app artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacTools-Debug
+          path: build/debug-artifact/MacTools-Debug.zip
+          if-no-files-found: error
+
       - name: Build unsigned Release app
         if: github.event_name != 'pull_request'
         run: |
