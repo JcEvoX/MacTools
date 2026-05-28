@@ -46,6 +46,20 @@ final class DeviceBatteryPluginTests: XCTestCase {
         plugin.deactivate(reason: .hostShutdown)
     }
 
+    func testPluginDescriptorUsesSingleRowSpanForTwoDeviceList() async throws {
+        let plugin = makePlugin(items: [
+            makeBatteryItem(id: "mac", name: "MacBook Pro", kind: .internalBattery, level: 78),
+            makeBatteryItem(id: "mouse", name: "MX Anywhere 3S", kind: .bluetooth, level: 85)
+        ])
+
+        plugin.activate(context: makeContext())
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 1)!)
+
+        plugin.deactivate(reason: .hostShutdown)
+    }
+
     func testPluginHostIncludesComponentAndConfiguration() {
         let plugin = makePlugin()
         let host = makePluginHostForTests(
@@ -176,6 +190,16 @@ final class DeviceBatteryPluginTests: XCTestCase {
         let leftItem = makeAirPodsPart(name: "AirPods Pro 2 左耳", parentName: "AirPods Pro 2 充电盒")
         let rightItem = makeAirPodsPart(name: "AirPods Pro 2 右耳", parentName: "AirPods Pro 2 充电盒")
 
+        XCTAssertEqual(deviceSymbolName(for: caseItem), "airpodspro.chargingcase.wireless")
+        XCTAssertEqual(deviceSymbolName(for: leftItem), "airpodpro.left")
+        XCTAssertEqual(deviceSymbolName(for: rightItem), "airpodpro.right")
+    }
+
+    func testAirPodsPartSymbolsKeepNonProShape() {
+        let caseItem = makeAirPodsPart(name: "AirPods 充电盒", parentName: "AirPods")
+        let leftItem = makeAirPodsPart(name: "AirPods 左耳", parentName: "AirPods 充电盒")
+        let rightItem = makeAirPodsPart(name: "AirPods 右耳", parentName: "AirPods 充电盒")
+
         XCTAssertEqual(deviceSymbolName(for: caseItem), "airpods.chargingcase")
         XCTAssertEqual(deviceSymbolName(for: leftItem), "airpod.left")
         XCTAssertEqual(deviceSymbolName(for: rightItem), "airpod.right")
@@ -208,6 +232,27 @@ final class DeviceBatteryPluginTests: XCTestCase {
             level: 88,
             chargeState: .normal,
             parentName: parentName,
+            source: "test",
+            lastUpdated: Date(),
+            isConnected: true,
+            detail: nil
+        )
+    }
+
+    private func makeBatteryItem(
+        id: String,
+        name: String,
+        kind: DeviceBatteryKind,
+        level: Int
+    ) -> DeviceBatteryItem {
+        DeviceBatteryItem(
+            id: id,
+            name: name,
+            model: nil,
+            kind: kind,
+            level: level,
+            chargeState: .normal,
+            parentName: nil,
             source: "test",
             lastUpdated: Date(),
             isConnected: true,

@@ -40,9 +40,12 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     private let store: DeviceBatteryStore
 
     private var componentSpan: PluginComponentSpan {
-        viewModel.snapshot.visibleItems.count == 1
-            ? PluginComponentSpan(width: 4, height: 1)!
-            : .fourByTwo
+        let visibleItemCount = viewModel.snapshot.visibleItems.count
+        if visibleItemCount == 1 || (store.layoutMode == .grid && visibleItemCount == 2) {
+            return PluginComponentSpan(width: 4, height: 1)!
+        }
+
+        return .fourByTwo
     }
 
     convenience init(context: PluginRuntimeContext) {

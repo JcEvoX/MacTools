@@ -17,8 +17,7 @@ struct DeviceBatteryComponentView: View {
                 case .grid:
                     DeviceBatteryListCard(
                         items: Array(visibleItems.prefix(5)),
-                        totalCount: visibleItems.count,
-                        rowHeight: DeviceBatteryLayout.listRowHeight(for: min(visibleItems.count, 5))
+                        totalCount: visibleItems.count
                     )
                 case .list:
                     DeviceBatteryGaugeGrid(
@@ -114,25 +113,12 @@ struct DeviceBatteryComponentView: View {
 private enum DeviceBatteryLayout {
     static let cornerRadius: CGFloat = 16
     static let horizontalPadding: CGFloat = 12
-    static let verticalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 6
     static let rowIconWidth: CGFloat = 34
     static let percentWidth: CGFloat = 48
     static let batteryWidth: CGFloat = 34
     static let ringSpan: CGFloat = 0.78
     static let ringRotation: Double = 129.6
-
-    static func listRowHeight(for itemCount: Int) -> CGFloat {
-        switch itemCount {
-        case 0...2:
-            return 52
-        case 3:
-            return 46
-        case 4:
-            return 40
-        default:
-            return 34
-        }
-    }
 
     static func gaugeColumnCount(for itemCount: Int) -> Int {
         switch itemCount {
@@ -179,35 +165,55 @@ private struct DeviceBatterySingleLineCard: View {
 private struct DeviceBatteryListCard: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
-    let rowHeight: CGFloat
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                DeviceBatteryNativeRow(
-                    item: item,
-                    rowHeight: rowHeight,
-                    showsDetail: rowHeight >= 44
-                )
+        GeometryReader { proxy in
+            let rowHeight = resolvedRowHeight(containerHeight: proxy.size.height)
 
-                if index < items.count - 1 {
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    DeviceBatteryNativeRow(
+                        item: item,
+                        rowHeight: rowHeight,
+                        showsDetail: false
+                    )
+
+                    if index < items.count - 1 {
+                        DeviceBatteryDivider()
+                    }
+                }
+
+                if totalCount > items.count {
                     DeviceBatteryDivider()
+                    Text("还有 \(totalCount - items.count) 台设备")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 22)
                 }
             }
-
-            if totalCount > items.count {
-                DeviceBatteryDivider()
-                Text("还有 \(totalCount - items.count) 台设备")
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 22)
-            }
+            .padding(.vertical, DeviceBatteryLayout.verticalPadding)
+            .frame(maxWidth: .infinity)
+            .frame(height: proxy.size.height, alignment: .top)
+            .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
         }
-        .padding(.vertical, DeviceBatteryLayout.verticalPadding)
-        .frame(maxWidth: .infinity)
-        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func resolvedRowHeight(containerHeight: CGFloat) -> CGFloat {
+        guard !items.isEmpty else {
+            return 40
+        }
+
+        let overflowHeight: CGFloat = totalCount > items.count ? 23 : 0
+        let dividerHeight = CGFloat(max(items.count - 1, 0)) * 1
+            + (totalCount > items.count ? 1 : 0)
+        let availableHeight = containerHeight
+            - DeviceBatteryLayout.verticalPadding * 2
+            - overflowHeight
+            - dividerHeight
+
+        return max(30, floor(availableHeight / CGFloat(items.count)))
     }
 }
 
@@ -582,16 +588,26 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         return "computermouse.fill"
     case .airPodsPart:
         let ownName = item.name.lowercased()
+        let isPro = haystack.contains("airpods pro")
         if ownName.contains("case") || ownName.contains("充电盒") {
+            if isPro {
+                return "airpodspro.chargingcase.wireless"
+            }
             return "airpods.chargingcase"
         }
         if ownName.contains("左耳") || ownName.contains("left") || ownName.contains("🄻") {
+            if isPro {
+                return "airpodpro.left"
+            }
             return "airpod.left"
         }
         if ownName.contains("右耳") || ownName.contains("right") || ownName.contains("🅁") {
+            if isPro {
+                return "airpodpro.right"
+            }
             return "airpod.right"
         }
-        return "airpodspro"
+        return isPro ? "airpodspro" : "airpods"
     case .bluetooth, .magicAccessory, .other:
         if haystack.contains("iphone") || haystack.contains("手机") {
             return "iphone"
