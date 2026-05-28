@@ -130,11 +130,39 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(reading, RapooBatteryReading(level: 83, chargeState: .normal, statusCode: 1))
     }
 
+    func testRapooParserReadsChargingState() {
+        let report = [UInt8](repeating: 0, count: 16).setting(2, at: 6).setting(45, at: 7)
+        let reading = RapooBatteryParser.parseInputReport(reportID: 7, bytes: report)
+
+        XCTAssertEqual(reading, RapooBatteryReading(level: 45, chargeState: .charging, statusCode: 2))
+    }
+
     func testRapooParserUsesSecondCandidateWhenFirstCandidateIsInvalid() {
         let report = [UInt8](repeating: 0, count: 16).setting(1, at: 7).setting(64, at: 8)
         let reading = RapooBatteryParser.parseInputReport(reportID: 7, bytes: report)
 
         XCTAssertEqual(reading, RapooBatteryReading(level: 64, chargeState: .normal, statusCode: 1))
+    }
+
+    func testRapooParserRejectsUnexpectedReportID() {
+        let report = [UInt8](repeating: 0, count: 16).setting(1, at: 6).setting(83, at: 7)
+
+        XCTAssertNil(RapooBatteryParser.parseInputReport(reportID: 9, bytes: report))
+    }
+
+    func testRapooParserRejectsOutOfRangeLevel() {
+        let report = [UInt8](repeating: 0, count: 16).setting(1, at: 6).setting(130, at: 7)
+
+        XCTAssertNil(RapooBatteryParser.parseInputReport(reportID: 7, bytes: report))
+    }
+
+    func testRapooCatalogUsesDocumentedHIDIdentifiers() {
+        XCTAssertEqual(RapooDeviceCatalog.vendorID, 0x24AE)
+        XCTAssertEqual(RapooDeviceCatalog.vendorUsagePage, 0xFF00)
+        XCTAssertEqual(RapooDeviceCatalog.vendorUsage, 0x0001)
+        XCTAssertEqual(RapooDeviceCatalog.inputReportID, 7)
+        XCTAssertEqual(RapooDeviceCatalog.featureReportID, 8)
+        XCTAssertEqual(RapooDeviceCatalog.reportLength, 512)
     }
 
     func testRapooCatalogMapsReceiverProductIDToVT7() {
