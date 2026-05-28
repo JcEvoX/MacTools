@@ -137,7 +137,7 @@ struct DeviceBatterySettingsView: View {
     private func iconName(for mode: DeviceBatteryLayoutMode) -> String {
         switch mode {
         case .grid:
-            return "square.grid.2x2"
+            return "list.bullet.rectangle"
         case .list:
             return "list.bullet"
         case .showcase:
