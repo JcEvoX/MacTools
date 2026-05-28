@@ -21,6 +21,31 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(plugin.descriptor.span, .fourByTwo)
     }
 
+    func testPluginDescriptorUsesSingleRowSpanForOneDevice() async throws {
+        let plugin = makePlugin(items: [
+            DeviceBatteryItem(
+                id: "internal-battery",
+                name: "MacBook 电池",
+                model: nil,
+                kind: .internalBattery,
+                level: 82,
+                chargeState: .normal,
+                parentName: nil,
+                source: "test",
+                lastUpdated: Date(),
+                isConnected: true,
+                detail: nil
+            )
+        ])
+
+        plugin.activate(context: makeContext())
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 1)!)
+
+        plugin.deactivate(reason: .hostShutdown)
+    }
+
     func testPluginHostIncludesComponentAndConfiguration() {
         let plugin = makePlugin()
         let host = makePluginHostForTests(
@@ -118,18 +143,21 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertTrue(RapooDeviceCatalog.isSupportedMouseProductID(5139))
     }
 
-    private func makePlugin() -> DeviceBatteryPlugin {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        let context = PluginRuntimeContext(
-            pluginID: "device-battery",
-            storage: UserDefaultsPluginStorage(pluginID: "device-battery", userDefaults: defaults)
-        )
-        return DeviceBatteryPlugin(
-            context: context,
+    private func makePlugin(items: [DeviceBatteryItem] = []) -> DeviceBatteryPlugin {
+        DeviceBatteryPlugin(
+            context: makeContext(),
             viewModel: DeviceBatteryViewModel(
-                sampler: StubDeviceBatterySampler(items: []),
+                sampler: StubDeviceBatterySampler(items: items),
                 rapooMonitor: StubRapooBatteryMonitor()
             )
+        )
+    }
+
+    private func makeContext() -> PluginRuntimeContext {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        return PluginRuntimeContext(
+            pluginID: "device-battery",
+            storage: UserDefaultsPluginStorage(pluginID: "device-battery", userDefaults: defaults)
         )
     }
 }
@@ -170,4 +198,3 @@ private extension Array where Element == UInt8 {
         return copy
     }
 }
-

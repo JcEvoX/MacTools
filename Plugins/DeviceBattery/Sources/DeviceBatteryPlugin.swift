@@ -32,12 +32,18 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         defaultDescription: "查看 Mac、蓝牙外设和雷柏鼠标电量"
     )
 
-    let descriptor = PluginComponentDescriptor(
-        span: .fourByTwo
-    )
+    var descriptor: PluginComponentDescriptor {
+        PluginComponentDescriptor(span: componentSpan)
+    }
 
     private let viewModel: DeviceBatteryViewModel
     private let store: DeviceBatteryStore
+
+    private var componentSpan: PluginComponentSpan {
+        viewModel.snapshot.visibleItems.count == 1
+            ? PluginComponentSpan(width: 4, height: 1)!
+            : .fourByTwo
+    }
 
     convenience init(context: PluginRuntimeContext) {
         self.init(context: context, viewModel: DeviceBatteryViewModel())

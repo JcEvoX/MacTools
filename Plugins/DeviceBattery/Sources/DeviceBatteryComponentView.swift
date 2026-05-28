@@ -10,6 +10,8 @@ struct DeviceBatteryComponentView: View {
         Group {
             if visibleItems.isEmpty {
                 emptyState
+            } else if visibleItems.count == 1 {
+                DeviceBatterySingleLineCard(item: visibleItems[0])
             } else {
                 switch store.layoutMode {
                 case .grid:
@@ -161,6 +163,19 @@ private enum DeviceBatteryLayout {
     }
 }
 
+private struct DeviceBatterySingleLineCard: View {
+    let item: DeviceBatteryItem
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DeviceBatteryNativeRow(item: item, rowHeight: 78, showsDetail: false, prominent: true)
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+    }
+}
+
 private struct DeviceBatteryListCard: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
@@ -202,31 +217,27 @@ private struct DeviceBatteryGaugeGrid: View {
 
     var body: some View {
         Group {
-            if items.count == 1, let item = items.first {
-                DeviceBatterySingleGaugeCard(item: item)
-            } else {
-                LazyVGrid(columns: columns, spacing: rowSpacing) {
-                    ForEach(items) { item in
-                        DeviceBatteryGaugeTile(
-                            item: item,
-                            tileSize: tileSize,
-                            lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize)
-                        )
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    if totalCount > items.count {
-                        Text("+\(totalCount - items.count)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .frame(width: tileSize, height: tileSize + 20)
-                    }
+            LazyVGrid(columns: columns, spacing: rowSpacing) {
+                ForEach(items) { item in
+                    DeviceBatteryGaugeTile(
+                        item: item,
+                        tileSize: tileSize,
+                        lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize)
+                    )
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
+
+                if totalCount > items.count {
+                    Text("+\(totalCount - items.count)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .frame(width: tileSize, height: tileSize + 28)
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -253,9 +264,7 @@ private struct DeviceBatteryShowcaseCard: View {
 
     var body: some View {
         Group {
-            if items.count == 1, let item = items.first {
-                DeviceBatterySingleGaugeCard(item: item)
-            } else if let primary = items.first {
+            if let primary = items.first {
                 HStack(spacing: 12) {
                     DeviceBatteryFeaturedGauge(item: primary)
                         .frame(width: 124)
@@ -290,19 +299,6 @@ private struct DeviceBatteryShowcaseCard: View {
     }
 }
 
-private struct DeviceBatterySingleGaugeCard: View {
-    let item: DeviceBatteryItem
-
-    var body: some View {
-        DeviceBatteryFeaturedGauge(item: item)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(DeviceBatteryCardBackground(cornerRadius: DeviceBatteryLayout.cornerRadius))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-}
-
 private struct DeviceBatteryFeaturedGauge: View {
     let item: DeviceBatteryItem
 
@@ -310,12 +306,12 @@ private struct DeviceBatteryFeaturedGauge: View {
         VStack(spacing: 6) {
             DeviceBatteryGaugeTile(
                 item: item,
-                tileSize: 104,
+                tileSize: 96,
                 lineWidth: 10,
-                iconSize: 44,
-                percentSize: 17
+                iconSize: 38,
+                percentSize: 16
             )
-            .frame(width: 114, height: 126)
+            .frame(width: 114, height: 120)
 
             Text(item.name)
                 .font(.system(size: 12.5, weight: .medium))
@@ -337,26 +333,28 @@ private struct DeviceBatteryGaugeTile: View {
     var percentSize: CGFloat? = nil
 
     var body: some View {
-        ZStack {
-            DeviceBatteryRing(
-                item: item,
-                size: tileSize,
-                lineWidth: lineWidth
-            )
+        VStack(spacing: 2) {
+            ZStack {
+                DeviceBatteryRing(
+                    item: item,
+                    size: tileSize,
+                    lineWidth: lineWidth
+                )
 
-            Image(systemName: deviceSymbolName(for: item))
-                .font(.system(size: iconSize ?? tileSize * 0.38, weight: .regular))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-                .frame(width: tileSize * 0.62, height: tileSize * 0.58)
-                .offset(y: -tileSize * 0.06)
+                Image(systemName: deviceSymbolName(for: item))
+                    .font(.system(size: iconSize ?? tileSize * 0.34, weight: .regular))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .frame(width: tileSize * 0.55, height: tileSize * 0.5)
 
-            if let symbolName = chargingSymbolName(for: item) {
-                Image(systemName: symbolName)
-                    .font(.system(size: max(11, tileSize * 0.18), weight: .bold))
-                    .foregroundStyle(batteryTint(for: item))
-                    .offset(y: -tileSize * 0.56)
+                if let symbolName = chargingSymbolName(for: item) {
+                    Image(systemName: symbolName)
+                        .font(.system(size: max(9, tileSize * 0.16), weight: .bold))
+                        .foregroundStyle(batteryTint(for: item))
+                        .offset(y: -tileSize * 0.48)
+                }
             }
+            .frame(width: tileSize, height: tileSize)
 
             Text(DeviceBatteryFormatter.percent(item.clampedLevel))
                 .font(.system(size: percentSize ?? max(10, tileSize * 0.19), weight: .medium, design: .rounded))
@@ -364,9 +362,8 @@ private struct DeviceBatteryGaugeTile: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .offset(y: tileSize * 0.45)
         }
-        .frame(width: tileSize, height: tileSize + 22)
+        .frame(width: tileSize, height: tileSize + 24)
         .compositingGroup()
         .help(helpText(for: item))
     }
@@ -416,6 +413,7 @@ private struct DeviceBatteryNativeRow: View {
     let rowHeight: CGFloat
     var showsDetail = false
     var compact = false
+    var prominent = false
 
     var body: some View {
         HStack(spacing: compact ? 8 : 12) {
@@ -462,11 +460,17 @@ private struct DeviceBatteryNativeRow: View {
     }
 
     private var titleSize: CGFloat {
-        rowHeight >= 44 ? 13.5 : 12.5
+        if prominent {
+            return 15
+        }
+        return rowHeight >= 44 ? 13.5 : 12.5
     }
 
     private var iconSize: CGFloat {
-        rowHeight >= 44 ? 22 : 19
+        if prominent {
+            return 25
+        }
+        return rowHeight >= 44 ? 22 : 19
     }
 }
 
