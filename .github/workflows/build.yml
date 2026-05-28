@@ -100,7 +100,35 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
           ROOT="$(cd "$(dirname "$0")" && pwd)"
-          export MACTOOLS_PLUGIN_CATALOG_URL="file://$ROOT/LocalPlugins/catalog.dev.json"
+          LOCAL_CATALOG_PATH="$ROOT/LocalPlugins/catalog.local.json"
+          PACKAGES_DIR="$ROOT/LocalPlugins/Packages"
+          INSTALL_DIR="$HOME/Library/Application Support/MacTools Dev/Plugins/Installed"
+
+          /usr/bin/ruby -rjson -ruri -e '
+            root = ARGV.fetch(0)
+            catalog_path = File.join(root, "LocalPlugins", "catalog.dev.json")
+            output_path = File.join(root, "LocalPlugins", "catalog.local.json")
+            catalog = JSON.parse(File.read(catalog_path))
+            (catalog["plugins"] || []).each do |plugin|
+              package = plugin["package"] || {}
+              package_path = File.expand_path(File.join(root, "LocalPlugins", "Packages", "#{plugin.fetch("id")}.mactoolsplugin"))
+              package["url"] = URI::DEFAULT_PARSER.escape("file://#{package_path}")
+            end
+            File.write(output_path, JSON.pretty_generate(catalog))
+          ' "$ROOT"
+
+          mkdir -p "$INSTALL_DIR"
+          find "$PACKAGES_DIR" -maxdepth 1 -name "*.mactoolsplugin" -type d -print0 | while IFS= read -r -d '' package; do
+            destination="$INSTALL_DIR/$(basename "$package")"
+            staging="$INSTALL_DIR/.$(basename "$package").syncing.$$"
+            rm -rf "$staging"
+            ditto "$package" "$staging"
+            rm -rf "$destination"
+            mv "$staging" "$destination"
+          done
+
+          LOCAL_CATALOG_URL="$(/usr/bin/ruby -ruri -e 'puts URI::DEFAULT_PARSER.escape("file://#{File.expand_path(ARGV.fetch(0))}")' "$LOCAL_CATALOG_PATH")"
+          export MACTOOLS_PLUGIN_CATALOG_URL="$LOCAL_CATALOG_URL"
           open "$ROOT/MacTools Dev.app"
           EOF
           chmod +x "$ARTIFACT_ROOT/run-debug.sh"
