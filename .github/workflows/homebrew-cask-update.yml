@@ -34,8 +34,7 @@ jobs:
             TAG="v${INPUT_VERSION#v}"
             release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
           else
-            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-              --jq '[.[] | select(.prerelease == false and .draft == false)] | first')"
+            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest")"
           fi
 
           if [[ -z "$release" || "$release" == "null" ]]; then
