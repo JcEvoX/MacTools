@@ -30,6 +30,8 @@
 	<string>$(PLUGIN_CATALOG_PUBLIC_KEY)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>点击日历日期时需要控制系统日历应用并定位到对应日期。</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>读取蓝牙外设电量，用于在设备电量组件中显示鼠标、键盘和耳机状态。</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>读取系统日历事件，用于在右键日历组件中显示当天日程。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
