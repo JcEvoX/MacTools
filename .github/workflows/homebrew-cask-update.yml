@@ -1,32 +1,41 @@
 name: Homebrew Cask Update
 
 on:
-  schedule:
-    - cron: "0 2 * * *" # 每天 UTC 02:00（北京时间 10:00）
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to bump, for example 1.0.14. Defaults to the latest stable release."
+        required: false
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  update-cask:
-    name: Sync homebrew cask to latest stable release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  bump-official-cask:
+    name: Open Homebrew cask bump PR
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: macos-26
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          ref: main
-
-      - name: Get latest stable release
-        id: latest
+      - name: Resolve release metadata
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq '[.[] | select(.prerelease == false and .draft == false)] | first')"
+          if [[ -n "$INPUT_VERSION" ]]; then
+            TAG="v${INPUT_VERSION#v}"
+            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+          else
+            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest")"
+          fi
 
           if [[ -z "$release" || "$release" == "null" ]]; then
             echo "No stable release found." >&2
@@ -51,72 +60,55 @@ jobs:
           fi
 
           SHA256="$(curl -fsSL "$SHA256_URL" | awk '{ print $1; exit }')"
-          if [[ -z "$SHA256" ]]; then
-            echo "Failed to read SHA256 from ${SHA256_URL}." >&2
+          if [[ ! "$SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "Invalid SHA256 read from ${SHA256_URL}: ${SHA256}" >&2
             exit 1
           fi
 
           {
-            echo "TAG=$TAG"
-            echo "VERSION=$VERSION"
-            echo "SHA256=$SHA256"
-            echo "DOWNLOAD_URL=$DOWNLOAD_URL"
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "sha256=$SHA256"
+            echo "download_url=$DOWNLOAD_URL"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Check if cask is already up to date
-        id: check
+      - name: Check official cask version
+        id: cask
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: 1
         run: |
-          CURRENT_VERSION="$(grep -E '^\s+version ' homebrew/Casks/mactools.rb | sed 's/.*version "\(.*\)"/\1/')"
-          LATEST_VERSION="${{ steps.latest.outputs.VERSION }}"
+          brew update
+          current="$(brew info --cask --json=v2 mactools | jq -r '.casks[0].version')"
+          latest="${{ steps.release.outputs.version }}"
+
           {
-            echo "current=$CURRENT_VERSION"
-            echo "latest=$LATEST_VERSION"
-            if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+            echo "current=$current"
+            echo "latest=$latest"
+            if [[ "$current" == "$latest" ]]; then
               echo "up_to_date=true"
             else
               echo "up_to_date=false"
             fi
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update homebrew cask
-        if: steps.check.outputs.up_to_date == 'false'
+      - name: Open Homebrew/homebrew-cask bump PR
+        if: steps.cask.outputs.up_to_date == 'false'
         env:
-          VERSION: ${{ steps.latest.outputs.VERSION }}
-          SHA256: ${{ steps.latest.outputs.SHA256 }}
-          DOWNLOAD_URL: ${{ steps.latest.outputs.DOWNLOAD_URL }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          HOMEBREW_NO_INSTALL_FROM_API: 1
         run: |
-          cat > homebrew/Casks/mactools.rb <<CASK
-          cask "mactools" do
-            version "${VERSION}"
-            sha256 "${SHA256}"
+          if [[ -z "$HOMEBREW_GITHUB_API_TOKEN" ]]; then
+            echo "Missing HOMEBREW_GITHUB_API_TOKEN secret. Create a GitHub token with public_repo access." >&2
+            exit 1
+          fi
 
-            url "${DOWNLOAD_URL}"
-            name "MacTools"
-            desc "Menu bar toolbox"
-            homepage "https://github.com/${GITHUB_REPOSITORY}"
-
-            livecheck do
-              url :url
-              strategy :github_latest
-            end
-
-            auto_updates true
-            depends_on macos: :sonoma
-
-            app "MacTools.app"
-          end
-          CASK
-
-      - name: Commit and push
-        if: steps.check.outputs.up_to_date == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add homebrew/Casks/mactools.rb
-          git commit -m "chore: update homebrew cask to ${{ steps.latest.outputs.VERSION }}"
-          git push origin main
+          brew bump-cask-pr mactools \
+            --version "${{ steps.release.outputs.version }}" \
+            --url "${{ steps.release.outputs.download_url }}" \
+            --sha256 "${{ steps.release.outputs.sha256 }}" \
+            --no-browse
 
       - name: Already up to date
-        if: steps.check.outputs.up_to_date == 'true'
+        if: steps.cask.outputs.up_to_date == 'true'
         run: |
-          echo "Cask is already at version ${{ steps.check.outputs.current }}, nothing to do."
+          echo "Official Homebrew cask is already at version ${{ steps.cask.outputs.current }}."

@@ -1,10 +1,11 @@
 # GitHub Actions 自动构建
 
-本仓库提供五条流水线：
+本仓库提供六条流水线：
 
 - `Build`：在 `main` push、Pull Request 和手动触发时运行。执行 XcodeGen、Debug 测试，并在非 PR 场景额外编译 unsigned Release app 做配置校验；不上传不可分发的未签名产物。
 - `Prepare Release`：在 GitHub Actions 页面手动触发。输入发布类型、目标版本和是否继续发布；它会检查、bump、提交版本变更、创建 tag，并在需要时显式触发 `Release` 或 `Plugin Release`。
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
+- `Homebrew Cask Update`：在 `Release` 成功完成后，或手动输入版本时运行。读取稳定版 Release 里的 `MacTools.dmg` 与 `MacTools.sha256`，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
 - `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
 - `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
@@ -23,7 +24,7 @@
 | `ASC_API_ISSUER_ID` | App Store Connect Issuer ID。 |
 | `SPARKLE_PRIVATE_KEY` | Sparkle EdDSA 私钥，必须与 `project.yml` 中的 `SPARKLE_PUBLIC_ED_KEY` 配对。 |
 | `PLUGIN_CATALOG_PRIVATE_KEY_BASE64` | 插件 catalog Ed25519 私钥的 Base64 内容，用于签名 `docs/plugins/catalog.json`。 |
-| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，用于稳定版发布后自动向 `ggbond268/homebrew-mactools` 提交 cask 更新 PR；未配置时跳过 Homebrew 同步。 |
+| `HOMEBREW_GITHUB_API_TOKEN` | 可选。GitHub Personal Access Token，至少需要 `public_repo` 权限，用于稳定版发布后通过 `brew bump-cask-pr` 自动向官方 `Homebrew/homebrew-cask` 提交 cask bump PR；未配置时 Homebrew 同步会失败，可手动运行 workflow 或手动提交 PR。 |
 
 不要把 `LocalConfig.xcconfig`、`.p12`、`.p8`、Sparkle 私钥、证书密码或 Apple ID 写入仓库。
 
@@ -103,7 +104,7 @@ PY
 make release
 ```
 
-命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 和 Homebrew tap 仍由 `Release` workflow 完成。
+命令会交互选择发布类型、分析当前版本和最新 tag、选择 `patch`/`minor`/`major`，并先展示 bump 预览；确认后才自动 `git pull --rebase`、运行轻量检查、更新版本文件、提交版本 bump、创建并推送 tag。App 发布会推送 `v*.*.*` tag，后续构建、签名、公证、上传 GitHub Release、更新 Sparkle appcast 由 `Release` workflow 完成；官方 Homebrew cask 的版本更新 PR 由 `Homebrew Cask Update` workflow 跟进。
 
 非交互示例：
 
@@ -256,7 +257,7 @@ changed: refine menu item icon names
 
 文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。该文件也会同步进入 Sparkle 更新弹窗。
 
-稳定版发布成功创建 GitHub Release 后，Release 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时用刚生成的 DMG URL 和 SHA-256 更新 `ggbond268/homebrew-mactools` 中的 `Casks/mactools.rb`，并打开更新 PR。预发布版本会跳过 Homebrew 同步；未配置该 secret 时也会跳过，不影响发布。Homebrew PR 合并后，用户本地仍需要先运行 `brew update` 刷新 tap，才能通过 `brew upgrade --cask --greedy ggbond268/mactools/mactools` 检测到新版本。
+稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时读取刚发布的 DMG URL 和 SHA-256，并通过 `brew bump-cask-pr mactools` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。
 
