@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
-  "bundleRelativePath": "TranslatorPlugin.bundle",
+  "bundleRelativePath": "Translator.bundle",
   "factoryClass": "TranslatorPlugin.TranslatorPluginFactory",
   "build": {
     "project": "../../MacTools.xcodeproj",

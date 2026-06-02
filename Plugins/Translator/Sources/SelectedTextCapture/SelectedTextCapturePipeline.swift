@@ -8,7 +8,6 @@ struct SelectedTextCapturePipeline {
         SelectedTextCapturePipeline(strategies: [
             AccessibilitySelectedTextCapture(),
             BrowserAppleScriptSelectedTextCapture(),
-            MenuCopySelectedTextCapture(),
             SimulatedCopySelectedTextCapture(),
         ])
     }

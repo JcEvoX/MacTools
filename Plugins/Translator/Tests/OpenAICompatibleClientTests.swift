@@ -112,6 +112,20 @@ final class OpenAICompatibleClientTests: XCTestCase {
         )
     }
 
+    func testHTTP401MapsToUnauthorized() async {
+        await assertTranslateError(
+            result: .success((Data("{}".utf8), Self.httpResponse(statusCode: 401))),
+            expectedDescription: "API Key 无效或无权限"
+        )
+    }
+
+    func testHTTP403MapsToUnauthorized() async {
+        await assertTranslateError(
+            result: .success((Data("{}".utf8), Self.httpResponse(statusCode: 403))),
+            expectedDescription: "API Key 无效或无权限"
+        )
+    }
+
     func testEmptyResponseContentMapsToEmptyResponse() async {
         await assertTranslateError(
             result: .success((

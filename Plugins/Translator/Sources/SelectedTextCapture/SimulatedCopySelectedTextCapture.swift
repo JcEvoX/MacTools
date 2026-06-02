@@ -11,6 +11,10 @@ struct SimulatedCopySelectedTextCapture: SelectedTextCapturing {
             return failure(context: context, reason: "需要辅助功能授权")
         }
 
+        // 触发快捷键（如 ⌥D）时用户可能仍按住修饰键，若此时注入 ⌘C，
+        // 物理修饰键会与注入事件叠加（如变成 ⌘⌥C）导致复制失效。先等待修饰键释放。
+        await waitForModifierKeysToClear()
+
         let pasteboard = NSPasteboard.general
         let snapshot = PasteboardSnapshot.capture(from: pasteboard)
 
@@ -50,6 +54,20 @@ struct SimulatedCopySelectedTextCapture: SelectedTextCapturing {
 
         if pasteboard.changeCount != clearedChangeCount {
             try? await Task.sleep(nanoseconds: 30_000_000)
+        }
+    }
+
+    private func waitForModifierKeysToClear() async {
+        let trackedModifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+        let deadline = Date().addingTimeInterval(0.3)
+
+        while Date() < deadline {
+            let current = CGEventSource.flagsState(.combinedSessionState)
+            if current.intersection(trackedModifiers).isEmpty {
+                return
+            }
+
+            try? await Task.sleep(nanoseconds: 15_000_000)
         }
     }
 

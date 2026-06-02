@@ -4,7 +4,6 @@ import Foundation
 enum SelectedTextCaptureStrategyID: String, Equatable, Sendable {
     case accessibility
     case browserAppleScript
-    case menuCopy
     case simulatedCopy
 }
 

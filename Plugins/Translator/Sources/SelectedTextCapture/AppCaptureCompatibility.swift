@@ -1,16 +1,6 @@
 import Foundation
 
 enum AppCaptureCompatibility {
-    private static let browserBundleIDs: Set<String> = [
-        "com.apple.Safari",
-        "com.google.Chrome",
-        "com.microsoft.edgemac",
-        "com.brave.Browser",
-        "org.mozilla.firefox",
-        "company.thebrowser.Browser",
-        "org.chromium.Chromium",
-    ]
-
     private static let appleScriptSelectionBundleIDs: Set<String> = [
         "com.apple.Safari",
         "com.google.Chrome",
@@ -19,11 +9,6 @@ enum AppCaptureCompatibility {
         "company.thebrowser.Browser",
         "org.chromium.Chromium",
     ]
-
-    static func isBrowser(_ bundleID: String?) -> Bool {
-        guard let bundleID else { return false }
-        return browserBundleIDs.contains(bundleID)
-    }
 
     static func supportsAppleScriptSelection(_ bundleID: String?) -> Bool {
         guard let bundleID else { return false }

@@ -54,10 +54,10 @@ final class TranslatorCoordinatorTests: XCTestCase {
                     )
                 ),
                 RecordingSelectedTextCapture(
-                    strategyID: .menuCopy,
+                    strategyID: .simulatedCopy,
                     result: SelectedTextCaptureResult(
                         text: nil,
-                        strategyID: .menuCopy,
+                        strategyID: .simulatedCopy,
                         isEditable: false,
                         sourceApplicationBundleID: nil,
                         failureReason: "复制失败"

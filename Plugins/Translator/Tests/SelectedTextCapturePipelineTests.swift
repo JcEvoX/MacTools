@@ -17,10 +17,10 @@ final class SelectedTextCapturePipelineTests: XCTestCase {
                 )
             ),
             StubSelectedTextCapture(
-                strategyID: .menuCopy,
+                strategyID: .browserAppleScript,
                 result: SelectedTextCaptureResult(
                     text: "selected text",
-                    strategyID: .menuCopy,
+                    strategyID: .browserAppleScript,
                     isEditable: true,
                     sourceApplicationBundleID: "com.example.second",
                     failureReason: "忽略"
@@ -41,7 +41,7 @@ final class SelectedTextCapturePipelineTests: XCTestCase {
         let result = await pipeline.capture(context: SelectedTextCaptureContext())
 
         XCTAssertEqual(result.text, "selected text")
-        XCTAssertEqual(result.strategyID, .menuCopy)
+        XCTAssertEqual(result.strategyID, .browserAppleScript)
         XCTAssertTrue(result.isEditable)
         XCTAssertEqual(result.sourceApplicationBundleID, "com.example.second")
         XCTAssertNil(result.failureReason)
@@ -91,10 +91,10 @@ final class SelectedTextCapturePipelineTests: XCTestCase {
                 )
             ),
             StubSelectedTextCapture(
-                strategyID: .menuCopy,
+                strategyID: .simulatedCopy,
                 result: SelectedTextCaptureResult(
                     text: nil,
-                    strategyID: .menuCopy,
+                    strategyID: .simulatedCopy,
                     isEditable: false,
                     sourceApplicationBundleID: nil,
                     failureReason: "复制失败"
@@ -121,10 +121,10 @@ final class SelectedTextCapturePipelineTests: XCTestCase {
                 )
             ),
             StubSelectedTextCapture(
-                strategyID: .menuCopy,
+                strategyID: .simulatedCopy,
                 result: SelectedTextCaptureResult(
                     text: nil,
-                    strategyID: .menuCopy,
+                    strategyID: .simulatedCopy,
                     isEditable: false,
                     sourceApplicationBundleID: nil,
                     failureReason: "复制失败"

@@ -700,6 +700,11 @@ final class PluginHost: ObservableObject {
                     self?.statusItemButtonFrameProvider?()
                 }
             }
+            if let configurationPresenting = plugin as? any PluginConfigurationPresenting {
+                configurationPresenting.requestConfigurationPresentation = { [weak self] in
+                    self?.presentPluginConfiguration(pluginID: pluginID)
+                }
+            }
             configureHostStatusItemCallbacks(for: [plugin])
         }
     }
@@ -1136,6 +1141,7 @@ final class PluginHost: ObservableObject {
         plugin.onStateChange = nil
         plugin.requestPermissionGuidance = nil
         plugin.shortcutBindingResolver = nil
+        (plugin as? any PluginConfigurationPresenting)?.requestConfigurationPresentation = nil
         syncGlobalShortcuts()
     }
 

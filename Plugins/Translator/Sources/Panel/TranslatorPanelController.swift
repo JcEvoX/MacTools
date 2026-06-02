@@ -8,49 +8,27 @@ final class TranslatorPanelController: TranslatorPanelControlling {
 
     private var panelWindow: TranslatorPanelWindow?
     private var lastFrame: NSRect?
+    private let model = TranslatorPanelModel()
 
     var onAction: ((TranslatorPanelAction) -> Void)?
 
     func show(snapshot: TranslatorPanelSnapshot) {
+        model.snapshot = snapshot
         let panel = panelWindow ?? makePanel()
         panelWindow = panel
 
-        update(snapshot: snapshot)
-
-        if lastFrame == nil {
-            panel.setFrame(defaultFrame(for: panel), display: true)
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
-        panel.makeKey()
+
+        // 取词阶段保持非 key，避免抢走前台 App 的键盘焦点而影响 AX 取词与模拟 ⌘C；
+        // 结果态才成为 key 以支持按钮点击、文本选择与 Esc 关闭。不调用 NSApp.activate，
+        // 与仓库内其他 .nonactivatingPanel 浮窗保持一致，不让整个 App 抢占前台。
+        if snapshot.phase != .capturing {
+            panel.makeKey()
+        }
     }
 
     func update(snapshot: TranslatorPanelSnapshot) {
-        let panel = panelWindow ?? makePanel()
-        panelWindow = panel
-
-        let currentFrame = panel.frame
-        let size = currentFrame.size == .zero ? Self.panelSize : currentFrame.size
-        let effectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        effectView.material = .popover
-        effectView.blendingMode = .behindWindow
-        effectView.state = .active
-        effectView.maskImage = Self.roundedMaskImage(size: size, cornerRadius: 18)
-
-        let rootView = TranslatorPanelView(snapshot: snapshot) { [weak self] action in
-            self?.onAction?(action)
-        }
-        let hostingView = NSHostingView(rootView: rootView)
-        hostingView.frame = effectView.bounds
-        hostingView.autoresizingMask = [.width, .height]
-        effectView.addSubview(hostingView)
-
-        panel.contentView = effectView
-        panel.setContentSize(size)
-        if currentFrame != .zero {
-            panel.setFrame(currentFrame, display: true)
-        }
+        model.snapshot = snapshot
     }
 
     func close() {
@@ -67,6 +45,23 @@ final class TranslatorPanelController: TranslatorPanelControlling {
         panel.onCloseRequest = { [weak self] in
             self?.onAction?(.close)
         }
+
+        let effectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.panelSize))
+        effectView.material = .popover
+        effectView.blendingMode = .behindWindow
+        effectView.state = .active
+        effectView.maskImage = Self.roundedMaskImage(size: Self.panelSize, cornerRadius: 18)
+
+        let rootView = TranslatorPanelHostView(model: model) { [weak self] action in
+            self?.onAction?(action)
+        }
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = effectView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        effectView.addSubview(hostingView)
+
+        panel.contentView = effectView
+        panel.setContentSize(Self.panelSize)
         panel.setFrame(lastFrame ?? defaultFrame(for: panel), display: true)
         return panel
     }

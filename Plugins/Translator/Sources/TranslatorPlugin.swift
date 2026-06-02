@@ -20,7 +20,7 @@ private struct TranslatorPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
     let metadata = PluginMetadata(
         id: TranslatorConstants.pluginID,
         title: "翻译",
@@ -38,6 +38,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestConfigurationPresentation: (() -> Void)?
 
     private let storage: PluginStorage
     private let accessibilityTrustProvider: () -> Bool
@@ -261,7 +262,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func handlePanelAction(_ action: TranslatorPanelAction) {
         if action == .openSettings {
-            requestPermissionGuidance?(TranslatorConstants.PermissionID.automation)
+            requestConfigurationPresentation?()
             return
         }
 

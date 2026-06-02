@@ -86,6 +86,8 @@ final class TranslatorCoordinator {
             translation: nil,
             errorMessage: nil
         )
+        // 立即展示取词加载态；capturing 阶段面板不抢焦点，避免影响 AX 取词与模拟复制。
+        panelController?.show(snapshot: snapshot)
 
         let result = await selectedTextCapturePipeline.capture(
             context: SelectedTextCaptureContext(
@@ -137,9 +139,9 @@ final class TranslatorCoordinator {
         case .copyTranslation:
             copy(snapshot.translation?.text)
         case .speakSource:
-            speak(snapshot.sourceText)
+            speak(snapshot.sourceText, language: snapshot.languageSelection?.source)
         case .speakTranslation:
-            speak(snapshot.translation?.text)
+            speak(snapshot.translation?.text, language: snapshot.languageSelection?.target)
         case .openSettings:
             break
         }
@@ -179,6 +181,7 @@ final class TranslatorCoordinator {
                 translation: nil,
                 errorMessage: message
             )
+            panelController?.show(snapshot: snapshot)
         }
     }
 
@@ -216,14 +219,17 @@ final class TranslatorCoordinator {
                 translation: translation,
                 errorMessage: nil
             )
+            panelController?.show(snapshot: snapshot)
         } catch {
             guard !Task.isCancelled, sessionID == currentSessionID else { return }
 
+            TranslatorLog.provider.error("translation failed")
             setError(
                 .requestFailed(error.localizedDescription),
                 sourceText: sourceText,
                 languageSelection: languageSelection
             )
+            panelController?.show(snapshot: snapshot)
         }
     }
 
@@ -248,9 +254,13 @@ final class TranslatorCoordinator {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private func speak(_ text: String?) {
+    private func speak(_ text: String?, language: TranslatorLanguage?) {
         guard let text, !text.isEmpty else { return }
 
-        speechSynthesizer.speak(AVSpeechUtterance(string: text))
+        let utterance = AVSpeechUtterance(string: text)
+        if let language, let voice = AVSpeechSynthesisVoice(language: language.speechLanguageCode) {
+            utterance.voice = voice
+        }
+        speechSynthesizer.speak(utterance)
     }
 }

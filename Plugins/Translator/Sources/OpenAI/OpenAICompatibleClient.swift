@@ -52,10 +52,18 @@ struct OpenAICompatibleClient: Sendable {
         } catch let error as OpenAICompatibleClientError {
             throw error
         } catch {
+            // 仅记录传输层错误类别，不记录请求头、API Key 或响应体。
+            TranslatorLog.provider.error("translation request transport error")
             throw OpenAICompatibleClientError.requestFailed
         }
 
         guard (200 ... 299).contains(response.statusCode) else {
+            TranslatorLog.provider.error("translation request failed with status \(response.statusCode, privacy: .public)")
+
+            if response.statusCode == 401 || response.statusCode == 403 {
+                throw OpenAICompatibleClientError.unauthorized
+            }
+
             throw OpenAICompatibleClientError.requestFailed
         }
 
@@ -94,6 +102,7 @@ struct OpenAICompatibleClient: Sendable {
 enum OpenAICompatibleClientError: Error, Equatable, Sendable {
     case invalidResponse
     case requestFailed
+    case unauthorized
     case emptyResponse
     case parseFailed
 }
@@ -103,6 +112,8 @@ extension OpenAICompatibleClientError: LocalizedError {
         switch self {
         case .invalidResponse, .requestFailed:
             return "请求失败，请稍后重试"
+        case .unauthorized:
+            return "API Key 无效或无权限"
         case .emptyResponse:
             return "响应为空"
         case .parseFailed:

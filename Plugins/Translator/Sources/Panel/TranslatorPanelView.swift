@@ -1,5 +1,21 @@
 import SwiftUI
 
+@MainActor
+final class TranslatorPanelModel: ObservableObject {
+    @Published var snapshot: TranslatorPanelSnapshot = .idle
+}
+
+/// 长期承载 SwiftUI 视图树，仅在 `model.snapshot` 变化时由 SwiftUI 差量更新，
+/// 避免每次快照都重建 NSHostingView 而丢失滚动位置与文本选择。
+struct TranslatorPanelHostView: View {
+    @ObservedObject var model: TranslatorPanelModel
+    let onAction: (TranslatorPanelAction) -> Void
+
+    var body: some View {
+        TranslatorPanelView(snapshot: model.snapshot, onAction: onAction)
+    }
+}
+
 struct TranslatorPanelView: View {
     let snapshot: TranslatorPanelSnapshot
     let onAction: (TranslatorPanelAction) -> Void

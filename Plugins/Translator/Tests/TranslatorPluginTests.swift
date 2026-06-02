@@ -249,11 +249,23 @@ final class TranslatorPluginTests: XCTestCase {
 
     func testPanelCloseActionClosesPanelEvenWithoutCoordinator() {
         let panelController = RecordingTranslatorPanelController()
-        _ = makePlugin(panelController: panelController)
+        let plugin = makePlugin(panelController: panelController)
 
         panelController.onAction?(.close)
 
         XCTAssertTrue(panelController.didClose)
+        withExtendedLifetime(plugin) {}
+    }
+
+    func testPanelOpenSettingsRequestsConfigurationPresentation() {
+        let panelController = RecordingTranslatorPanelController()
+        let plugin = makePlugin(panelController: panelController)
+        var didRequestPresentation = false
+        plugin.requestConfigurationPresentation = { didRequestPresentation = true }
+
+        panelController.onAction?(.openSettings)
+
+        XCTAssertTrue(didRequestPresentation)
     }
 
     func testPanelCloseActionDuringPendingCapturePreventsProviderInvocation() async {
