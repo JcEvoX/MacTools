@@ -1,0 +1,24 @@
+{
+  "id": "translator",
+  "displayName": "翻译",
+  "summary": "划词快捷键翻译",
+  "version": "0.1.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "TranslatorPlugin.bundle",
+  "factoryClass": "TranslatorPlugin.TranslatorPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "TranslatorPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [
+    "accessibility",
+    "automation"
+  ],
+  "category": "productivity"
+}
