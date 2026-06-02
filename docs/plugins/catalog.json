@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-05-26T03:56:56Z",
-  "minimumHostVersion": "1.0.11",
+  "generatedAt": "2026-06-02T13:59:31Z",
+  "minimumHostVersion": "1.0.14",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -15,15 +15,15 @@
       "id": "activity-bar",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "8c3ccbfeed3866abd0f22fcff6ed65e4ee8ba5b6f96ad3ce1938dc8383b0edc1",
-        "size": 758513,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/activity-bar.mactoolsplugin.zip"
+        "sha256": "b1346300767ca736f0b86d8c92dbf31c749c40fc404495f488ebcd2c11cb7f7b",
+        "size": 758520,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -141,18 +141,18 @@
       "id": "calendar",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "1775635540603d5938efd0d98abd264666e7abf275a105b9f329fb7ff2ce5529",
-        "size": 296723,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/calendar.mactoolsplugin.zip"
+        "sha256": "08762befd56a3927579a12a3db6079065d48c0244d6802d68652dffdf120e52a",
+        "size": 297197,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/calendar.mactoolsplugin.zip"
       },
       "permissions": [
         "calendarFullAccess",
         "automation"
       ],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
       "summary": "查看日期、节假日和系统日程",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -174,6 +174,27 @@
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
       "summary": "一键清空当前剪贴板内容",
       "version": "1.0.4"
+    },
+    {
+      "capabilities": {
+        "componentPanel": true,
+        "configuration": true,
+        "primaryPanel": false
+      },
+      "category": null,
+      "displayName": "设备电量",
+      "id": "device-battery",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "f4853c1d51795f3d39011633333122e584983c7d8c87366b5d5e62dd8f2ecbd1",
+        "size": 575737,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/device-battery.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
+      "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
+      "version": "1.0.0"
     },
     {
       "capabilities": {
@@ -471,6 +492,30 @@
     },
     {
       "capabilities": {
+        "componentPanel": true,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "productivity",
+      "displayName": "隐藏菜单栏图标",
+      "id": "menu-bar-hidden",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "068d33ce911096ecf51ef74e70a6f2a7d27afdf3d1749e77830657fefa60679f",
+        "size": 753046,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/menu-bar-hidden.mactoolsplugin.zip"
+      },
+      "permissions": [
+        "accessibility",
+        "screen-recording"
+      ],
+      "pluginKitVersion": 2,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
+      "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
         "componentPanel": false,
         "configuration": false,
         "primaryPanel": true
@@ -501,17 +546,17 @@
       "id": "middle-click",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7fc8dbf2ebdd2388fc3a2d4f2632e75f51a462dd360def89f2766e69e0d7507a",
-        "size": 114956,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.12/middle-click.mactoolsplugin.zip"
+        "sha256": "4965fcf00014f8af8c005dae0c8f6d628de6341f2ec45c1a009990b296db66ce",
+        "size": 124048,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/middle-click.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.12",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
       "summary": "触控板轻点模拟鼠标中键",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -631,15 +676,15 @@
       "id": "system-status",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "abd2da1b1bbc34520beade124046dd6f4fec8196acc6245ab958fd53aabb21ed",
-        "size": 344971,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/system-status.mactoolsplugin.zip"
+        "sha256": "6cc41bd81814c57362a2eb3001f569770fe59126b886fb1e59bec08b5060d19f",
+        "size": 346269,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
       "summary": "实时查看系统状态",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -688,6 +733,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "ST7y13ltwwSo3tY57MI44xP9LFY1dELAUjhJkAMqVRsr6246Ap4SDeipO4aZvPAToz6Crpj/vwHb2nxNNnwyAw=="
+    "value": "ykMH6iIZ4e+uSallDnt2bt7fS8ZULaO2DRux3z0xbIJkMVCH+69yLoIH4aiGvgDszdXX2cvFi2gn+a3ENrzsBA=="
   }
 }
