@@ -40,7 +40,10 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     )
 
     let descriptor = PluginComponentDescriptor(
-        span: PluginComponentSpan(width: 4, height: 10)!
+        span: PluginComponentSpan(
+            width: 4,
+            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 10)
+        )!
     )
 
     private let controller: ActivityBarController

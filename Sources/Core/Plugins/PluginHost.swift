@@ -72,7 +72,16 @@ final class PluginHost: ObservableObject {
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
     /// 由 `MenuBarStatusItemController` 注入，返回状态栏图标按钮的屏幕 frame。
-    var statusItemButtonFrameProvider: (() -> NSRect?)? = nil
+    var statusItemButtonFrameProvider: (() -> NSRect?)? = nil {
+        didSet {
+            configureHostStatusItemCallbacks(for: activePlugins)
+        }
+    }
+    var resetStatusItemPosition: (() -> Void)? = nil {
+        didSet {
+            configureHostStatusItemCallbacks(for: activePlugins)
+        }
+    }
 
     convenience init() {
         let dynamicPluginManager = DynamicPluginManager()
@@ -690,6 +699,19 @@ final class PluginHost: ObservableObject {
                 anchorable.anchorRectProvider = { [weak self] in
                     self?.statusItemButtonFrameProvider?()
                 }
+            }
+            configureHostStatusItemCallbacks(for: [plugin])
+        }
+    }
+
+    private func configureHostStatusItemCallbacks(for plugins: [any MacToolsPlugin]) {
+        for plugin in plugins {
+            guard let recoverable = plugin as? any MenuBarHostStatusItemRecovering else { continue }
+            recoverable.hostStatusItemFrameProvider = { [weak self] in
+                self?.statusItemButtonFrameProvider?()
+            }
+            recoverable.resetHostStatusItemPosition = { [weak self] in
+                self?.resetStatusItemPosition?()
             }
         }
     }
@@ -1476,6 +1498,8 @@ final class PluginHost: ObservableObject {
             return isGranted ? "检查授权状态" : "请求授权"
         case .automation:
             return "打开设置"
+        case .screenRecording:
+            return isGranted ? "检查授权状态" : "前往授权"
         }
     }
 
@@ -1487,6 +1511,8 @@ final class PluginHost: ObservableObject {
             return "calendar"
         case .automation:
             return "cursorarrow.click.2"
+        case .screenRecording:
+            return "rectangle.dashed.badge.record"
         }
     }
 }

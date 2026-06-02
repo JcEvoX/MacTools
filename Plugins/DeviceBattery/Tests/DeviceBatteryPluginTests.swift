@@ -13,15 +13,15 @@ final class DeviceBatteryPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPluginDescriptorUsesFourByTwoSpan() {
+    func testPluginDescriptorUsesExpandedFullWidthSpan() {
         let plugin = makePlugin()
 
         XCTAssertEqual(plugin.metadata.id, "device-battery")
         XCTAssertEqual(plugin.metadata.title, "设备电量")
-        XCTAssertEqual(plugin.descriptor.span, .fourByTwo)
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 25)!)
     }
 
-    func testPluginDescriptorUsesSingleRowSpanForOneDevice() async throws {
+    func testPluginDescriptorUsesExpandedSingleRowSpanForOneDevice() async throws {
         let plugin = makePlugin(items: [
             DeviceBatteryItem(
                 id: "internal-battery",
@@ -41,12 +41,12 @@ final class DeviceBatteryPluginTests: XCTestCase {
         plugin.activate(context: makeContext())
         try await Task.sleep(for: .milliseconds(50))
 
-        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 1)!)
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 12)!)
 
         plugin.deactivate(reason: .hostShutdown)
     }
 
-    func testPluginDescriptorUsesSingleRowSpanForTwoDeviceList() async throws {
+    func testPluginDescriptorUsesExpandedSingleRowSpanForTwoDeviceList() async throws {
         let plugin = makePlugin(items: [
             makeBatteryItem(id: "mac", name: "MacBook Pro", kind: .internalBattery, level: 78),
             makeBatteryItem(id: "mouse", name: "MX Anywhere 3S", kind: .bluetooth, level: 85)
@@ -55,7 +55,7 @@ final class DeviceBatteryPluginTests: XCTestCase {
         plugin.activate(context: makeContext())
         try await Task.sleep(for: .milliseconds(50))
 
-        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 1)!)
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 12)!)
 
         plugin.deactivate(reason: .hostShutdown)
     }

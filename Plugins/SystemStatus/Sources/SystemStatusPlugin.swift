@@ -27,7 +27,10 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
     )
 
     let descriptor = PluginComponentDescriptor(
-        span: .fourByTwo
+        span: PluginComponentSpan(
+            width: 4,
+            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 2)
+        )!
     )
 
     private let viewModel: SystemStatusViewModel

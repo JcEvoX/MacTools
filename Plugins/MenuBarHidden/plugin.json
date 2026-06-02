@@ -1,0 +1,21 @@
+{
+  "id": "menu-bar-hidden",
+  "displayName": "隐藏菜单栏图标",
+  "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "MenuBarHidden.bundle",
+  "factoryClass": "MenuBarHiddenPlugin.MenuBarHiddenPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MenuBarHiddenPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": true,
+    "configuration": true
+  },
+  "permissions": ["accessibility", "screen-recording"],
+  "category": "productivity"
+}

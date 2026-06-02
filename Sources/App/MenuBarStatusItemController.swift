@@ -27,7 +27,7 @@ final class MenuBarStatusItemController: NSObject {
     private let pluginHost: PluginHost
     private let windowRouter: AppWindowRouter
     private let iconSettings: MenuBarIconSettings
-    private let statusItem: NSStatusItem
+    private var statusItem: NSStatusItem
     private var panelPresenter: MenuBarPanelPresenter!
     private var cancellables: Set<AnyCancellable> = []
     private var localEventMonitor: Any?
@@ -52,7 +52,9 @@ final class MenuBarStatusItemController: NSObject {
         self.pluginHost = pluginHost
         self.windowRouter = windowRouter
         self.iconSettings = iconSettings
-        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
+        self.statusItem = NSStatusBar.system.statusItem(withLength: 0)
+        self.statusItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         super.init()
         panelPresenter = MenuBarPanelPresenter(
             pluginHost: pluginHost,
@@ -76,6 +78,9 @@ final class MenuBarStatusItemController: NSObject {
         observePluginHost()
         observeIconSettings()
         updateStatusIcon()
+        pluginHost.resetStatusItemPosition = { [weak self] in
+            self?.resetStatusItemPosition()
+        }
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
@@ -152,9 +157,26 @@ final class MenuBarStatusItemController: NSObject {
         let payload = iconSettings.imagePayload(for: statusItem.button?.effectiveAppearance)
         payload.image.isTemplate = payload.isTemplate
 
+        statusItem.length = NSStatusItem.variableLength
         statusItem.button?.image = payload.image
         statusItem.button?.imagePosition = .imageOnly
         configureAnimationIfNeeded(payload)
+    }
+
+    private func resetStatusItemPosition() {
+        dismissPanels()
+        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
+
+        let oldItem = statusItem
+        NSStatusBar.system.removeStatusItem(oldItem)
+        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
+
+        let newItem = NSStatusBar.system.statusItem(withLength: 0)
+        newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
+        statusItem = newItem
+
+        configureStatusItem()
+        updateStatusIcon()
     }
 
     private func configureAnimationIfNeeded(_ payload: MenuBarIconImagePayload) {

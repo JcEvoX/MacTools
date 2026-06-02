@@ -43,7 +43,10 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
     )
 
     let descriptor = PluginComponentDescriptor(
-        span: PluginComponentSpan(width: 4, height: 3)!
+        span: PluginComponentSpan(
+            width: 4,
+            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 3)
+        )!
     )
 
     private let context: PluginRuntimeContext
