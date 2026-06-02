@@ -116,3 +116,10 @@ public protocol DropZoneAnchorProviding: AnyObject {
     /// 宿主注入：返回状态栏图标按钮在屏幕坐标系中的 frame。
     var anchorRectProvider: (() -> NSRect?)? { get set }
 }
+
+/// 可选协议——需要保护宿主菜单栏状态项位置的插件才声明遵从。
+@MainActor
+public protocol MenuBarHostStatusItemRecovering: AnyObject {
+    var hostStatusItemFrameProvider: (() -> NSRect?)? { get set }
+    var resetHostStatusItemPosition: (() -> Void)? { get set }
+}

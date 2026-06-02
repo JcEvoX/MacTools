@@ -7,14 +7,17 @@ struct ComponentGridPlacement: Identifiable, Equatable {
     let row: Int
     let column: Int
     let span: PluginComponentSpan
+    let yOffset: CGFloat
 }
 
 enum ComponentPanelLayout {
-    static let columns = 4
-    static let cellWidth: CGFloat = 70
-    static let cellHeight: CGFloat = 94
-    static let horizontalSpacing: CGFloat = 8
-    static let verticalSpacing: CGFloat = 8
+    static let metrics = PluginComponentPanelLayoutMetrics.default
+    static let columns = metrics.columns
+    static let cellWidth = metrics.cellWidth
+    static let horizontalSpacing = metrics.horizontalSpacing
+    static let verticalSpacing = metrics.verticalSpacing
+    static let originalCellHeight = metrics.originalCellHeight
+    static let cellHeight = metrics.cellHeight
     static let spacing = horizontalSpacing
     static let horizontalPadding = MenuBarPanelLayout.outerPadding
     static let verticalPadding = MenuBarPanelLayout.outerPadding
@@ -23,7 +26,7 @@ enum ComponentPanelLayout {
     static let minimumPanelHeight = MenuBarPanelLayout.minimumPanelHeight
 
     static var gridWidth: CGFloat {
-        CGFloat(columns) * cellWidth + CGFloat(columns - 1) * horizontalSpacing
+        metrics.gridWidth
     }
 
     static var panelWidth: CGFloat {
@@ -35,27 +38,29 @@ enum ComponentPanelLayout {
     }
 
     static func itemWidth(for span: PluginComponentSpan) -> CGFloat {
-        CGFloat(span.width) * cellWidth + CGFloat(span.width - 1) * horizontalSpacing
+        metrics.itemWidth(forSpanWidth: span.width)
     }
 
     static func itemHeight(for span: PluginComponentSpan) -> CGFloat {
-        CGFloat(span.height) * cellHeight + CGFloat(span.height - 1) * verticalSpacing
+        metrics.itemHeight(forSpanHeight: span.height)
     }
 
     static func xOffset(for placement: ComponentGridPlacement) -> CGFloat {
-        CGFloat(placement.column) * (cellWidth + horizontalSpacing)
+        metrics.offsetX(forColumn: placement.column)
     }
 
     static func yOffset(for placement: ComponentGridPlacement) -> CGFloat {
-        CGFloat(placement.row) * (cellHeight + verticalSpacing)
+        placement.yOffset
     }
 
     static func gridContentHeight(for placements: [ComponentGridPlacement]) -> CGFloat {
-        guard let maximumRow = placements.map({ $0.row + $0.span.height }).max() else {
+        guard let maximumBottom = placements.map({
+            $0.yOffset + itemHeight(for: $0.span)
+        }).max() else {
             return emptyContentHeight
         }
 
-        return CGFloat(maximumRow) * cellHeight + CGFloat(max(maximumRow - 1, 0)) * verticalSpacing
+        return maximumBottom
     }
 
     static func preferredPanelHeight(for items: [PluginComponentItem], screen: NSScreen?) -> CGFloat {
@@ -84,6 +89,7 @@ enum ComponentGridPlacementEngine {
     ) -> [ComponentGridPlacement] {
         var occupiedCells: Set<GridCell> = []
         var placements: [ComponentGridPlacement] = []
+        var columnBottoms = Array(repeating: CGFloat(0), count: columns)
 
         for item in items {
             let span = item.span
@@ -104,7 +110,12 @@ enum ComponentGridPlacementEngine {
                             id: item.id,
                             row: row,
                             column: column,
-                            span: span
+                            span: span,
+                            yOffset: yOffset(
+                                column: column,
+                                span: span,
+                                columnBottoms: columnBottoms
+                            )
                         )
                     )
                     markOccupied(
@@ -112,6 +123,12 @@ enum ComponentGridPlacementEngine {
                         row: row,
                         column: column,
                         occupiedCells: &occupiedCells
+                    )
+                    updateColumnBottoms(
+                        span: span,
+                        column: column,
+                        yOffset: placements[placements.count - 1].yOffset,
+                        columnBottoms: &columnBottoms
                     )
                     didPlace = true
                     break
@@ -126,6 +143,33 @@ enum ComponentGridPlacementEngine {
         }
 
         return placements
+    }
+
+    private static func yOffset(
+        column: Int,
+        span: PluginComponentSpan,
+        columnBottoms: [CGFloat]
+    ) -> CGFloat {
+        let coveredColumns = column..<(column + span.width)
+        let previousBottom = coveredColumns
+            .map { columnBottoms[$0] }
+            .max() ?? 0
+
+        return previousBottom == 0
+            ? 0
+            : previousBottom + ComponentPanelLayout.verticalSpacing
+    }
+
+    private static func updateColumnBottoms(
+        span: PluginComponentSpan,
+        column: Int,
+        yOffset: CGFloat,
+        columnBottoms: inout [CGFloat]
+    ) {
+        let bottom = yOffset + ComponentPanelLayout.itemHeight(for: span)
+        for occupiedColumn in column..<(column + span.width) {
+            columnBottoms[occupiedColumn] = bottom
+        }
     }
 
     private static func canPlace(

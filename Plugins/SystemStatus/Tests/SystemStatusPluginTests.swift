@@ -13,12 +13,12 @@ final class SystemStatusPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPluginDescriptorUsesFourByTwoSpan() {
+    func testPluginDescriptorUsesExpandedFullWidthSpan() {
         let plugin = SystemStatusPlugin()
 
         XCTAssertEqual(plugin.metadata.id, "system-status")
         XCTAssertEqual(plugin.metadata.title, "系统状态")
-        XCTAssertEqual(plugin.descriptor.span, .fourByTwo)
+        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: 25)!)
     }
 
     func testPluginHostIncludesSystemStatusComponentOnlyWhenProvided() {
