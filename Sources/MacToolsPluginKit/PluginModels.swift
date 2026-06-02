@@ -66,6 +66,7 @@ public enum PluginStatusTone {
 
 public enum PluginPermissionKind {
     case accessibility
+    case inputMonitoring
     case calendarFullAccess
     case automation
     case screenRecording
@@ -324,6 +325,8 @@ public struct PluginComponentSpan: Equatable, Hashable, Sendable {
 }
 
 public struct PluginComponentPanelLayoutMetrics: Equatable, Sendable {
+    public static let cardCornerRadius: CGFloat = 12
+
     public let columns: Int
     public let cellWidth: CGFloat
     public let cellHeight: CGFloat

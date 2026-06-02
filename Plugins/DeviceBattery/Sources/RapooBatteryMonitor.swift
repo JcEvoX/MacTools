@@ -76,7 +76,8 @@ struct RapooMouseBatterySnapshot: Equatable, Sendable {
             source: "Rapoo HID",
             lastUpdated: lastUpdated,
             isConnected: true,
-            detail: itemDetail
+            detail: itemDetail,
+            componentIdentity: nil
         )
     }
 
@@ -587,4 +588,3 @@ private func rapooHIDInputReportCallback(
         )
     }
 }
-

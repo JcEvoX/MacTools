@@ -80,7 +80,7 @@ enum MenuBarHiddenComponentIconLayout {
     static let horizontalItemSpacing: CGFloat = 4
     static let minimumVerticalSpacing: CGFloat = 4
     static let horizontalPadding: CGFloat = 7
-    static let cardCornerRadius: CGFloat = 12
+    static let cardCornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
     static let itemCornerRadius: CGFloat = 7
 
     static func naturalContentHeight(forRowHeights rowHeights: [CGFloat]) -> CGFloat {

@@ -1494,6 +1494,8 @@ final class PluginHost: ObservableObject {
         switch kind {
         case .accessibility:
             return isGranted ? "检查授权状态" : "前往授权"
+        case .inputMonitoring:
+            return isGranted ? "检查授权状态" : "前往授权"
         case .calendarFullAccess:
             return isGranted ? "检查授权状态" : "请求授权"
         case .automation:
@@ -1507,6 +1509,8 @@ final class PluginHost: ObservableObject {
         switch kind {
         case .accessibility:
             return "accessibility"
+        case .inputMonitoring:
+            return "keyboard.badge.eye"
         case .calendarFullAccess:
             return "calendar"
         case .automation:

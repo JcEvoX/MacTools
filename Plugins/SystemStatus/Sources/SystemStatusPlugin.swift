@@ -196,26 +196,34 @@ final class SystemStatusViewModel: ObservableObject {
 
 struct SystemStatusComponentView: View {
     private enum Layout {
-        static let spacing: CGFloat = 8
+        static let spacing = SystemStatusComponentLayout.cardSpacing
     }
 
     @ObservedObject var viewModel: SystemStatusViewModel
     let isPanelVisible: Bool
 
     var body: some View {
-        VStack(spacing: Layout.spacing) {
-            HStack(spacing: Layout.spacing) {
-                compactCPUCard
-                compactMemoryCard
-                compactDiskCard
-                compactBatteryCard
-            }
+        GeometryReader { proxy in
+            let rowHeight = max(0, (proxy.size.height - Layout.spacing) / 2)
 
-            HStack(spacing: Layout.spacing) {
-                networkCard
-                topProcessesCard
+            VStack(spacing: Layout.spacing) {
+                HStack(spacing: Layout.spacing) {
+                    compactCPUCard
+                    compactMemoryCard
+                    compactDiskCard
+                    compactBatteryCard
+                }
+                .frame(height: rowHeight)
+
+                HStack(spacing: Layout.spacing) {
+                    networkCard
+                    topProcessesCard
+                }
+                .frame(height: rowHeight)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if isPanelVisible {
                 viewModel.start()
@@ -233,8 +241,7 @@ struct SystemStatusComponentView: View {
                 "温度 \(SystemStatusFormatter.temperature(cpu.temperatureCelsius))",
                 "功率 \(SystemStatusFormatter.power(cpu.systemPowerWatts))"
             ],
-            progress: cpu.usage,
-            tone: .purple
+            progress: cpu.usage
         )
     }
 
@@ -247,8 +254,7 @@ struct SystemStatusComponentView: View {
                 "已用 \(SystemStatusFormatter.bytes(memory.usedBytes))",
                 "总量 \(SystemStatusFormatter.bytes(memory.totalBytes))"
             ],
-            progress: memory.usage,
-            tone: tone(forUsage: memory.usage, normal: .blue)
+            progress: memory.usage
         )
     }
 
@@ -261,8 +267,7 @@ struct SystemStatusComponentView: View {
                 "已用 \(SystemStatusFormatter.bytes(disk.usedBytes))",
                 "总量 \(SystemStatusFormatter.bytes(disk.totalBytes))"
             ],
-            progress: disk.usage,
-            tone: tone(forUsage: disk.usage, normal: .teal)
+            progress: disk.usage
         )
     }
 
@@ -276,7 +281,6 @@ struct SystemStatusComponentView: View {
                 batteryHealthText(for: battery)
             ],
             progress: battery.level,
-            tone: tone(for: battery),
             centerSubtext: batteryCircleStatusText(for: battery),
             centerHelpText: batteryShortText(for: battery)
         )
@@ -326,38 +330,6 @@ struct SystemStatusComponentView: View {
         )
     }
 
-    private func tone(forUsage usage: Double?, normal: SystemStatusMetricTone) -> SystemStatusMetricTone {
-        guard let usage else {
-            return normal
-        }
-
-        if usage >= 0.9 {
-            return .red
-        }
-        if usage >= 0.75 {
-            return .orange
-        }
-
-        return normal
-    }
-
-    private func tone(for battery: SystemStatusBatterySnapshot) -> SystemStatusMetricTone {
-        guard let level = battery.level else {
-            return .orange
-        }
-
-        if battery.state == .charging || battery.state == .charged {
-            return .green
-        }
-        if level <= 0.2 {
-            return .red
-        }
-        if level <= 0.35 {
-            return .orange
-        }
-        return .green
-    }
-
     private func batteryShortText(for battery: SystemStatusBatterySnapshot) -> String {
         guard battery.isAvailable else {
             return battery.state.title
@@ -396,33 +368,8 @@ struct SystemStatusComponentView: View {
     }
 }
 
-private enum SystemStatusMetricTone {
-    case blue
-    case cyan
-    case green
-    case orange
-    case purple
-    case red
-    case teal
-
-    var color: Color {
-        switch self {
-        case .blue:
-            return Color(nsColor: .systemBlue)
-        case .cyan:
-            return Color(nsColor: .systemCyan)
-        case .green:
-            return Color(nsColor: .systemGreen)
-        case .orange:
-            return Color(nsColor: .systemOrange)
-        case .purple:
-            return Color(nsColor: .systemPurple)
-        case .red:
-            return Color(nsColor: .systemRed)
-        case .teal:
-            return Color(nsColor: .systemTeal)
-        }
-    }
+private enum SystemStatusCircleStyle {
+    static let tint = Color(nsColor: .systemBlue)
 }
 
 private struct SystemStatusCompactMetricCard: View {
@@ -430,14 +377,13 @@ private struct SystemStatusCompactMetricCard: View {
     let percentText: String
     let detailLines: [String]
     let progress: Double?
-    let tone: SystemStatusMetricTone
     var centerSubtext: String? = nil
     var centerHelpText: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                SystemStatusCircularProgress(value: progress, tint: tone.color)
+                SystemStatusCircularProgress(value: progress, tint: SystemStatusCircleStyle.tint)
                     .frame(width: 58, height: 58)
 
                 VStack(spacing: centerSubtext == nil ? 1 : 0) {
@@ -457,7 +403,7 @@ private struct SystemStatusCompactMetricCard: View {
                     if let centerSubtext {
                         Text(centerSubtext)
                             .font(.system(size: 6.8, weight: .semibold, design: .rounded))
-                            .foregroundStyle(tone.color)
+                            .foregroundStyle(SystemStatusCircleStyle.tint)
                             .lineLimit(1)
                             .minimumScaleFactor(0.55)
                     }
@@ -481,10 +427,9 @@ private struct SystemStatusCompactMetricCard: View {
             }
             .help(detailLines.joined(separator: "\n"))
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 7)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 private struct SystemStatusWideInfoCard<Content: View>: View {
@@ -514,10 +459,9 @@ private struct SystemStatusWideInfoCard<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 
@@ -630,9 +574,9 @@ private struct SystemStatusTopProcessesCard: View {
                 .frame(maxHeight: .infinity, alignment: .center)
             }
         }
-        .padding(10)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 
     private var header: some View {

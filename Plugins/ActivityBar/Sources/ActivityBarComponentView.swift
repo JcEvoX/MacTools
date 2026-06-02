@@ -1,11 +1,20 @@
 import AppKit
 import Charts
 import SwiftUI
+import MacToolsPluginKit
 
 private struct ActivityBarPanelShape: Shape {
     func path(in rect: CGRect) -> Path {
-        Path(roundedRect: rect, cornerRadius: 10, style: .continuous)
+        Path(
+            roundedRect: rect,
+            cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+            style: .continuous
+        )
     }
+}
+
+private enum ActivityBarComponentLayout {
+    static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
 }
 
 private enum ActivityBarTrendMode: String, CaseIterable {
@@ -261,7 +270,13 @@ struct ActivityBarComponentView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(
+                        .blue.opacity(0.08),
+                        in: RoundedRectangle(
+                            cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                            style: .continuous
+                        )
+                    )
                     .padding(.horizontal, 4)
                     .padding(.top, 4)
             }
@@ -296,7 +311,13 @@ struct ActivityBarComponentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            .primary.opacity(0.04),
+            in: RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
     }
 
     private var inputInsightText: String? {
@@ -381,7 +402,13 @@ struct ActivityBarComponentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            .primary.opacity(0.04),
+            in: RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
         .padding(.horizontal, 16)
     }
 

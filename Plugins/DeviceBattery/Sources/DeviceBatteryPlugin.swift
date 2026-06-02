@@ -1,4 +1,5 @@
 import AppKit
+@preconcurrency import IOKit.hid
 import SwiftUI
 import MacToolsPluginKit
 
@@ -17,10 +18,20 @@ private struct DeviceBatteryPluginProvider: PluginProvider {
     }
 }
 
+enum DeviceBatteryInputMonitoringAuthorizationStatus {
+    case granted
+    case denied
+    case unknown
+}
+
 @MainActor
 final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     private enum ControlID {
         static let openInputMonitoring = "open-input-monitoring"
+    }
+
+    private enum PermissionID {
+        static let inputMonitoring = "input-monitoring"
     }
 
     let metadata = PluginMetadata(
@@ -38,19 +49,16 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
 
     private let viewModel: DeviceBatteryViewModel
     private let store: DeviceBatteryStore
+    private let inputMonitoringAuthorizationStatus: () -> DeviceBatteryInputMonitoringAuthorizationStatus
 
     private var componentSpan: PluginComponentSpan {
         let visibleItemCount = viewModel.snapshot.visibleItems.count
-        if visibleItemCount == 1 || (store.layoutMode == .grid && visibleItemCount == 2) {
-            return PluginComponentSpan(
-                width: 4,
-                height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 1)
-            )!
-        }
-
         return PluginComponentSpan(
-            width: 4,
-            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 2)
+            width: DeviceBatteryComponentLayout.width,
+            height: DeviceBatteryComponentLayout.spanHeight(
+                mode: store.layoutMode,
+                visibleItemCount: visibleItemCount
+            )
         )!
     }
 
@@ -58,12 +66,25 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         self.init(context: context, viewModel: DeviceBatteryViewModel())
     }
 
-    init(
+    convenience init(
         context: PluginRuntimeContext,
         viewModel: DeviceBatteryViewModel
     ) {
+        self.init(
+            context: context,
+            viewModel: viewModel,
+            inputMonitoringAuthorizationStatus: Self.currentInputMonitoringAuthorizationStatus
+        )
+    }
+
+    init(
+        context: PluginRuntimeContext,
+        viewModel: DeviceBatteryViewModel,
+        inputMonitoringAuthorizationStatus: @escaping () -> DeviceBatteryInputMonitoringAuthorizationStatus
+    ) {
         self.viewModel = viewModel
         self.store = DeviceBatteryStore(storage: context.storage)
+        self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
     }
 
     var onStateChange: (() -> Void)? {
@@ -84,22 +105,21 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         )
     }
 
-    var settingsSections: [PluginSettingsSection] {
+    var permissionRequirements: [PluginPermissionRequirement] {
         [
-            PluginSettingsSection(
-                id: "sources",
-                title: "电量来源",
-                description: "读取 macOS 本地电源、蓝牙外设和雷柏 HID 上报。",
-                status: sourceSettingsStatus,
-                footnote: sourceSettingsFootnote,
-                buttonTitle: "打开输入监控设置",
-                actionID: ControlID.openInputMonitoring
+            PluginPermissionRequirement(
+                id: PermissionID.inputMonitoring,
+                kind: .inputMonitoring,
+                title: "输入监控授权",
+                description: "用于读取已适配厂商 HID 鼠标的电量、充电状态、设备型号和名称。"
             )
         ]
     }
 
+    var settingsSections: [PluginSettingsSection] { [] }
+
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: "选择组件面板布局和需要显示的电量来源。") { [store, viewModel] _ in
+        PluginConfiguration(description: "选择组件面板布局和显示内容。") { [store, viewModel] _ in
             DeviceBatterySettingsView(
                 store: store,
                 onChange: {
@@ -148,10 +168,21 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
-        PluginPermissionState(isGranted: true, footnote: nil)
+        switch permissionID {
+        case PermissionID.inputMonitoring:
+            return inputMonitoringPermissionState
+        default:
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
     }
 
-    func handlePermissionAction(id: String) {}
+    func handlePermissionAction(id: String) {
+        guard id == PermissionID.inputMonitoring else {
+            return
+        }
+
+        openInputMonitoringSettings()
+    }
 
     func handleSettingsAction(id: String) {
         if id == ControlID.openInputMonitoring {
@@ -161,39 +192,62 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
 
     func handleShortcutAction(id: String) {}
 
-    private var sourceSettingsStatus: PluginSettingsSection.Status {
-        let snapshot = viewModel.snapshot
-        if snapshot.rapooState == .permissionDenied {
-            return PluginSettingsSection.Status(
-                text: "雷柏需授权",
-                systemImage: "exclamationmark.triangle.fill",
-                tone: .caution
+    private var inputMonitoringPermissionState: PluginPermissionState {
+        let authorizationStatus = inputMonitoringAuthorizationStatus()
+        if viewModel.snapshot.rapooState == .permissionDenied,
+           authorizationStatus != .granted {
+            return PluginPermissionState(
+                isGranted: false,
+                footnote: "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
             )
         }
 
-        if snapshot.visibleItems.isEmpty {
-            return PluginSettingsSection.Status(
-                text: "未检测到",
-                systemImage: "battery.0percent",
-                tone: .neutral
+        switch authorizationStatus {
+        case .granted:
+            return PluginPermissionState(
+                isGranted: true,
+                footnote: inputMonitoringGrantedFootnote
+            )
+        case .denied, .unknown:
+            return PluginPermissionState(
+                isGranted: false,
+                footnote: inputMonitoringUnauthorizedFootnote
             )
         }
-
-        return PluginSettingsSection.Status(
-            text: "\(snapshot.visibleItems.count) 台设备",
-            systemImage: "checkmark.circle.fill",
-            tone: .positive
-        )
     }
 
-    private var sourceSettingsFootnote: String {
+    private var inputMonitoringGrantedFootnote: String {
+        switch viewModel.snapshot.rapooState {
+        case .connected:
+            return "已允许 MacTools 使用输入监控，并已读取到厂商 HID 鼠标信息。"
+        case .failed(let message):
+            return "已允许 MacTools 使用输入监控。最近读取厂商 HID 鼠标失败：\(message)"
+        case .idle, .scanning, .waitingForReport, .noDevice, .permissionDenied:
+            return "已允许 MacTools 使用输入监控，可读取已适配厂商 HID 鼠标信息。"
+        }
+    }
+
+    private var inputMonitoringUnauthorizedFootnote: String {
         switch viewModel.snapshot.rapooState {
         case .permissionDenied:
-            return "雷柏鼠标通过厂商 HID 接口读取，macOS 可能要求输入监控权限。"
+            return "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
         case .failed(let message):
-            return message
+            return "授权后可读取厂商 HID 鼠标信息。最近读取失败：\(message)"
         case .idle, .scanning, .waitingForReport, .connected, .noDevice:
-            return "系统电池和蓝牙电量来自本机系统信息；雷柏 VT 系列使用专用 HID 监听，不访问网页。"
+            return "授权后可读取厂商 HID 鼠标信息；未授权不影响 Mac 内置电池、系统蓝牙设备和 Apple 外设电量。"
+        }
+    }
+
+    private static func currentInputMonitoringAuthorizationStatus() -> DeviceBatteryInputMonitoringAuthorizationStatus {
+        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
+        case kIOHIDAccessTypeGranted:
+            return .granted
+        case kIOHIDAccessTypeDenied:
+            return .denied
+        case kIOHIDAccessTypeUnknown:
+            return .unknown
+        default:
+            return .unknown
         }
     }
 
