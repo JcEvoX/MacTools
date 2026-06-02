@@ -5,23 +5,27 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.13</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.13</link>
-            <sparkle:version>43</sparkle:version>
-            <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.13 -->
+            <title>Version 1.0.14</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.14</link>
+            <sparkle:version>44</sparkle:version>
+            <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.14 -->
 
 ## What's Changed
 ### Other Changes
-* feat: update app icons for improved visual consistency by @ayangweb in https://github.com/ggbond268/MacTools/pull/90
-* feat: adjust app icon preview size and padding for better layout by @ayangweb in https://github.com/ggbond268/MacTools/pull/91
+* fix(middle-click): fix middle click simulation failure after wake from lid close by @ayangweb in https://github.com/ggbond268/MacTools/pull/94
+* Add device battery plugin by @char1eslu in https://github.com/ggbond268/MacTools/pull/93
+* Use official Homebrew cask install path by @char1eslu in https://github.com/ggbond268/MacTools/pull/96
+* Add menu bar hidden plugin by @ggbond268 in https://github.com/ggbond268/MacTools/pull/97
 
+## New Contributors
+* @ggbond268 made their first contribution in https://github.com/ggbond268/MacTools/pull/97
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.12...v1.0.13
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.13...v1.0.14
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Tue, 26 May 2026 07:23:47 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.13/MacTools.dmg" length="5796901" type="application/octet-stream" sparkle:edSignature="lMZz5VDjJBxUCp2OzG+kUSC2VvRzkLWUKjYabKF2JMeaoQDwDMfRqU+w3cN9P/iy/5CDd3CN1xhZ3ZekQCGgAw==" />
+            <pubDate>Tue, 02 Jun 2026 14:00:35 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.14/MacTools.dmg" length="5805577" type="application/octet-stream" sparkle:edSignature="1uJJHr5q3xIYUEk8TZuvrQtyFATxk4DYIUQo5nDLfrrYK4mKNh/azfA8zYDQlSN598Sl8AYTTUVhND8JvN2qAw==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
