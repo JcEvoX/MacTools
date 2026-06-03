@@ -96,6 +96,7 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
+    @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
 
     var body: some View {
         Form {
@@ -104,7 +105,7 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("启动")
             }
-            
+
             Section {
                 AppearanceSettingsRow(selection: appearancePreferenceBinding)
             } header: {
@@ -116,6 +117,7 @@ struct GeneralSettingsView: View {
                     iconSettings: menuBarIconSettings,
                     gallery: menuBarIconGallery
                 )
+                MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
             } header: {
                 Text("状态栏图标")
             }
@@ -130,6 +132,58 @@ struct GeneralSettingsView: View {
             appearancePreferenceRawValue = preference.rawValue
             preference.apply()
         }
+    }
+
+    private var clickBehaviorBinding: Binding<MenuBarClickBehaviorPreference> {
+        Binding {
+            MenuBarClickBehaviorPreference(rawValue: clickBehaviorRawValue) ?? .standard
+        } set: { preference in
+            clickBehaviorRawValue = preference.rawValue
+        }
+    }
+}
+
+private struct MenuBarClickBehaviorSettingsRow: View {
+    @Binding var selection: MenuBarClickBehaviorPreference
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "cursorarrow.click.2")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("点击行为")
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text("默认：左键仪表盘、右键功能面板；互换则反过来（Control+点击始终等同右键）。")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Picker("点击行为", selection: $selection) {
+                ForEach(MenuBarClickBehaviorPreference.allCases) { preference in
+                    Text(preference.title)
+                        .tag(preference)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .help("交换菜单栏图标的左右键点击行为")
     }
 }
 
