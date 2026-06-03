@@ -5,27 +5,29 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.14</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.14</link>
-            <sparkle:version>44</sparkle:version>
-            <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.14 -->
+            <title>Version 1.0.15</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.15</link>
+            <sparkle:version>45</sparkle:version>
+            <sparkle:shortVersionString>1.0.15</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.15 -->
 
 ## What's Changed
 ### Other Changes
-* fix(middle-click): fix middle click simulation failure after wake from lid close by @ayangweb in https://github.com/ggbond268/MacTools/pull/94
-* Add device battery plugin by @char1eslu in https://github.com/ggbond268/MacTools/pull/93
-* Use official Homebrew cask install path by @char1eslu in https://github.com/ggbond268/MacTools/pull/96
-* Add menu bar hidden plugin by @ggbond268 in https://github.com/ggbond268/MacTools/pull/97
+* [codex] Fix menu bar autohide state detection by @Chen-DaYi in https://github.com/ggbond268/MacTools/pull/105
+* Fix official Homebrew cask bump workflow by @char1eslu in https://github.com/ggbond268/MacTools/pull/104
+* Fix: 插件信任校验在宿主 team 不可读时改为 fail-closed by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/100
+* Perf: 启动项扫描用一次 launchctl list 替代逐项 print（#21 需求1） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/121
+* Feat: 支持互换菜单栏图标的左右键点击行为（#98） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/118
+* Feat: 启动项支持本地备注（#21 需求3） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/119
 
 ## New Contributors
-* @ggbond268 made their first contribution in https://github.com/ggbond268/MacTools/pull/97
+* @Goldenmonstew made their first contribution in https://github.com/ggbond268/MacTools/pull/100
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.13...v1.0.14
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.14...v1.0.15
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Tue, 02 Jun 2026 14:00:35 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.14/MacTools.dmg" length="5805577" type="application/octet-stream" sparkle:edSignature="1uJJHr5q3xIYUEk8TZuvrQtyFATxk4DYIUQo5nDLfrrYK4mKNh/azfA8zYDQlSN598Sl8AYTTUVhND8JvN2qAw==" />
+            <pubDate>Wed, 03 Jun 2026 13:12:24 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.15/MacTools.dmg" length="5984831" type="application/octet-stream" sparkle:edSignature="W63mCURvxpvY+KLO40bwCcGISbOW68qN987/e9ZE9FiTWJR61ZUq6ix/NiW1ReYCcrMKdEBrB6jexRQAsVhkAQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
