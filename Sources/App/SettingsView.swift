@@ -145,6 +145,15 @@ struct GeneralSettingsView: View {
 
 private struct MenuBarClickBehaviorSettingsRow: View {
     @Binding var selection: MenuBarClickBehaviorPreference
+    @State private var toggleID = UUID()
+
+    private var isSwapped: Binding<Bool> {
+        Binding {
+            selection.isSwapped
+        } set: { enabled in
+            selection = enabled ? .swapped : .standard
+        }
+    }
 
     var body: some View {
         HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
@@ -159,10 +168,10 @@ private struct MenuBarClickBehaviorSettingsRow: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("点击行为")
+                Text("交换左右键点击行为")
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text("默认：左键仪表盘、右键功能面板；互换则反过来（Control+点击始终等同右键）。")
+                Text("关闭时左键打开仪表盘、右键打开功能面板；开启后左右键行为互换。")
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -170,20 +179,20 @@ private struct MenuBarClickBehaviorSettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker("点击行为", selection: $selection) {
-                ForEach(MenuBarClickBehaviorPreference.allCases) { preference in
-                    Text(preference.title)
-                        .tag(preference)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            Toggle("交换左右键点击行为", isOn: isSwapped)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .id(toggleID)
         }
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
-        .help("交换菜单栏图标的左右键点击行为")
+        .help("开启后左键打开功能面板，右键打开仪表盘")
+        .onAppear {
+            DispatchQueue.main.async {
+                toggleID = UUID()
+            }
+        }
     }
 }
 
