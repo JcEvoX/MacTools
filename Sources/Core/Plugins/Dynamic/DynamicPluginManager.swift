@@ -322,8 +322,16 @@ final class DynamicPluginManager: ObservableObject {
     /// Re-activate a previously paused plugin without reloading it.
     func resumePlugin(_ pluginID: String) {
         guard let plugins = loadedPluginsByID[pluginID] else { return }
+        // Re-activate with the SAME context the plugin was first loaded with
+        // (support/cache/temp directories, resource bundle, scoped storage). A bare
+        // `PluginRuntimeContext(pluginID:)` has nil directories and the .main bundle,
+        // so plugins that recompute paths in activate() — e.g. ActivityBar's hook
+        // script location — would silently switch on-disk locations after hide/show.
+        let context = packageStore.installedRecords().first { $0.id == pluginID }
+            .map { packageStore.runtimeContext(for: $0) }
+            ?? PluginRuntimeContext(pluginID: pluginID)
         for plugin in plugins {
-            plugin.activate(context: PluginRuntimeContext(pluginID: pluginID))
+            plugin.activate(context: context)
         }
     }
 
