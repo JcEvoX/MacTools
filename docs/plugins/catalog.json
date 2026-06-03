@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-02T13:59:31Z",
+  "generatedAt": "2026-06-03T13:07:30Z",
   "minimumHostVersion": "1.0.14",
   "pluginKitVersion": 2,
   "plugins": [
@@ -15,15 +15,16 @@
       "id": "activity-bar",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "b1346300767ca736f0b86d8c92dbf31c749c40fc404495f488ebcd2c11cb7f7b",
+        "sha256": "6f9ead426b0d75341188df2a32fa8109dd703b12ec61c3b2bba42e65ebedfb6e",
         "size": 758520,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.13/activity-bar.mactoolsplugin.zip"
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.13",
+      "releaseChannel": "beta",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "capabilities": {
@@ -36,15 +37,16 @@
       "id": "app-hotkey",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "3a7833ff06b415d018e29c6bcef9030bccf0cbe4c48550f201d756594238d569",
-        "size": 242250,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/app-hotkey.mactoolsplugin.zip"
+        "sha256": "fa1575d9d7414ee23600e1fe339745ade5147dab5b4d0fba4d661edc1f4745b1",
+        "size": 178000,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/app-hotkey.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -99,15 +101,16 @@
       "id": "auto-hide-menu-bar",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "9eb80c2c283902c7e49df02e42ede75f14d83fc8279135c2dd8f3842d956650c",
-        "size": 48592,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/auto-hide-menu-bar.mactoolsplugin.zip"
+        "sha256": "26dce2e3afce2c4650f87cac877ae11a0a9c5a2f118b877e1426f5a935be0516",
+        "size": 49911,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/auto-hide-menu-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -220,7 +223,7 @@
     {
       "capabilities": {
         "componentPanel": false,
-        "configuration": false,
+        "configuration": true,
         "primaryPanel": true
       },
       "category": "display",
@@ -228,15 +231,16 @@
       "id": "display-brightness",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "54b578373601cd7b47f94de784fbfd97c7998d08c08ebe470fd7e2a1017de154",
-        "size": 258787,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/display-brightness.mactoolsplugin.zip"
+        "sha256": "35e8770e03e622423c9c965b4b8e2b4ae87509117e35ab5bd456515aa2e1d91f",
+        "size": 294263,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/display-brightness.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "快速调节每个显示器的亮度",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -459,15 +463,16 @@
       "id": "launch-control",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "9aa1f9f8b52a7093797b29581141236428c028196ea605a7025dae9271c2dfe5",
-        "size": 488537,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/launch-control.mactoolsplugin.zip"
+        "sha256": "64e8674853ed6dec811ee9fbf74e7989290a8b7aec47fc5ac718f5fb60fa20e5",
+        "size": 521207,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/launch-control.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "查看和管理 launchctl 启动项",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -590,17 +595,18 @@
       "id": "physical-clean-mode",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "a12532cc3ae3848f4fb68a12e1b05eba20c31acba8349676d8daee093ee0a028",
-        "size": 168186,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.11/physical-clean-mode.mactoolsplugin.zip"
+        "sha256": "4c0b508bab81549a2f995e1b2d2e3d874e8d7e2f29ead468dffdb56ca0aadc8d",
+        "size": 168391,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/physical-clean-mode.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility"
       ],
       "pluginKitVersion": 2,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.11",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
       "summary": "屏幕全黑并临时禁用键盘输入",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -733,6 +739,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "ykMH6iIZ4e+uSallDnt2bt7fS8ZULaO2DRux3z0xbIJkMVCH+69yLoIH4aiGvgDszdXX2cvFi2gn+a3ENrzsBA=="
+    "value": "xA/Y1yHW3z1TDzBbPRKKz2L+T5qm0vKmm10qfTqN2h//FpIOrCikWxpdMY0Xv0gjbNV8anmD5hvokuD9Pcb7CA=="
   }
 }
