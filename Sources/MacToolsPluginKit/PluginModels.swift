@@ -814,6 +814,7 @@ public struct PluginFeatureManagementItem: Identifiable {
     public let isActive: Bool
     public let presentation: PluginFeaturePresentation
     public let category: String?
+    public let releaseChannel: String?
 
     public init(
         id: String,
@@ -824,7 +825,8 @@ public struct PluginFeatureManagementItem: Identifiable {
         isVisible: Bool,
         isActive: Bool,
         presentation: PluginFeaturePresentation,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -835,6 +837,7 @@ public struct PluginFeatureManagementItem: Identifiable {
         self.isActive = isActive
         self.presentation = presentation
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 }
 

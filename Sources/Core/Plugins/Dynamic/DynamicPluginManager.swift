@@ -23,6 +23,7 @@ struct PluginManagementItem: Identifiable, Equatable {
     let requiresRestartToFullyUnload: Bool
     let releaseNotesURL: URL?
     let category: String?
+    let releaseChannel: String?
 
     init(
         id: String,
@@ -33,7 +34,8 @@ struct PluginManagementItem: Identifiable, Equatable {
         packageURL: URL?,
         requiresRestartToFullyUnload: Bool,
         releaseNotesURL: URL?,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -44,6 +46,7 @@ struct PluginManagementItem: Identifiable, Equatable {
         self.requiresRestartToFullyUnload = requiresRestartToFullyUnload
         self.releaseNotesURL = releaseNotesURL
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 
     var statusText: String {
@@ -333,6 +336,14 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedReleaseChannelsByID() -> [String: String?] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.releaseChannel)
+            }
+        )
+    }
+
     /// Deactivate a loaded plugin without unloading it.
     /// Used when the user hides the plugin — it stays in the list but its side effects stop.
     func pausePlugin(_ pluginID: String) {
@@ -451,6 +462,10 @@ final class DynamicPluginManager: ObservableObject {
         guard manifest.pluginKitVersion == entry.pluginKitVersion else {
             throw PluginPackageResolverError.manifestMismatch(field: "pluginKitVersion")
         }
+
+        guard manifest.releaseChannel == entry.releaseChannel else {
+            throw PluginPackageResolverError.manifestMismatch(field: "releaseChannel")
+        }
     }
 
     private func rebuildManagementItems(
@@ -487,7 +502,8 @@ final class DynamicPluginManager: ObservableObject {
                         packageURL: nil,
                         requiresRestartToFullyUnload: false,
                         releaseNotesURL: entry.releaseNotesURL,
-                        category: entry.category
+                        category: entry.category,
+                        releaseChannel: entry.releaseChannel
                     )
                 )
             }
@@ -551,7 +567,8 @@ final class DynamicPluginManager: ObservableObject {
             packageURL: record.packageURL,
             requiresRestartToFullyUnload: record.requiresRestartToFullyUnload,
             releaseNotesURL: catalogEntry?.releaseNotesURL,
-            category: catalogEntry?.category ?? record.manifest.category
+            category: catalogEntry?.category ?? record.manifest.category,
+            releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel
         )
     }
 

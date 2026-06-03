@@ -35,7 +35,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
         "size": 1234567
       },
       "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.1",
-      "category": "productivity"
+      "category": "productivity",
+      "releaseChannel": "beta"
     }
   ],
   "revoked": [],
@@ -73,7 +74,7 @@ MacToolsPlugins/
     Tests/
 ```
 
-`plugin.json` declares the plugin ID, version, capabilities, bundle path, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
+`plugin.json` declares the plugin ID, version, capabilities, bundle path, optional `releaseChannel`, and build scheme. In this repository `make generate`, `make build`, `make run`, and `make build-plugin` first scan `Plugins/*/plugin.json` and generate the local XcodeGen plugin targets. External repositories may provide their own `project.yml`, `.xcodeproj`, or the declared bundle directory. The built package contains only `plugin.json` and the signed `.bundle`; extra executables must already be copied into the bundle resources and listed in `plugin.json.package.signPaths` when they require an individual code signature.
 
 From the MacTools repository, build all local plugins and generate the Debug catalog:
 

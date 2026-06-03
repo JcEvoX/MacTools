@@ -24,6 +24,7 @@ struct PluginPackageManifest: Codable, Equatable {
     let capabilities: Capabilities
     let permissions: [String]
     let category: String?
+    let releaseChannel: String?
 
     init(
         id: String,
@@ -35,7 +36,8 @@ struct PluginPackageManifest: Codable, Equatable {
         factoryClass: String? = nil,
         capabilities: Capabilities = Capabilities(),
         permissions: [String] = [],
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -47,6 +49,7 @@ struct PluginPackageManifest: Codable, Equatable {
         self.capabilities = capabilities
         self.permissions = permissions
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 }
 

@@ -160,6 +160,10 @@ final class PluginPackageResolver: PluginPackageResolving {
         guard manifest.minHostVersion == entry.minimumHostVersion else {
             throw PluginPackageResolverError.manifestMismatch(field: "minimumHostVersion")
         }
+
+        guard manifest.releaseChannel == entry.releaseChannel else {
+            throw PluginPackageResolverError.manifestMismatch(field: "releaseChannel")
+        }
     }
 
     static func packageMetrics(for url: URL, fileManager: FileManager = .default) throws -> PluginPackageMetrics {

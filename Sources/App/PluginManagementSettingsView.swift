@@ -274,6 +274,8 @@ private struct PluginManagementRow: View {
                     Text(item.title)
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
+                    PluginReleaseChannelBadge(releaseChannel: item.releaseChannel)
+
                     Text(item.version)
                         .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(.secondary)

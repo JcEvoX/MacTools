@@ -191,6 +191,21 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
     }
 
+    func testManagementItemsCarryReleaseChannelFromManifestAndCatalog() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", releaseChannel: "beta")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+        let snapshot = makeCatalogSnapshot(
+            entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0", releaseChannel: "beta")]
+        )
+
+        manager.rebuildManagementItems(catalogSnapshot: snapshot)
+
+        XCTAssertEqual(manager.pluginManagementItems.first?.releaseChannel, "beta")
+        XCTAssertEqual(manager.installedReleaseChannelsByID()["com.example.demo"] ?? nil, "beta")
+    }
+
     func testCatalogEntryShowsUpdateWhenNewerThanInstalledVersion() throws {
         let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let store = makeStore()
@@ -261,7 +276,8 @@ final class DynamicPluginManagerTests: XCTestCase {
         version: String = "1.0.0",
         displayName: String = "Demo",
         bundleRelativePath: String = "Demo.bundle",
-        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion,
+        releaseChannel: String? = nil
     ) throws -> URL {
         let packageURL = temporaryRoot
             .appendingPathComponent("Source", isDirectory: true)
@@ -277,7 +293,8 @@ final class DynamicPluginManagerTests: XCTestCase {
             version: version,
             minHostVersion: "0.1.0",
             pluginKitVersion: pluginKitVersion,
-            bundleRelativePath: bundleRelativePath
+            bundleRelativePath: bundleRelativePath,
+            releaseChannel: releaseChannel
         )
         let data = try JSONEncoder().encode(manifest)
         try data.write(to: packageURL.appendingPathComponent("plugin.json"))
@@ -285,7 +302,11 @@ final class DynamicPluginManagerTests: XCTestCase {
         return packageURL
     }
 
-    private func makeCatalogEntry(id: String, version: String) -> PluginCatalogEntry {
+    private func makeCatalogEntry(
+        id: String,
+        version: String,
+        releaseChannel: String? = nil
+    ) -> PluginCatalogEntry {
         PluginCatalogEntry(
             id: id,
             displayName: "Demo",
@@ -296,7 +317,8 @@ final class DynamicPluginManagerTests: XCTestCase {
                 url: URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin"),
                 sha256: String(repeating: "a", count: 64),
                 size: 42
-            )
+            ),
+            releaseChannel: releaseChannel
         )
     }
 

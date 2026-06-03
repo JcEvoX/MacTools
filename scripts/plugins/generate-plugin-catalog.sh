@@ -185,6 +185,7 @@ for raw in packages:
         },
         "releaseNotesURL": manifest.get("releaseNotesURL") or release_notes_url or None,
         "category": manifest.get("category"),
+        "releaseChannel": manifest.get("releaseChannel"),
     })
 
 if requested_plugin_kit_version is None:

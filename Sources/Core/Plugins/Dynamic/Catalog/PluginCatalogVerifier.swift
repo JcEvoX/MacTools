@@ -116,7 +116,8 @@ struct PluginCatalogVerifier {
                 pluginKitVersion: entry.pluginKitVersion,
                 bundleRelativePath: "Entry.bundle",
                 capabilities: entry.capabilities,
-                permissions: entry.permissions
+                permissions: entry.permissions,
+                releaseChannel: entry.releaseChannel
             )
             try PluginPackageManifestLoader.validate(manifest, hostVersion: hostVersion)
 
