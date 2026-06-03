@@ -136,8 +136,36 @@ final class AutoHideMenuBarPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    private nonisolated static func readMenuBarAutohideState() -> Bool {
-        let defaults = UserDefaults(suiteName: "com.apple.dock")
-        return defaults?.object(forKey: "autohide-menubar") as? Bool ?? false
+    nonisolated static func readMenuBarAutohideState(
+        globalDefaults: UserDefaults = .standard,
+        dockDefaults: UserDefaults? = UserDefaults(suiteName: "com.apple.dock")
+    ) -> Bool {
+        resolvedMenuBarAutohideState(
+            globalValue: globalDefaults.object(forKey: "_HIHideMenuBar"),
+            dockValue: dockDefaults?.object(forKey: "autohide-menubar")
+        )
+    }
+
+    nonisolated static func resolvedMenuBarAutohideState(globalValue: Any?, dockValue: Any?) -> Bool {
+        if let value = boolValue(from: globalValue) {
+            return value
+        }
+
+        if let value = boolValue(from: dockValue) {
+            return value
+        }
+
+        return false
+    }
+
+    private nonisolated static func boolValue(from value: Any?) -> Bool? {
+        switch value {
+        case let value as Bool:
+            value
+        case let value as NSNumber:
+            value.boolValue
+        default:
+            nil
+        }
     }
 }
