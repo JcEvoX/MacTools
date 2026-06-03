@@ -9,6 +9,92 @@ enum FeatureSettingsPane: Hashable {
     case configuration(String)
 }
 
+struct PluginAutomaticUpdateStatus: Equatable {
+    enum Phase: Equatable {
+        case idle
+        case checking
+        case updating
+        case completed
+        case failed
+    }
+
+    let phase: Phase
+    let pluginIDs: [String]
+    let message: String?
+
+    static let idle = PluginAutomaticUpdateStatus(
+        phase: .idle,
+        pluginIDs: [],
+        message: nil
+    )
+
+    var isActive: Bool {
+        phase == .checking || phase == .updating
+    }
+
+    var isVisible: Bool {
+        phase != .idle
+    }
+
+    func isUpdatingPlugin(id: String) -> Bool {
+        phase == .updating && pluginIDs.contains(id)
+    }
+
+    var title: String {
+        switch phase {
+        case .idle:
+            return ""
+        case .checking:
+            return "正在检查插件更新"
+        case .updating:
+            return "正在更新插件"
+        case .completed:
+            return "插件已更新"
+        case .failed:
+            return "插件自动更新失败"
+        }
+    }
+
+    var detailText: String {
+        if let message {
+            return message
+        }
+
+        switch phase {
+        case .idle:
+            return ""
+        case .checking:
+            return "新版首次启动时会先检查已安装插件。"
+        case .updating:
+            return "正在更新 \(pluginIDs.count) 个已安装插件，完成后会继续加载。"
+        case .completed:
+            return pluginIDs.isEmpty ? "已是最新版本。" : "已更新 \(pluginIDs.count) 个插件。"
+        case .failed:
+            return "稍后可在此页面重试。"
+        }
+    }
+}
+
+struct PluginAutomaticUpdateVersionStore {
+    private enum DefaultsKey {
+        static let lastCheckedAppVersion = "plugins.dynamic.lastAutomaticUpdateAppVersion"
+    }
+
+    var userDefaults: UserDefaults = .standard
+
+    func needsAutomaticUpdateCheck(currentAppVersion: String) -> Bool {
+        guard !currentAppVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        return userDefaults.string(forKey: DefaultsKey.lastCheckedAppVersion) != currentAppVersion
+    }
+
+    func markAutomaticUpdateChecked(currentAppVersion: String) {
+        userDefaults.set(currentAppVersion, forKey: DefaultsKey.lastCheckedAppVersion)
+    }
+}
+
 @MainActor
 final class PluginHost: ObservableObject {
     private struct PluginDescriptor {
@@ -55,6 +141,7 @@ final class PluginHost: ObservableObject {
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
+    private var didLoadDynamicPlugins = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
@@ -66,6 +153,7 @@ final class PluginHost: ObservableObject {
     @Published private(set) var shortcutItems: [ShortcutSettingsItem] = []
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
+    @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
     @Published private(set) var settingsPresentationRequestCount = 0
     @Published var selectedSettingsDestination: SettingsDestination = .general
@@ -83,7 +171,7 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    convenience init() {
+    convenience init(loadDynamicPluginsOnInit: Bool = true) {
         let dynamicPluginManager = DynamicPluginManager()
         let pluginCatalogManager = PluginCatalogManager.live(dynamicPluginManager: dynamicPluginManager)
         self.init(
@@ -94,7 +182,8 @@ final class PluginHost: ObservableObject {
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
-            accessibilityPermissionObserver: AccessibilityPermissionObserver()
+            accessibilityPermissionObserver: AccessibilityPermissionObserver(),
+            loadDynamicPluginsOnInit: loadDynamicPluginsOnInit
         )
     }
 
@@ -107,7 +196,8 @@ final class PluginHost: ObservableObject {
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
-        displayTopologyRefreshDelay: Duration = .milliseconds(180)
+        displayTopologyRefreshDelay: Duration = .milliseconds(180),
+        loadDynamicPluginsOnInit: Bool = true
     ) {
         self.builtInPlugins = plugins.sorted {
             if $0.metadata.order == $1.metadata.order {
@@ -128,7 +218,12 @@ final class PluginHost: ObservableObject {
         configureCallbacks(for: self.builtInPlugins)
 
         if let dynamicPluginManager {
-            self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+            if loadDynamicPluginsOnInit {
+                self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+                self.didLoadDynamicPlugins = true
+            } else {
+                dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
+            }
             self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
@@ -610,6 +705,91 @@ final class PluginHost: ObservableObject {
     func refreshPluginCatalog() async {
         await pluginCatalogManager?.refreshCatalog()
         syncPluginManagementState()
+    }
+
+    func loadDynamicPluginsIfNeeded() {
+        guard !didLoadDynamicPlugins, let dynamicPluginManager else {
+            return
+        }
+
+        dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+        didLoadDynamicPlugins = true
+        configureCallbacks(for: dynamicPlugins)
+        pauseHiddenDynamicPlugins()
+        refreshAll()
+        syncPluginManagementState()
+    }
+
+    var hasInstalledDynamicPlugins: Bool {
+        guard let dynamicPluginManager else {
+            return false
+        }
+
+        return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
+    }
+
+    func automaticUpdateInstalledPluginsBeforeLoading() async {
+        guard let pluginCatalogManager else {
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+            phase: .checking,
+            pluginIDs: [],
+            message: nil
+        )
+
+        await pluginCatalogManager.refreshCatalog()
+        syncPluginManagementState()
+
+        if let errorMessage = pluginCatalogManager.status.errorMessage {
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .failed,
+                pluginIDs: [],
+                message: errorMessage
+            )
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        let updatePlan = pluginCatalogManager.automaticUpdatePlanForInstalledPlugins()
+        guard !updatePlan.isEmpty else {
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .completed,
+                pluginIDs: [],
+                message: "已安装插件都是最新版本。"
+            )
+            loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        presentPluginMarketplace()
+        automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+            phase: .updating,
+            pluginIDs: updatePlan.updateableInstalledPluginIDs,
+            message: "正在更新 \(updatePlan.updateableInstalledPluginIDs.count) 个已安装插件。"
+        )
+        syncPluginManagementState()
+
+        do {
+            try await pluginCatalogManager.updateInstalledPluginsToLatestBeforeLoading()
+            syncPluginManagementState()
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .completed,
+                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                message: "已更新 \(updatePlan.updateableInstalledPluginIDs.count) 个插件。"
+            )
+        } catch {
+            syncPluginManagementState()
+            automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                phase: .failed,
+                pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                message: error.localizedDescription
+            )
+        }
+
+        loadDynamicPluginsIfNeeded()
     }
 
     func installPluginFromCatalog(pluginID: String) async throws {

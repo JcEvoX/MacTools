@@ -57,6 +57,14 @@ struct PluginCatalogBulkUpdateError: LocalizedError {
     }
 }
 
+struct PluginCatalogUpdatePlan: Equatable {
+    let updateableInstalledPluginIDs: [String]
+
+    var isEmpty: Bool {
+        updateableInstalledPluginIDs.isEmpty
+    }
+}
+
 @MainActor
 final class PluginCatalogManager {
     private let catalogProvider: (any PluginCatalogProviding)?
@@ -159,6 +167,27 @@ final class PluginCatalogManager {
             return
         }
 
+        try await updatePlugins(entries: entries, reloadAfterUpdate: true)
+    }
+
+    func automaticUpdatePlanForInstalledPlugins() -> PluginCatalogUpdatePlan {
+        let entries = updateEntriesForInstalledPlugins()
+        return PluginCatalogUpdatePlan(updateableInstalledPluginIDs: entries.map(\.id))
+    }
+
+    func updateInstalledPluginsToLatestBeforeLoading() async throws {
+        let entries = updateEntriesForInstalledPlugins()
+        guard !entries.isEmpty else {
+            return
+        }
+
+        try await updatePlugins(entries: entries, reloadAfterUpdate: false)
+    }
+
+    private func updatePlugins(
+        entries: [PluginCatalogEntry],
+        reloadAfterUpdate: Bool
+    ) async throws {
         var resolvedUpdates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)] = []
         var failures: [PluginPackageUpdateFailure] = []
 
@@ -171,7 +200,12 @@ final class PluginCatalogManager {
             }
         }
 
-        failures.append(contentsOf: dynamicPluginManager.updatePluginPackages(resolvedUpdates))
+        failures.append(
+            contentsOf: dynamicPluginManager.updatePluginPackages(
+                resolvedUpdates,
+                reloadAfterUpdate: reloadAfterUpdate
+            )
+        )
 
         guard failures.isEmpty else {
             throw PluginCatalogBulkUpdateError(failures: failures)
@@ -208,6 +242,24 @@ final class PluginCatalogManager {
             }
 
             return entry
+        }
+    }
+
+    private func updateEntriesForInstalledPlugins() -> [PluginCatalogEntry] {
+        let installedVersionsByID = dynamicPluginManager.installedPackageVersionsByID()
+
+        return (snapshot?.catalog.plugins ?? []).filter { entry in
+            guard let installedVersion = installedVersionsByID[entry.id] else {
+                return false
+            }
+
+            if snapshot?.catalog.revoked.contains(where: {
+                $0.matches(pluginID: entry.id, version: entry.version)
+            }) == true {
+                return false
+            }
+
+            return PluginVersionComparator.isVersion(entry.version, newerThan: installedVersion)
         }
     }
 

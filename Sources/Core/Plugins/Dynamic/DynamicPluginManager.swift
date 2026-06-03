@@ -205,6 +205,20 @@ final class DynamicPluginManager: ObservableObject {
         return activePlugins(from: records)
     }
 
+    func prepareInstalledPluginsWithoutLoading() {
+        let records = packageStore.installedRecords()
+        deactivateMissingOrDisabledPlugins(records: records)
+        latestLoadErrorsByID = [:]
+        let results = records.map { record in
+            DynamicPluginLoadResult(
+                record: deferredPluginIDs.contains(record.id) ? record.markingRestartRequired() : record,
+                plugins: [],
+                errorMessage: nil
+            )
+        }
+        rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
+    }
+
     func reloadInstalledPlugins() {
         onPluginsChanged?(loadInstalledPlugins())
     }
@@ -229,7 +243,8 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func updatePluginPackages(
-        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)]
+        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
+        reloadAfterUpdate: Bool = true
     ) -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
             return []
@@ -239,7 +254,7 @@ final class DynamicPluginManager: ObservableObject {
         var didUpdatePackage = false
 
         defer {
-            if didUpdatePackage {
+            if reloadAfterUpdate && didUpdatePackage {
                 reloadInstalledPlugins()
             }
         }
@@ -298,6 +313,14 @@ final class DynamicPluginManager: ObservableObject {
                 }
 
                 return (record.id, record.manifest.capabilities)
+            }
+        )
+    }
+
+    func installedPackageVersionsByID() -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.version)
             }
         )
     }

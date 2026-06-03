@@ -13,6 +13,7 @@ struct PluginManagementSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             header
+            automaticUpdateBanner
 
             if pluginHost.pluginManagementItems.isEmpty {
                 ContentUnavailableView(
@@ -41,8 +42,10 @@ struct PluginManagementSettingsView: View {
                             ForEach(filteredItems) { item in
                                 PluginManagementRow(
                                     item: item,
-                                    isBusy: activeOperationID == item.id,
-                                    isInteractionDisabled: activeOperationID != nil,
+                                    isBusy: activeOperationID == item.id
+                                        || pluginHost.automaticPluginUpdateStatus.isUpdatingPlugin(id: item.id),
+                                    isInteractionDisabled: activeOperationID != nil
+                                        || pluginHost.automaticPluginUpdateStatus.isActive,
                                     onInstall: { runOperation(id: item.id) { try await pluginHost.installPluginFromCatalog(pluginID: item.id) } },
                                     onUpdate: { runOperation(id: item.id) { try await pluginHost.updatePluginFromCatalog(pluginID: item.id) } },
                                     onUninstall: { uninstall(item) },
@@ -59,6 +62,10 @@ struct PluginManagementSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(SettingsStyle.contentBackground)
         .task {
+            guard !pluginHost.automaticPluginUpdateStatus.isActive else {
+                return
+            }
+
             await pluginHost.refreshPluginCatalog()
         }
         .alert(
@@ -146,12 +153,72 @@ struct PluginManagementSettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var automaticUpdateBanner: some View {
+        if pluginHost.automaticPluginUpdateStatus.isVisible {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(automaticUpdateTint.opacity(0.14))
+
+                    if pluginHost.automaticPluginUpdateStatus.isActive {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.78)
+                    } else {
+                        Image(systemName: automaticUpdateIconName)
+                            .font(PluginSettingsTheme.Typography.sectionTitle.weight(.semibold))
+                            .foregroundStyle(automaticUpdateTint)
+                    }
+                }
+                .frame(width: PluginSettingsTheme.Size.metricIcon, height: PluginSettingsTheme.Size.metricIcon)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(pluginHost.automaticPluginUpdateStatus.title)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                    Text(pluginHost.automaticPluginUpdateStatus.detailText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(PluginSettingsTheme.Spacing.cardContent)
+            .pluginSettingsCardBackground(.host)
+        }
+    }
+
     private var hasAvailablePluginUpdates: Bool {
         pluginHost.pluginManagementItems.contains { $0.canUpdate }
     }
 
+    private var automaticUpdateTint: Color {
+        switch pluginHost.automaticPluginUpdateStatus.phase {
+        case .idle, .checking, .updating:
+            return .accentColor
+        case .completed:
+            return .green
+        case .failed:
+            return .orange
+        }
+    }
+
+    private var automaticUpdateIconName: String {
+        switch pluginHost.automaticPluginUpdateStatus.phase {
+        case .idle, .checking, .updating:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
     private func runOperation(id: String, _ operation: @escaping () async throws -> Void) {
-        guard activeOperationID == nil else {
+        guard activeOperationID == nil,
+              !pluginHost.automaticPluginUpdateStatus.isActive
+        else {
             return
         }
 

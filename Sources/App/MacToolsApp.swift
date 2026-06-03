@@ -14,11 +14,12 @@ struct MacToolsApp: App {
 
 @MainActor
 final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
-    private let pluginHost = PluginHost()
+    private let pluginHost = PluginHost(loadDynamicPluginsOnInit: false)
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
     private let menuBarIconGallery = MenuBarIconGalleryLibrary()
     private let launchAtLoginController = LaunchAtLoginController()
+    private let pluginAutomaticUpdateVersionStore = PluginAutomaticUpdateVersionStore()
     private var windowRouter: AppWindowRouter?
     private var statusItemController: MenuBarStatusItemController?
 
@@ -39,10 +40,41 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
             windowRouter: windowRouter,
             iconSettings: menuBarIconSettings
         )
+
+        bootstrapDynamicPlugins()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         statusItemController?.dismissPanels()
         pluginHost.dynamicPluginManager?.deactivateAll()
+    }
+
+    private func bootstrapDynamicPlugins() {
+        let currentAppVersion = AppMetadata.versionDescription
+
+        guard pluginHost.hasInstalledDynamicPlugins else {
+            pluginHost.loadDynamicPluginsIfNeeded()
+            pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                currentAppVersion: currentAppVersion
+            )
+            return
+        }
+
+        guard pluginAutomaticUpdateVersionStore.needsAutomaticUpdateCheck(
+            currentAppVersion: currentAppVersion
+        ) else {
+            pluginHost.loadDynamicPluginsIfNeeded()
+            return
+        }
+
+        Task { @MainActor in
+            await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
+
+            if pluginHost.automaticPluginUpdateStatus.phase != .failed {
+                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                    currentAppVersion: currentAppVersion
+                )
+            }
+        }
     }
 }
