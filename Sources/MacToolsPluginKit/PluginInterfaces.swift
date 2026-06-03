@@ -30,6 +30,16 @@ public protocol PluginPrimaryPanel: AnyObject {
     func handleAction(_ action: PluginPanelAction)
 }
 
+public enum PluginShortcutEventPhase: Sendable {
+    case pressed
+    case released
+}
+
+@MainActor
+public protocol PluginShortcutEventHandling: AnyObject {
+    func handleShortcutEvent(id: String, phase: PluginShortcutEventPhase)
+}
+
 public extension MacToolsPlugin {
     var primaryPanel: (any PluginPrimaryPanel)? {
         nil

@@ -731,8 +731,42 @@ private struct PluginShortcutSection: View {
     var body: some View {
         PluginConfigurationSection(title: "快捷键", systemImage: "command") {
             VStack(alignment: .leading, spacing: 0) {
-                ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                if groupedItems.isEmpty {
+                    ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                } else {
+                    GroupedShortcutSettingsRowsView(pluginHost: pluginHost, groups: groupedItems)
+                }
             }
+        }
+    }
+
+    private var groupedItems: [ShortcutSettingsGroup] {
+        guard items.allSatisfy({ $0.settingsGroupID != nil }) else {
+            return []
+        }
+
+        var groupOrder: [String] = []
+        var groups: [String: [ShortcutSettingsItem]] = [:]
+
+        for item in items {
+            guard let groupID = item.settingsGroupID else {
+                continue
+            }
+
+            if groups[groupID] == nil {
+                groupOrder.append(groupID)
+            }
+            groups[groupID, default: []].append(item)
+        }
+
+        return groupOrder.compactMap { groupID in
+            guard let groupItems = groups[groupID], let firstItem = groupItems.first else { return nil }
+
+            return ShortcutSettingsGroup(
+                id: groupID,
+                title: firstItem.settingsGroupTitle ?? firstItem.title,
+                items: groupItems
+            )
         }
     }
 }

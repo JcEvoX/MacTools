@@ -240,6 +240,359 @@ public struct PluginSettingsListDivider: View {
     }
 }
 
+@MainActor
+final class PluginShortcutRecorderDisplayState: ObservableObject {
+    @Published var previewText = "按下录制快捷键"
+    @Published private(set) var showEscHint = false
+    @Published private(set) var conflictMessage: String? = nil
+    @Published private(set) var shakeOffset: CGFloat = 0
+    @Published private(set) var isShaking = false
+
+    func triggerShake(conflict: String? = nil) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            showEscHint = true
+            if let conflict { conflictMessage = conflict }
+        }
+
+        isShaking = true
+        let steps: [(CGFloat, Double)] = [
+            (10, 0.00), (-8, 0.06), (7, 0.12), (-5, 0.18), (3, 0.24), (0, 0.30)
+        ]
+
+        for (offset, delay) in steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                withAnimation(.linear(duration: 0.05)) {
+                    self?.shakeOffset = offset
+                }
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) { [weak self] in
+            self?.isShaking = false
+        }
+    }
+}
+
+public struct PluginShortcutRecorderField: View {
+    public let text: String
+    public let isRecording: Bool
+    public let minWidth: CGFloat
+
+    private var displayText: String {
+        text == "None" ? "未设置" : text
+    }
+
+    public init(
+        text: String,
+        isRecording: Bool,
+        minWidth: CGFloat = 90
+    ) {
+        self.text = text
+        self.isRecording = isRecording
+        self.minWidth = minWidth
+    }
+
+    public var body: some View {
+        Text(displayText)
+            .font(PluginSettingsTheme.Typography.monospacedValue)
+            .foregroundStyle(displayText == "未设置" ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.sectionHeaderContent)
+            .padding(.vertical, PluginSettingsTheme.Spacing.controlCluster - 3)
+            .frame(minWidth: minWidth, alignment: .center)
+            .background(
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
+                    .fill(PluginSettingsTheme.Palette.fieldBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
+                    .strokeBorder(
+                        isRecording ? Color.accentColor : PluginSettingsTheme.Palette.cardBorder,
+                        lineWidth: isRecording ? 1.5 : PluginSettingsTheme.Stroke.standard
+                    )
+            )
+    }
+}
+
+public struct PluginShortcutRecorder: View {
+    public let text: String
+    public let minWidth: CGFloat
+    public let validateAndCommit: (ShortcutBinding) -> String?
+    public let onBeginRecording: (() -> Void)?
+    public let onEndRecording: (() -> Void)?
+
+    @State private var isPresented = false
+
+    public init(
+        text: String,
+        minWidth: CGFloat = 90,
+        validateAndCommit: @escaping (ShortcutBinding) -> String?,
+        onBeginRecording: (() -> Void)? = nil,
+        onEndRecording: (() -> Void)? = nil
+    ) {
+        self.text = text
+        self.minWidth = minWidth
+        self.validateAndCommit = validateAndCommit
+        self.onBeginRecording = onBeginRecording
+        self.onEndRecording = onEndRecording
+    }
+
+    public var body: some View {
+        Button { isPresented = true } label: {
+            PluginShortcutRecorderField(
+                text: text,
+                isRecording: isPresented,
+                minWidth: minWidth
+            )
+        }
+        .buttonStyle(.plain)
+        .help("点击录制快捷键")
+        .overlay(
+            PluginShortcutRecorderPresenter(
+                isPresented: $isPresented,
+                validateAndCommit: validateAndCommit,
+                onBeginRecording: onBeginRecording,
+                onEndRecording: onEndRecording
+            )
+            .allowsHitTesting(false)
+        )
+    }
+}
+
+private struct PluginShortcutRecorderPopoverView: View {
+    @ObservedObject var displayState: PluginShortcutRecorderDisplayState
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(displayState.previewText)
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                .foregroundStyle(Color.accentColor)
+                .lineLimit(1)
+                .padding(.horizontal, PluginSettingsTheme.Spacing.rowContentControl)
+                .padding(.vertical, PluginSettingsTheme.Spacing.controlCluster)
+                .frame(minWidth: 130, alignment: .center)
+                .background(
+                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
+                        .fill(
+                            displayState.isShaking
+                                ? Color.red.opacity(0.18)
+                                : PluginSettingsTheme.Palette.recordingBackground
+                        )
+                )
+                .offset(x: displayState.shakeOffset)
+
+            if displayState.conflictMessage != nil || displayState.showEscHint {
+                Group {
+                    if let msg = displayState.conflictMessage {
+                        Text(msg)
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("按下 ESC 退出录制")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(PluginSettingsTheme.Typography.statusBadge)
+                .padding(.top, PluginSettingsTheme.Spacing.controlCluster)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: -6)),
+                    removal: .opacity
+                ))
+            }
+        }
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowContentControl)
+        .frame(minWidth: 160)
+    }
+}
+
+private struct PluginShortcutRecorderPresenter: NSViewRepresentable {
+    @Binding var isPresented: Bool
+    let validateAndCommit: (ShortcutBinding) -> String?
+    var onBeginRecording: (() -> Void)? = nil
+    var onEndRecording: (() -> Void)? = nil
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(
+            isPresented: isPresented,
+            sourceView: nsView,
+            validateAndCommit: validateAndCommit,
+            onDismiss: { isPresented = false },
+            onBeginRecording: onBeginRecording,
+            onEndRecording: onEndRecording
+        )
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.close()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSPopoverDelegate {
+        private var popover: NSPopover?
+        private var displayState: PluginShortcutRecorderDisplayState?
+        private var keyMonitor: Any?
+        private var committed = false
+        private var validateAndCommit: ((ShortcutBinding) -> String?)?
+        private var onDismiss: (() -> Void)?
+        private var onBeginRecording: (() -> Void)?
+        private var onEndRecording: (() -> Void)?
+
+        func update(
+            isPresented: Bool,
+            sourceView: NSView,
+            validateAndCommit: @escaping (ShortcutBinding) -> String?,
+            onDismiss: @escaping () -> Void,
+            onBeginRecording: (() -> Void)?,
+            onEndRecording: (() -> Void)?
+        ) {
+            self.validateAndCommit = validateAndCommit
+            self.onDismiss = onDismiss
+            self.onBeginRecording = onBeginRecording
+            self.onEndRecording = onEndRecording
+
+            if isPresented, popover == nil {
+                guard sourceView.window != nil else { return }
+                present(from: sourceView)
+            } else if !isPresented, popover != nil {
+                close()
+            }
+        }
+
+        func close() {
+            guard let pop = popover else { return }
+            let dismiss = onDismiss
+            let endRecording = onEndRecording
+            let wasRecording = displayState != nil
+
+            pop.delegate = nil
+            popover = nil
+            pop.close()
+            cleanup()
+            dismiss?()
+            if wasRecording { endRecording?() }
+        }
+
+        func popoverShouldClose(_ popover: NSPopover) -> Bool {
+            guard !committed else { return true }
+            displayState?.triggerShake()
+            return false
+        }
+
+        private func present(from sourceView: NSView) {
+            committed = false
+            let state = PluginShortcutRecorderDisplayState()
+            displayState = state
+
+            onBeginRecording?()
+
+            let content = PluginShortcutRecorderPopoverView(displayState: state)
+            let vc = NSHostingController(rootView: content)
+            let pop = NSPopover()
+            pop.contentViewController = vc
+            pop.behavior = .transient
+            pop.animates = true
+            pop.delegate = self
+            popover = pop
+
+            keyMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: NSEvent.EventTypeMask.keyDown
+                    .union(.flagsChanged)
+                    .union(.leftMouseDown)
+                    .union(.rightMouseDown)
+                    .union(.otherMouseDown)
+                    .union(.leftMouseUp)
+                    .union(.rightMouseUp)
+                    .union(.otherMouseUp)
+                    .union(.scrollWheel)
+                    .union(.mouseEntered)
+                    .union(.mouseExited)
+                    .union(.mouseMoved)
+            ) { [weak self] event in
+                guard let self else { return event }
+                return self.handleEvent(event)
+            }
+
+            DispatchQueue.main.async { [weak self, weak sourceView] in
+                guard let self, let sourceView, self.popover === pop else { return }
+                pop.show(relativeTo: sourceView.bounds, of: sourceView, preferredEdge: .maxY)
+            }
+        }
+
+        private func handleEvent(_ event: NSEvent) -> NSEvent? {
+            switch event.type {
+            case .flagsChanged:
+                handleFlagsChanged(event)
+                return event
+            case .keyDown:
+                return handleKey(event)
+            case .leftMouseDown, .rightMouseDown, .otherMouseDown,
+                 .leftMouseUp, .rightMouseUp, .otherMouseUp,
+                 .scrollWheel, .mouseEntered, .mouseExited, .mouseMoved:
+                return nil
+            default:
+                return event
+            }
+        }
+
+        private func handleFlagsChanged(_ event: NSEvent) {
+            guard popover?.isShown == true else { return }
+            let modifiers = ShortcutModifiers.from(event.modifierFlags)
+
+            if modifiers.isEmpty {
+                displayState?.previewText = "按下录制快捷键"
+            } else {
+                var tokens: [String] = []
+                if modifiers.contains(.control) { tokens.append("⌃") }
+                if modifiers.contains(.option) { tokens.append("⌥") }
+                if modifiers.contains(.shift) { tokens.append("⇧") }
+                if modifiers.contains(.command) { tokens.append("⌘") }
+                displayState?.previewText = tokens.joined(separator: " + ")
+            }
+        }
+
+        private func handleKey(_ event: NSEvent) -> NSEvent? {
+            guard popover?.isShown == true else { return event }
+
+            let modifiers = ShortcutModifiers.from(event.modifierFlags)
+
+            if event.keyCode == ShortcutKeyCode.escape, modifiers.isEmpty {
+                close()
+                return nil
+            }
+
+            let binding = ShortcutBinding(keyCode: event.keyCode, modifiers: modifiers)
+            guard binding.isValid else { return nil }
+
+            if let conflict = validateAndCommit?(binding) {
+                displayState?.triggerShake(conflict: conflict)
+            } else {
+                committed = true
+                close()
+            }
+
+            return nil
+        }
+
+        private func cleanup() {
+            if let monitor = keyMonitor {
+                NSEvent.removeMonitor(monitor)
+            }
+
+            keyMonitor = nil
+            displayState = nil
+            committed = false
+            validateAndCommit = nil
+            onDismiss = nil
+            onBeginRecording = nil
+            onEndRecording = nil
+        }
+    }
+}
+
 public extension View {
     func pluginSettingsCardBackground(
         _ style: PluginSettingsCardBackgroundStyle = .host

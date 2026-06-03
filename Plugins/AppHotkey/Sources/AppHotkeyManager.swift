@@ -123,6 +123,10 @@ final class AppHotkeyManager {
         )
         guard status == noErr else { return status }
 
+        guard hotKeyID.signature == 0x4148_4B59 else {
+            return OSStatus(eventNotHandledErr)
+        }
+
         let manager = Unmanaged<AppHotkeyManager>
             .fromOpaque(userData)
             .takeUnretainedValue()

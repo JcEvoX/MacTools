@@ -141,6 +141,10 @@ public struct PluginShortcutDefinition: Identifiable {
     public let scope: ShortcutScope
     public let defaultBinding: ShortcutBinding?
     public let isRequired: Bool
+    public let sharedBindingGroupID: String?
+    public let settingsGroupID: String?
+    public let settingsGroupTitle: String?
+    public let settingsControlTitle: String?
 
     public init(
         id: String,
@@ -149,7 +153,11 @@ public struct PluginShortcutDefinition: Identifiable {
         actionID: String,
         scope: ShortcutScope,
         defaultBinding: ShortcutBinding?,
-        isRequired: Bool
+        isRequired: Bool,
+        sharedBindingGroupID: String? = nil,
+        settingsGroupID: String? = nil,
+        settingsGroupTitle: String? = nil,
+        settingsControlTitle: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -158,6 +166,10 @@ public struct PluginShortcutDefinition: Identifiable {
         self.scope = scope
         self.defaultBinding = defaultBinding
         self.isRequired = isRequired
+        self.sharedBindingGroupID = sharedBindingGroupID
+        self.settingsGroupID = settingsGroupID
+        self.settingsGroupTitle = settingsGroupTitle
+        self.settingsControlTitle = settingsControlTitle
     }
 }
 
@@ -172,6 +184,9 @@ public struct ShortcutSettingsItem: Identifiable {
     public let canClear: Bool
     public let usesDefaultValue: Bool
     public let errorMessage: String?
+    public let settingsGroupID: String?
+    public let settingsGroupTitle: String?
+    public let settingsControlTitle: String?
 
     public init(
         id: String,
@@ -183,7 +198,10 @@ public struct ShortcutSettingsItem: Identifiable {
         isRequired: Bool,
         canClear: Bool,
         usesDefaultValue: Bool,
-        errorMessage: String?
+        errorMessage: String?,
+        settingsGroupID: String? = nil,
+        settingsGroupTitle: String? = nil,
+        settingsControlTitle: String? = nil
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -195,6 +213,9 @@ public struct ShortcutSettingsItem: Identifiable {
         self.canClear = canClear
         self.usesDefaultValue = usesDefaultValue
         self.errorMessage = errorMessage
+        self.settingsGroupID = settingsGroupID
+        self.settingsGroupTitle = settingsGroupTitle
+        self.settingsControlTitle = settingsControlTitle
     }
 }
 

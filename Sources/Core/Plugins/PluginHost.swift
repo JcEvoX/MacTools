@@ -136,6 +136,7 @@ final class PluginHost: ObservableObject {
     private var dynamicPlugins: [any MacToolsPlugin] = []
     private var dynamicPluginCapabilitiesByID: [String: PluginPackageManifest.Capabilities] = [:]
     private var dynamicPluginCategoriesByID: [String: String?] = [:]
+    private var dynamicPluginReleaseChannelsByID: [String: String?] = [:]
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
@@ -226,6 +227,7 @@ final class PluginHost: ObservableObject {
             }
             self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
             self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
+            self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -238,6 +240,9 @@ final class PluginHost: ObservableObject {
 
         self.globalShortcutManager.onShortcutTriggered = { [weak self] shortcutID in
             self?.handleShortcutTrigger(shortcutID: shortcutID)
+        }
+        self.globalShortcutManager.onShortcutReleased = { [weak self] shortcutID in
+            self?.handleShortcutRelease(shortcutID: shortcutID)
         }
 
         self.displayConfigurationObserver?.onConfigurationChange = { [weak self] in
@@ -441,6 +446,14 @@ final class PluginHost: ObservableObject {
         }
 
         applyShortcutCustomization(.custom(binding), for: descriptor)
+    }
+
+    func setShortcutBindingAndReturnError(_ binding: ShortcutBinding, for shortcutID: String) -> String? {
+        guard let descriptor = shortcutDescriptor(for: shortcutID) else {
+            return "快捷键不可用。"
+        }
+
+        return applyShortcutCustomization(.custom(binding), for: descriptor)
     }
 
     func clearShortcut(for shortcutID: String) {
@@ -927,6 +940,7 @@ final class PluginHost: ObservableObject {
     private func syncPluginManagementState() {
         dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
         dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
+        dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -1090,7 +1104,8 @@ final class PluginHost: ObservableObject {
                 isActive: panelStatesByID[metadata.id]?.isOn == true
                     || componentStatesByID[metadata.id]?.isActive == true,
                 presentation: presentation(for: descriptor),
-                category: dynamicPluginCategoriesByID[metadata.id] ?? nil
+                category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
+                releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
             )
         }
 
@@ -1166,7 +1181,10 @@ final class PluginHost: ObservableObject {
                 isRequired: descriptor.definition.isRequired,
                 canClear: !descriptor.definition.isRequired && binding != nil,
                 usesDefaultValue: customization == .inheritDefault,
-                errorMessage: shortcutErrors[descriptor.itemID]
+                errorMessage: shortcutErrors[descriptor.itemID],
+                settingsGroupID: descriptor.definition.settingsGroupID,
+                settingsGroupTitle: descriptor.definition.settingsGroupTitle,
+                settingsControlTitle: descriptor.definition.settingsControlTitle
             )
         }
 
@@ -1570,22 +1588,26 @@ final class PluginHost: ObservableObject {
         return resolvedBinding(for: descriptor)
     }
 
+    @discardableResult
     private func applyShortcutCustomization(
         _ customization: ShortcutCustomization,
         for descriptor: ShortcutDescriptor
-    ) {
+    ) -> String? {
         do {
             try validateShortcutCustomization(customization, for: descriptor)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             shortcutErrors.removeValue(forKey: descriptor.itemID)
             rebuildDerivedState()
             syncGlobalShortcuts()
+            return nil
         } catch let error as ShortcutValidationError {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
             rebuildDerivedState()
+            return error.localizedDescription
         } catch {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
             rebuildDerivedState()
+            return error.localizedDescription
         }
     }
 
@@ -1612,13 +1634,23 @@ final class PluginHost: ObservableObject {
             }
 
             if let conflict = shortcutDescriptors().first(where: {
-                $0.itemID != descriptor.itemID && resolvedBinding(for: $0) == candidate
+                $0.itemID != descriptor.itemID
+                    && resolvedBinding(for: $0) == candidate
+                    && !canShareShortcutBinding(descriptor, with: $0)
             }) {
                 throw ShortcutValidationError.duplicate(
                     ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
                 )
             }
         }
+    }
+
+    private func canShareShortcutBinding(_ lhs: ShortcutDescriptor, with rhs: ShortcutDescriptor) -> Bool {
+        guard let groupID = lhs.definition.sharedBindingGroupID else {
+            return false
+        }
+
+        return groupID == rhs.definition.sharedBindingGroupID
     }
 
     private func syncGlobalShortcuts() {
@@ -1647,7 +1679,25 @@ final class PluginHost: ObservableObject {
 
         handlePluginAction {
             guardPluginCall(descriptor.plugin, operation: "shortcut action") {
-                descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+                if let eventHandler = descriptor.plugin as? any PluginShortcutEventHandling {
+                    eventHandler.handleShortcutEvent(id: descriptor.definition.actionID, phase: .pressed)
+                } else {
+                    descriptor.plugin.handleShortcutAction(id: descriptor.definition.actionID)
+                }
+            }
+        }
+    }
+
+    private func handleShortcutRelease(shortcutID: String) {
+        guard let descriptor = shortcutDescriptor(for: shortcutID),
+              let eventHandler = descriptor.plugin as? any PluginShortcutEventHandling
+        else {
+            return
+        }
+
+        handlePluginAction {
+            guardPluginCall(descriptor.plugin, operation: "shortcut release") {
+                eventHandler.handleShortcutEvent(id: descriptor.definition.actionID, phase: .released)
             }
         }
     }
