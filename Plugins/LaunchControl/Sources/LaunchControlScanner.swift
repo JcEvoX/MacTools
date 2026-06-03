@@ -33,6 +33,14 @@ struct LaunchControlScanner: @unchecked Sendable {
         var warnings: [String] = []
         progress(.message("读取 launchctl 禁用状态"))
         let disabledLabelsByDomain = loadDisabledLabels(domains: Set(directories.map(\.domain)))
+        // Fetch the whole user GUI domain in ONE `launchctl list` instead of one
+        // `launchctl print gui/<uid>/<label>` per item — the Status column is the
+        // last exit status and the PID column the running pid, so the data is
+        // equivalent. System-domain daemons are unaffected (handled per item below).
+        progress(.message("读取 launchctl 运行状态"))
+        let userDomainStatuses = Self.parseLaunchctlList(
+            (try? runner.runLaunchctl(arguments: ["list"]))?.combinedOutput ?? ""
+        )
         var items: [LaunchControlItem] = []
 
         for directory in directories {
@@ -54,9 +62,16 @@ struct LaunchControlScanner: @unchecked Sendable {
                         ? plistURL.deletingPathExtension().lastPathComponent
                         : summary.label
                     let disabledLabels = disabledLabelsByDomain[directory.domain, default: []]
-                    let launchctlStatus = directory.scope == .system
-                        ? (exitCode: Int32(-2), pid: nil as Int?, lastExitStatus: nil as Int?)
-                        : loadLaunchctlStatus(domain: directory.domain, label: label)
+                    let launchctlStatus: (exitCode: Int32, pid: Int?, lastExitStatus: Int?)
+                    if directory.scope == .system {
+                        launchctlStatus = (exitCode: Int32(-2), pid: nil, lastExitStatus: nil)
+                    } else if directory.domain == userDomain {
+                        // User GUI domain: served by the single `launchctl list` above.
+                        launchctlStatus = Self.status(from: userDomainStatuses, label: label)
+                    } else {
+                        // System-domain daemons (e.g. /Library/LaunchDaemons): unchanged.
+                        launchctlStatus = loadLaunchctlStatus(domain: directory.domain, label: label)
+                    }
                     let isDisabled = disabledLabels.contains(label)
                     let state = Self.state(
                         isDisabled: isDisabled,
@@ -220,6 +235,36 @@ struct LaunchControlScanner: @unchecked Sendable {
             let result = try? runner.runLaunchctl(arguments: ["print-disabled", domain])
             return (domain, Self.parseDisabledLabels(result?.combinedOutput ?? ""))
         })
+    }
+
+    /// Parses `launchctl list` output (tab-separated `PID  Status  Label`, with a
+    /// header row) into a label → (pid, lastExitStatus) map. `-` becomes nil.
+    static func parseLaunchctlList(_ output: String) -> [String: (pid: Int?, lastExitStatus: Int?)] {
+        var result: [String: (pid: Int?, lastExitStatus: Int?)] = [:]
+        for line in output.split(separator: "\n") {
+            let columns = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard columns.count == 3 else { continue }
+            let label = columns[2].trimmingCharacters(in: .whitespaces)
+            guard !label.isEmpty, label != "Label" else { continue } // skip header / blanks
+            result[label] = (
+                pid: Int(columns[0].trimmingCharacters(in: .whitespaces)),
+                lastExitStatus: Int(columns[1].trimmingCharacters(in: .whitespaces))
+            )
+        }
+        return result
+    }
+
+    /// Maps a `launchctl list` entry to the same status tuple shape the per-item
+    /// `launchctl print` path produces: present → loaded (exitCode 0); absent →
+    /// not loaded (exitCode 1), matching a non-zero `launchctl print`.
+    static func status(
+        from map: [String: (pid: Int?, lastExitStatus: Int?)],
+        label: String
+    ) -> (exitCode: Int32, pid: Int?, lastExitStatus: Int?) {
+        guard let entry = map[label] else {
+            return (exitCode: 1, pid: nil, lastExitStatus: nil)
+        }
+        return (exitCode: 0, pid: entry.pid, lastExitStatus: entry.lastExitStatus)
     }
 
     private func loadLaunchctlStatus(domain: String, label: String) -> (exitCode: Int32, pid: Int?, lastExitStatus: Int?) {
