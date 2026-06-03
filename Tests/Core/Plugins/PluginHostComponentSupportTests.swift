@@ -105,7 +105,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
                     sharedBindingGroupID: "brightness.down",
                     settingsGroupID: "display.one",
                     settingsGroupTitle: "Studio Display",
-                    settingsControlTitle: "降低"
+                    settingsControlTitle: "降低",
+                    settingsControlSystemImage: "sun.min.fill"
                 )
             ]
         )
@@ -115,6 +116,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(item?.settingsGroupID, "display.one")
         XCTAssertEqual(item?.settingsGroupTitle, "Studio Display")
         XCTAssertEqual(item?.settingsControlTitle, "降低")
+        XCTAssertEqual(item?.settingsControlSystemImage, "sun.min.fill")
     }
 
     func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {

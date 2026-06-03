@@ -38,6 +38,15 @@ enum DisplayBrightnessShortcutDirection: Equatable {
         }
     }
 
+    var systemImage: String {
+        switch self {
+        case .decrease:
+            return "sun.min.fill"
+        case .increase:
+            return "sun.max.fill"
+        }
+    }
+
     var sharedBindingGroupID: String {
         switch self {
         case .decrease:
@@ -316,7 +325,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
             sharedBindingGroupID: direction.sharedBindingGroupID,
             settingsGroupID: "\(Constants.shortcutDisplayGroupPrefix)\(displayKey)",
             settingsGroupTitle: display.name,
-            settingsControlTitle: direction.title
+            settingsControlTitle: direction.title,
+            settingsControlSystemImage: direction.systemImage
         )
     }
 

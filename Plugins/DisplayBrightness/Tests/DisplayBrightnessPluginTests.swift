@@ -107,6 +107,7 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         XCTAssertEqual(definitions.count, 2)
         XCTAssertEqual(definitions.map(\.settingsGroupTitle), ["Studio Display", "Studio Display"])
         XCTAssertEqual(definitions.map(\.settingsControlTitle), ["降低", "增加"])
+        XCTAssertEqual(definitions.map(\.settingsControlSystemImage), ["sun.min.fill", "sun.max.fill"])
         XCTAssertEqual(
             definitions.map(\.sharedBindingGroupID),
             ["display-brightness.decrease", "display-brightness.increase"]

@@ -145,6 +145,7 @@ public struct PluginShortcutDefinition: Identifiable {
     public let settingsGroupID: String?
     public let settingsGroupTitle: String?
     public let settingsControlTitle: String?
+    public let settingsControlSystemImage: String?
 
     public init(
         id: String,
@@ -157,7 +158,8 @@ public struct PluginShortcutDefinition: Identifiable {
         sharedBindingGroupID: String? = nil,
         settingsGroupID: String? = nil,
         settingsGroupTitle: String? = nil,
-        settingsControlTitle: String? = nil
+        settingsControlTitle: String? = nil,
+        settingsControlSystemImage: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -170,6 +172,7 @@ public struct PluginShortcutDefinition: Identifiable {
         self.settingsGroupID = settingsGroupID
         self.settingsGroupTitle = settingsGroupTitle
         self.settingsControlTitle = settingsControlTitle
+        self.settingsControlSystemImage = settingsControlSystemImage
     }
 }
 
@@ -187,6 +190,7 @@ public struct ShortcutSettingsItem: Identifiable {
     public let settingsGroupID: String?
     public let settingsGroupTitle: String?
     public let settingsControlTitle: String?
+    public let settingsControlSystemImage: String?
 
     public init(
         id: String,
@@ -201,7 +205,8 @@ public struct ShortcutSettingsItem: Identifiable {
         errorMessage: String?,
         settingsGroupID: String? = nil,
         settingsGroupTitle: String? = nil,
-        settingsControlTitle: String? = nil
+        settingsControlTitle: String? = nil,
+        settingsControlSystemImage: String? = nil
     ) {
         self.id = id
         self.pluginID = pluginID
@@ -216,6 +221,7 @@ public struct ShortcutSettingsItem: Identifiable {
         self.settingsGroupID = settingsGroupID
         self.settingsGroupTitle = settingsGroupTitle
         self.settingsControlTitle = settingsControlTitle
+        self.settingsControlSystemImage = settingsControlSystemImage
     }
 }
 

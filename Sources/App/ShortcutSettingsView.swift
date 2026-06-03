@@ -4,7 +4,8 @@ import MacToolsPluginKit
 private enum ShortcutSettingsLayout {
     static let standardRecorderWidth: CGFloat = 126
     static let groupedRecorderWidth: CGFloat = 126
-    static let groupedControlWidth: CGFloat = 184
+    static let groupedControlWidth: CGFloat = 166
+    static let groupedIconWidth: CGFloat = 22
     static let actionButtonSize: CGFloat = 22
     static let actionButtonsWidth: CGFloat = 50
 }
@@ -232,6 +233,7 @@ private struct GroupedShortcutSettingsRow: View {
                         onReset: { onReset(item) },
                         onClear: { onClear(item) },
                         title: item.settingsControlTitle ?? item.title,
+                        systemImage: item.settingsControlSystemImage,
                         layout: .stacked
                     )
                     .frame(width: Layout.controlWidth, alignment: .leading)
@@ -269,6 +271,7 @@ private struct ShortcutBindingControl: View {
     let onReset: () -> Void
     let onClear: () -> Void
     var title: String? = nil
+    var systemImage: String? = nil
     var layout: LayoutStyle = .horizontal
 
     var body: some View {
@@ -280,18 +283,30 @@ private struct ShortcutBindingControl: View {
             }
         case .stacked:
             HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                if let title {
-                    Text(title)
-                        .font(PluginSettingsTheme.Typography.secondaryLabel)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .help(title)
-                }
-
+                controlLabel
                 recorderButton
                 actionButtons
             }
+        }
+    }
+
+    @ViewBuilder
+    private var controlLabel: some View {
+        if let systemImage {
+            Image(systemName: systemImage)
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.secondary)
+                .frame(width: ShortcutSettingsLayout.groupedIconWidth, alignment: .center)
+                .accessibilityLabel(Text(title ?? item.title))
+                .help(title ?? item.title)
+        } else if let title {
+            Text(title)
+                .font(PluginSettingsTheme.Typography.secondaryLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .help(title)
         }
     }
 
