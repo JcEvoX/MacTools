@@ -424,14 +424,30 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
     }
 
     private func loadOriginalTransferTableIfNeeded() throws -> (CGDirectDisplayID, TransferTable) {
-        let (displayID, displayName, cachedTable): (CGDirectDisplayID, String, TransferTable?) = lock.withLock {
-            (_display.id, _display.name, originalTransferTable)
-        }
+        // The first-time capture must be atomic w.r.t. concurrent writeBrightness()
+        // calls: if the read of the live LUT happened outside the lock, a racing
+        // writer could have already dimmed the display, and we'd cache that dimmed
+        // LUT as the "original" — cleanup() would then restore the wrong curve and
+        // never return the display to full brightness. Capture under the lock; it is
+        // a one-time cost (subsequent calls hit the cache and return immediately).
+        return try lock.withLock {
+            let displayID = _display.id
+            let displayName = _display.name
 
-        if let cachedTable {
-            return (displayID, cachedTable)
-        }
+            if let cachedTable = originalTransferTable {
+                return (displayID, cachedTable)
+            }
 
+            let transferTable = try Self.readTransferTable(displayID: displayID, displayName: displayName)
+            originalTransferTable = transferTable
+            return (displayID, transferTable)
+        }
+    }
+
+    private static func readTransferTable(
+        displayID: CGDirectDisplayID,
+        displayName: String
+    ) throws -> TransferTable {
         var sampleCount: UInt32 = 0
         let countResult = CGGetDisplayTransferByTable(displayID, 0, nil, nil, nil, &sampleCount)
 
@@ -461,13 +477,11 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
             throw DisplayBrightnessControllerError.brightnessUnavailable(displayName: displayName)
         }
 
-        let transferTable = TransferTable(
+        return TransferTable(
             red: Array(UnsafeBufferPointer(start: red, count: Int(sampleCount))),
             green: Array(UnsafeBufferPointer(start: green, count: Int(sampleCount))),
             blue: Array(UnsafeBufferPointer(start: blue, count: Int(sampleCount)))
         )
-        lock.withLock { originalTransferTable = transferTable }
-        return (displayID, transferTable)
     }
 
     private static func canControl(displayID: CGDirectDisplayID) -> Bool {
