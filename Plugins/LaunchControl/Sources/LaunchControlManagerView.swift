@@ -182,6 +182,8 @@ struct LaunchControlManagerView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         detailHeader(item)
                         actionBar(item)
+                        LaunchControlNoteEditor(item: item, controller: controller)
+                            .id(item.id)
                         keyFields(item)
                         rawPlist(item)
                     }
@@ -267,7 +269,8 @@ struct LaunchControlManagerView: View {
                     item.commandText,
                     item.plistURL.path,
                     item.origin.title,
-                    item.triggerSummary
+                    item.triggerSummary,
+                    item.note
                 ].joined(separator: "\n")
                 searchMatches = haystack.localizedCaseInsensitiveContains(query)
             }
@@ -713,6 +716,57 @@ private enum LaunchControlPendingAction: Identifiable {
              .start,
              .restart:
             return nil
+        }
+    }
+}
+
+private struct LaunchControlNoteEditor: View {
+    let item: LaunchControlItem
+    let controller: LaunchControlController
+    @State private var draft: String
+
+    init(item: LaunchControlItem, controller: LaunchControlController) {
+        self.item = item
+        self.controller = controller
+        _draft = State(initialValue: item.note)
+    }
+
+    private var isDirty: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            != item.note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("备注")
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Spacer()
+                if isDirty {
+                    Button("保存") {
+                        controller.setNote(draft, for: item)
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            TextEditor(text: $draft)
+                .font(.system(size: 12))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 60, maxHeight: 120)
+                .padding(6)
+                .pluginSettingsCardBackground(.recessed)
+                .overlay(alignment: .topLeading) {
+                    if draft.isEmpty {
+                        Text("为这个启动项添加本地备注（仅保存在本机，不写入 plist）。")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 11)
+                            .padding(.top, 13)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
     }
 }
