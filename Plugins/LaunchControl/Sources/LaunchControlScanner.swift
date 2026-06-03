@@ -174,7 +174,11 @@ struct LaunchControlScanner: @unchecked Sendable {
             }
             _ = scanner.scanUpToString("=>")
             _ = scanner.scanString("=>")
-            if scanner.scanString("true") != nil {
+            // Modern macOS (14+) emits `=> disabled` / `=> enabled`; older output
+            // used `=> true` / `=> false`. Accept both so disabled items are
+            // detected on current systems (the previous code only matched "true",
+            // so on shipping macOS the disabled set was always empty).
+            if scanner.scanString("disabled") != nil || scanner.scanString("true") != nil {
                 labels.insert(label)
             } else {
                 _ = scanner.scanUpToCharacters(from: .newlines)
