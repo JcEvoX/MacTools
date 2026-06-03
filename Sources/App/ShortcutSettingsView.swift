@@ -4,7 +4,7 @@ import MacToolsPluginKit
 private enum ShortcutSettingsLayout {
     static let standardRecorderWidth: CGFloat = 126
     static let groupedRecorderWidth: CGFloat = 126
-    static let groupedControlWidth: CGFloat = 166
+    static let groupedControlWidth: CGFloat = 192
     static let groupedIconWidth: CGFloat = 22
     static let actionButtonSize: CGFloat = 22
     static let actionButtonsWidth: CGFloat = 50
@@ -47,7 +47,7 @@ struct ShortcutSettingsRowsView: View {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 ShortcutSettingsStandardRow(
                     item: item,
-                    validateAndCommit: { binding in
+                    recordShortcut: { binding in
                         configure(item, binding: binding)
                     },
                     onConfigure: {
@@ -93,7 +93,7 @@ struct GroupedShortcutSettingsRowsView: View {
             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
                 GroupedShortcutSettingsRow(
                     group: group,
-                    validateAndCommit: configure,
+                    recordShortcut: configure,
                     onBeginRecording: { item in
                         pluginHost.clearShortcutError(for: item.id)
                     },
@@ -127,12 +127,13 @@ struct GroupedShortcutSettingsRowsView: View {
 struct ShortcutSettingsGroup: Identifiable {
     let id: String
     let title: String
+    let description: String?
     let items: [ShortcutSettingsItem]
 }
 
 private struct ShortcutSettingsStandardRow: View {
     let item: ShortcutSettingsItem
-    let validateAndCommit: (ShortcutBinding) -> String?
+    let recordShortcut: (ShortcutBinding) -> String?
     let onConfigure: () -> Void
     let onClear: () -> Void
     let onReset: () -> Void
@@ -166,12 +167,14 @@ private struct ShortcutSettingsStandardRow: View {
                     }
                 }
 
-                Text(supportingText)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(supportingColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(supportingText)
+                if !supportingText.isEmpty {
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(supportingColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(supportingText)
+                }
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .help(rowHelpText)
@@ -179,7 +182,11 @@ private struct ShortcutSettingsStandardRow: View {
             HStack(alignment: .center, spacing: 10) {
                 ShortcutBindingControl(
                     item: item,
-                    validateAndCommit: validateAndCommit,
+                    onRecord: { binding in
+                        PluginShortcutRecordingResult.from(
+                            errorMessage: recordShortcut(binding)
+                        )
+                    },
                     onBeginRecording: onConfigure,
                     onConfigure: onConfigure,
                     onReset: onReset,
@@ -198,7 +205,7 @@ private struct GroupedShortcutSettingsRow: View {
     }
 
     let group: ShortcutSettingsGroup
-    let validateAndCommit: (ShortcutSettingsItem, ShortcutBinding) -> String?
+    let recordShortcut: (ShortcutSettingsItem, ShortcutBinding) -> String?
     let onBeginRecording: (ShortcutSettingsItem) -> Void
     let onClear: (ShortcutSettingsItem) -> Void
     let onReset: (ShortcutSettingsItem) -> Void
@@ -212,12 +219,14 @@ private struct GroupedShortcutSettingsRow: View {
                     .truncationMode(.tail)
                     .help(group.title)
 
-                Text(supportingText)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(supportingColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(supportingText)
+                if !supportingText.isEmpty {
+                    Text(supportingText)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(supportingColor)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(supportingText)
+                }
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
@@ -225,8 +234,10 @@ private struct GroupedShortcutSettingsRow: View {
                 ForEach(group.items) { item in
                     ShortcutBindingControl(
                         item: item,
-                        validateAndCommit: { binding in
-                            validateAndCommit(item, binding)
+                        onRecord: { binding in
+                            PluginShortcutRecordingResult.from(
+                                errorMessage: recordShortcut(item, binding)
+                            )
                         },
                         onBeginRecording: { onBeginRecording(item) },
                         onConfigure: { onBeginRecording(item) },
@@ -250,7 +261,7 @@ private struct GroupedShortcutSettingsRow: View {
             return messages.joined(separator: "；")
         }
 
-        return "可与其他显示器使用相同快捷键，同时调节。"
+        return group.description ?? ""
     }
 
     private var supportingColor: Color {
@@ -265,7 +276,7 @@ private struct ShortcutBindingControl: View {
     }
 
     let item: ShortcutSettingsItem
-    let validateAndCommit: (ShortcutBinding) -> String?
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
     let onBeginRecording: () -> Void
     let onConfigure: () -> Void
     let onReset: () -> Void
@@ -321,9 +332,10 @@ private struct ShortcutBindingControl: View {
 
     private var recorderButton: some View {
         PluginShortcutRecorder(
-            text: item.bindingText,
+            title: title ?? item.title,
+            displayText: item.bindingText,
             minWidth: recorderWidth,
-            validateAndCommit: validateAndCommit,
+            onRecord: onRecord,
             onBeginRecording: onBeginRecording
         )
         .frame(width: recorderWidth)
@@ -354,7 +366,7 @@ private struct ShortcutBindingControl: View {
     }
 
     private var shouldShowReset: Bool {
-        guard layout == .horizontal else {
+        guard layout == .horizontal || item.isRequired else {
             return false
         }
 

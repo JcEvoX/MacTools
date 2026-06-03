@@ -765,6 +765,7 @@ private struct PluginShortcutSection: View {
             return ShortcutSettingsGroup(
                 id: groupID,
                 title: firstItem.settingsGroupTitle ?? firstItem.title,
+                description: firstItem.settingsGroupDescription ?? firstItem.description,
                 items: groupItems
             )
         }

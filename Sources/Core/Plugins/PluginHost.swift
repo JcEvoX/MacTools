@@ -1184,6 +1184,7 @@ final class PluginHost: ObservableObject {
                 errorMessage: shortcutErrors[descriptor.itemID],
                 settingsGroupID: descriptor.definition.settingsGroupID,
                 settingsGroupTitle: descriptor.definition.settingsGroupTitle,
+                settingsGroupDescription: descriptor.definition.settingsGroupDescription,
                 settingsControlTitle: descriptor.definition.settingsControlTitle,
                 settingsControlSystemImage: descriptor.definition.settingsControlSystemImage
             )

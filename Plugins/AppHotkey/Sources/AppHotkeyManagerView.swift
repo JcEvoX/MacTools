@@ -74,13 +74,13 @@ struct AppHotkeyManagerView: View {
                     },
                     onBeginRecording: { onBeginRecording?(entry.id) },
                     onEndRecording: { onEndRecording?(entry.id) },
-                    validateAndCommit: { binding in
+                    onRecord: { binding in
                         if let conflict = store.conflictEntry(for: binding, excludingID: entry.id) {
-                            return "与「\(conflict.displayName)」冲突"
+                            return .rejected("与「\(conflict.displayName)」冲突")
                         }
                         store.updateShortcut(id: entry.id, shortcut: binding)
                         onUpdate()
-                        return nil
+                        return .accepted
                     }
                 )
                 if entry.id != store.entries.last?.id {
@@ -120,8 +120,7 @@ private struct AppShortcutEntryRow: View {
     let onDelete: () -> Void
     let onBeginRecording: () -> Void
     let onEndRecording: () -> Void
-    /// 录制成功时调用；返回 nil 表示提交成功，返回字符串表示冲突原因。
-    let validateAndCommit: (ShortcutBinding) -> String?
+    let onRecord: (ShortcutBinding) -> PluginShortcutRecordingResult
 
     private var appIcon: NSImage {
         guard let url = entry.bundleURL else {
@@ -163,8 +162,9 @@ private struct AppShortcutEntryRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             PluginShortcutRecorder(
-                text: shortcutText,
-                validateAndCommit: validateAndCommit,
+                title: "\(entry.displayName) 快捷键",
+                displayText: shortcutText,
+                onRecord: onRecord,
                 onBeginRecording: onBeginRecording,
                 onEndRecording: onEndRecording
             )

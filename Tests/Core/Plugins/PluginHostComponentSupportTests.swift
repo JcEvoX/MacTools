@@ -105,6 +105,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
                     sharedBindingGroupID: "brightness.down",
                     settingsGroupID: "display.one",
                     settingsGroupTitle: "Studio Display",
+                    settingsGroupDescription: "可与其他显示器使用相同快捷键，同时调节。",
                     settingsControlTitle: "降低",
                     settingsControlSystemImage: "sun.min.fill"
                 )
@@ -115,6 +116,7 @@ final class PluginHostComponentSupportTests: XCTestCase {
 
         XCTAssertEqual(item?.settingsGroupID, "display.one")
         XCTAssertEqual(item?.settingsGroupTitle, "Studio Display")
+        XCTAssertEqual(item?.settingsGroupDescription, "可与其他显示器使用相同快捷键，同时调节。")
         XCTAssertEqual(item?.settingsControlTitle, "降低")
         XCTAssertEqual(item?.settingsControlSystemImage, "sun.min.fill")
     }

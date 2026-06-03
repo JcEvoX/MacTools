@@ -144,6 +144,7 @@ public struct PluginShortcutDefinition: Identifiable {
     public let sharedBindingGroupID: String?
     public let settingsGroupID: String?
     public let settingsGroupTitle: String?
+    public let settingsGroupDescription: String?
     public let settingsControlTitle: String?
     public let settingsControlSystemImage: String?
 
@@ -158,6 +159,7 @@ public struct PluginShortcutDefinition: Identifiable {
         sharedBindingGroupID: String? = nil,
         settingsGroupID: String? = nil,
         settingsGroupTitle: String? = nil,
+        settingsGroupDescription: String? = nil,
         settingsControlTitle: String? = nil,
         settingsControlSystemImage: String? = nil
     ) {
@@ -171,6 +173,7 @@ public struct PluginShortcutDefinition: Identifiable {
         self.sharedBindingGroupID = sharedBindingGroupID
         self.settingsGroupID = settingsGroupID
         self.settingsGroupTitle = settingsGroupTitle
+        self.settingsGroupDescription = settingsGroupDescription
         self.settingsControlTitle = settingsControlTitle
         self.settingsControlSystemImage = settingsControlSystemImage
     }
@@ -189,6 +192,7 @@ public struct ShortcutSettingsItem: Identifiable {
     public let errorMessage: String?
     public let settingsGroupID: String?
     public let settingsGroupTitle: String?
+    public let settingsGroupDescription: String?
     public let settingsControlTitle: String?
     public let settingsControlSystemImage: String?
 
@@ -205,6 +209,7 @@ public struct ShortcutSettingsItem: Identifiable {
         errorMessage: String?,
         settingsGroupID: String? = nil,
         settingsGroupTitle: String? = nil,
+        settingsGroupDescription: String? = nil,
         settingsControlTitle: String? = nil,
         settingsControlSystemImage: String? = nil
     ) {
@@ -220,6 +225,7 @@ public struct ShortcutSettingsItem: Identifiable {
         self.errorMessage = errorMessage
         self.settingsGroupID = settingsGroupID
         self.settingsGroupTitle = settingsGroupTitle
+        self.settingsGroupDescription = settingsGroupDescription
         self.settingsControlTitle = settingsControlTitle
         self.settingsControlSystemImage = settingsControlSystemImage
     }

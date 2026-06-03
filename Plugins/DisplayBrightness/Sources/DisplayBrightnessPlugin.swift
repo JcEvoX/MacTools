@@ -325,6 +325,7 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
             sharedBindingGroupID: direction.sharedBindingGroupID,
             settingsGroupID: "\(Constants.shortcutDisplayGroupPrefix)\(displayKey)",
             settingsGroupTitle: display.name,
+            settingsGroupDescription: "可与其他显示器使用相同快捷键，同时调节。",
             settingsControlTitle: direction.title,
             settingsControlSystemImage: direction.systemImage
         )

@@ -106,6 +106,13 @@ final class DisplayBrightnessPluginTests: XCTestCase {
 
         XCTAssertEqual(definitions.count, 2)
         XCTAssertEqual(definitions.map(\.settingsGroupTitle), ["Studio Display", "Studio Display"])
+        XCTAssertEqual(
+            definitions.map(\.settingsGroupDescription),
+            [
+                "可与其他显示器使用相同快捷键，同时调节。",
+                "可与其他显示器使用相同快捷键，同时调节。"
+            ]
+        )
         XCTAssertEqual(definitions.map(\.settingsControlTitle), ["降低", "增加"])
         XCTAssertEqual(definitions.map(\.settingsControlSystemImage), ["sun.min.fill", "sun.max.fill"])
         XCTAssertEqual(
