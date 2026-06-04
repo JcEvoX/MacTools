@@ -66,6 +66,7 @@ public enum PluginStatusTone {
 
 public enum PluginPermissionKind {
     case accessibility
+    case inputMonitoring
     case calendarFullAccess
     case automation
     case screenRecording
@@ -324,6 +325,8 @@ public struct PluginComponentSpan: Equatable, Hashable, Sendable {
 }
 
 public struct PluginComponentPanelLayoutMetrics: Equatable, Sendable {
+    public static let cardCornerRadius: CGFloat = 12
+
     public let columns: Int
     public let cellWidth: CGFloat
     public let cellHeight: CGFloat
@@ -811,6 +814,7 @@ public struct PluginFeatureManagementItem: Identifiable {
     public let isActive: Bool
     public let presentation: PluginFeaturePresentation
     public let category: String?
+    public let releaseChannel: String?
 
     public init(
         id: String,
@@ -821,7 +825,8 @@ public struct PluginFeatureManagementItem: Identifiable {
         isVisible: Bool,
         isActive: Bool,
         presentation: PluginFeaturePresentation,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -832,6 +837,7 @@ public struct PluginFeatureManagementItem: Identifiable {
         self.isActive = isActive
         self.presentation = presentation
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 }
 

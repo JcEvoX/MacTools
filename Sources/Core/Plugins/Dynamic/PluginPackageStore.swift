@@ -158,6 +158,7 @@ final class PluginPackageStore {
             .appendingPathComponent("\(manifest.id)-backup-\(UUID().uuidString)", isDirectory: true)
             .appendingPathExtension("mactoolsplugin")
         let hadExistingPackage = fileManager.fileExists(atPath: destinationURL.path)
+        let wasDisabled = disabledPluginIDs.contains(manifest.id)
 
         if hadExistingPackage {
             guard replaceExisting else {
@@ -199,7 +200,9 @@ final class PluginPackageStore {
             throw PluginPackageStoreError.installFailed(error.localizedDescription)
         }
 
-        setEnabled(true, for: manifest.id)
+        if !hadExistingPackage || !wasDisabled {
+            setEnabled(true, for: manifest.id)
+        }
         clearPendingRestart(pluginID: manifest.id)
 
         guard let record = installedRecords().first(where: { $0.id == manifest.id }) else {

@@ -78,6 +78,66 @@ final class SelectedTextCapturePipelineTests: XCTestCase {
         XCTAssertEqual(result.sourceApplicationBundleID, "com.apple.Safari")
     }
 
+    func testBrowserContextPrefersAppleScriptOverAccessibilityText() async {
+        let pipeline = SelectedTextCapturePipeline(strategies: [
+            StubSelectedTextCapture(
+                strategyID: .accessibility,
+                result: SelectedTextCaptureResult(
+                    text: "accessibility text",
+                    strategyID: .accessibility,
+                    isEditable: true,
+                    sourceApplicationBundleID: "com.apple.Safari",
+                    failureReason: nil
+                )
+            ),
+            StubSelectedTextCapture(
+                strategyID: .browserAppleScript,
+                result: SelectedTextCaptureResult(
+                    text: "browser selection",
+                    strategyID: .browserAppleScript,
+                    isEditable: false,
+                    sourceApplicationBundleID: "com.apple.Safari",
+                    failureReason: nil
+                )
+            ),
+        ])
+
+        let result = await pipeline.capture(context: SelectedTextCaptureContext(frontmostApplicationBundleID: "com.apple.Safari"))
+
+        XCTAssertEqual(result.text, "browser selection")
+        XCTAssertEqual(result.strategyID, .browserAppleScript)
+    }
+
+    func testBrowserContextFallsBackToAccessibilityWhenAppleScriptFails() async {
+        let pipeline = SelectedTextCapturePipeline(strategies: [
+            StubSelectedTextCapture(
+                strategyID: .accessibility,
+                result: SelectedTextCaptureResult(
+                    text: "accessibility fallback",
+                    strategyID: .accessibility,
+                    isEditable: true,
+                    sourceApplicationBundleID: "com.apple.Safari",
+                    failureReason: nil
+                )
+            ),
+            StubSelectedTextCapture(
+                strategyID: .browserAppleScript,
+                result: SelectedTextCaptureResult(
+                    text: nil,
+                    strategyID: .browserAppleScript,
+                    isEditable: false,
+                    sourceApplicationBundleID: "com.apple.Safari",
+                    failureReason: "自动化取词失败"
+                )
+            ),
+        ])
+
+        let result = await pipeline.capture(context: SelectedTextCaptureContext(frontmostApplicationBundleID: "com.apple.Safari"))
+
+        XCTAssertEqual(result.text, "accessibility fallback")
+        XCTAssertEqual(result.strategyID, .accessibility)
+    }
+
     func testAllFailuresReturnsMissingSelection() async {
         let pipeline = SelectedTextCapturePipeline(strategies: [
             StubSelectedTextCapture(

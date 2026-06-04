@@ -185,14 +185,30 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
-        var seen: Set<String> = []
-        return items.filter { item in
+        var bestByKey: [String: DeviceBatteryItem] = [:]
+        var orderedKeys: [String] = []
+
+        for item in DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items) {
             let key = "\(item.kind.title)-\(item.name.lowercased())-\(item.parentName ?? "")"
-            guard !seen.contains(key) else {
-                return false
+            if let existing = bestByKey[key] {
+                bestByKey[key] = preferredItem(existing, item)
+            } else {
+                bestByKey[key] = item
+                orderedKeys.append(key)
             }
-            seen.insert(key)
-            return true
         }
+
+        return orderedKeys.compactMap { bestByKey[$0] }
+    }
+
+    private func preferredItem(
+        _ left: DeviceBatteryItem,
+        _ right: DeviceBatteryItem
+    ) -> DeviceBatteryItem {
+        if left.chargeState.isActiveChargingState != right.chargeState.isActiveChargingState {
+            return left.chargeState.isActiveChargingState ? left : right
+        }
+
+        return left.lastUpdated ?? .distantPast >= right.lastUpdated ?? .distantPast ? left : right
     }
 }

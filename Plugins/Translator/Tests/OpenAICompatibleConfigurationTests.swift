@@ -32,6 +32,28 @@ final class OpenAICompatibleConfigurationTests: XCTestCase {
         )
     }
 
+    func testEndpointKeepsFullChatCompletionsPath() throws {
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://gateway.example.com/openai/v1/chat/completions"
+        )
+
+        XCTAssertEqual(
+            try configuration.endpointURL().absoluteString,
+            "https://gateway.example.com/openai/v1/chat/completions"
+        )
+    }
+
+    func testEndpointKeepsProviderSpecificChatCompletionsPath() throws {
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        )
+
+        XCTAssertEqual(
+            try configuration.endpointURL().absoluteString,
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        )
+    }
+
     func testPromptTemplateMissingTextIsInvalidWithExactMessage() {
         let configuration = OpenAICompatibleConfiguration(promptTemplate: "翻译 {{source_language}} 到 {{target_language}}")
 

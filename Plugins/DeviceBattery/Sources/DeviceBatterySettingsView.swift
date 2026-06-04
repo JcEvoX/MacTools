@@ -17,45 +17,30 @@ struct DeviceBatterySettingsView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             sectionHeader(systemName: "rectangle.grid.2x2", title: "组件布局")
 
-            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-                ForEach(DeviceBatteryLayoutMode.allCases, id: \.self) { mode in
-                    Button {
-                        store.setLayoutMode(mode)
-                        onChange()
-                    } label: {
-                        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                            HStack(spacing: 6) {
-                                Image(systemName: iconName(for: mode))
-                                    .frame(width: 16)
-                                Text(mode.title)
-                                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                    ForEach(DeviceBatteryLayoutMode.allCases, id: \.self) { mode in
+                        DeviceBatteryLayoutModeButton(
+                            mode: mode,
+                            isSelected: store.layoutMode == mode,
+                            iconSystemName: iconName(for: mode),
+                            action: {
+                                store.setLayoutMode(mode)
+                                onChange()
                             }
-                            Text(mode.subtitle)
-                                .font(PluginSettingsTheme.Typography.rowDescription)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: 58, alignment: .topLeading)
-                        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
-                        .contentShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous))
+                        )
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(store.layoutMode == mode ? Color.accentColor : .primary)
-                    .background(
-                        RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous)
-                            .fill(store.layoutMode == mode ? Color.accentColor.opacity(0.12) : PluginSettingsTheme.Palette.recessedControlBackground)
-                    )
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(PluginSettingsTheme.Spacing.cardContent)
+            .pluginSettingsCardBackground(.host)
         }
     }
 
     private var sourceSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader(systemName: "bolt.horizontal.circle", title: "电量来源")
+            sectionHeader(systemName: "bolt.horizontal.circle", title: "显示内容")
 
             VStack(spacing: 0) {
                 sourceToggle(
@@ -72,8 +57,8 @@ struct DeviceBatterySettingsView: View {
                     action: store.setShowBluetoothDevices
                 )
                 sourceToggle(
-                    title: "雷柏 VT 鼠标",
-                    description: "监听雷柏厂商 HID 接口，支持已确认的 VT 系列 Product ID。",
+                    title: "厂商 HID 鼠标",
+                    description: "读取已适配鼠标的电量、充电状态、设备型号和名称。",
                     isOn: store.showRapooDevices,
                     isLast: true,
                     action: store.setShowRapooDevices
@@ -140,8 +125,48 @@ struct DeviceBatterySettingsView: View {
             return "list.bullet.rectangle"
         case .list:
             return "gauge.with.dots.needle.67percent"
-        case .showcase:
-            return "rectangle.inset.filled"
         }
+    }
+}
+
+private struct DeviceBatteryLayoutModeButton: View {
+    let mode: DeviceBatteryLayoutMode
+    let isSelected: Bool
+    let iconSystemName: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                Image(systemName: iconSystemName)
+                    .pluginSettingsRowIconStyle(isSelected ? Color.accentColor : Color.primary)
+
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                    Text(mode.title)
+                        .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
+                        .lineLimit(1)
+
+                    Text(mode.subtitle)
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(isSelected ? Color.accentColor.opacity(0.78) : .secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: PluginSettingsTheme.Size.controlHeight * 2)
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
+                .fill(
+                    isSelected
+                        ? PluginSettingsTheme.Palette.activeControlBackground
+                        : PluginSettingsTheme.Palette.recessedControlBackground
+                )
+        )
     }
 }

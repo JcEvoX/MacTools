@@ -21,6 +21,13 @@ private struct TranslatorPluginProvider: PluginProvider {
 
 @MainActor
 final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
+    private enum APIKeyState: Equatable {
+        case unknown
+        case present
+        case missing
+        case error(String)
+    }
+
     let metadata = PluginMetadata(
         id: TranslatorConstants.pluginID,
         title: "翻译",
@@ -44,14 +51,16 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private let accessibilityTrustProvider: () -> Bool
     private let accessibilityTrustRequester: (Bool) -> Bool
     private let selectTranslationStarter: (() -> Void)?
-    private let secretStore: OpenAICompatibleSecretStore
+    private let secretStore: any TranslatorSecretStoring
     private let languagePreferenceStore: LanguagePreferenceStore
     private let panelController: any TranslatorPanelControlling
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
     private let translationProviderFactoryOverride: TranslatorProviderFactory?
     private var providerConfiguration: OpenAICompatibleConfiguration
     private var languagePair: TranslatorLanguagePair
-    private var hasAPIKey: Bool
+    private var cachedAPIKey: String?
+    private var didLoadAPIKey = false
+    private var apiKeyState: APIKeyState
     private var coordinator: TranslatorCoordinator?
 
     init(
@@ -59,7 +68,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         accessibilityTrustProvider: @escaping () -> Bool = AccessibilityCheck.isTrusted,
         accessibilityTrustRequester: @escaping (Bool) -> Bool = AccessibilityCheck.requestTrust,
         selectTranslationStarter: (() -> Void)? = nil,
-        secretStore: OpenAICompatibleSecretStore = OpenAICompatibleSecretStore(),
+        secretStore: any TranslatorSecretStoring = OpenAICompatibleSecretStore(),
         panelController: any TranslatorPanelControlling = TranslatorPanelController(),
         selectedTextCapturePipeline: SelectedTextCapturePipeline = .live(),
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil
@@ -76,7 +85,8 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         self.languagePreferenceStore = languagePreferenceStore
         self.providerConfiguration = OpenAICompatibleConfiguration(storage: context.storage)
         self.languagePair = languagePreferenceStore.loadPair()
-        self.hasAPIKey = Self.hasNonEmptyAPIKey(try? secretStore.loadAPIKey())
+        self.cachedAPIKey = nil
+        self.apiKeyState = .unknown
         panelController.onAction = { [weak self] action in
             self?.handlePanelAction(action)
         }
@@ -135,7 +145,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             if let self {
                 TranslatorSettingsView(
                     configuration: self.providerConfiguration,
-                    apiKey: (try? self.secretStore.loadAPIKey()) ?? "",
+                    apiKey: self.cachedAPIKey ?? "",
                     languagePair: self.languagePair,
                     onSave: { [weak self] configuration, apiKey, languagePair in
                         self?.saveConfiguration(configuration, apiKey: apiKey, languagePair: languagePair)
@@ -195,6 +205,19 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
 
     func handleSettingsAction(id: String) {}
 
+    func deactivate(reason: PluginDeactivationReason) {
+        guard reason.requiresStateCleanup else {
+            return
+        }
+
+        if let coordinator {
+            coordinator.close()
+        } else {
+            panelController.close()
+        }
+        coordinator = nil
+    }
+
     func handleShortcutAction(id: String) {
         guard id == TranslatorConstants.ActionID.selectTranslation,
               isShortcutEnabled
@@ -223,8 +246,25 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private var panelSubtitle: String {
         if !isShortcutEnabled { return "快捷键已暂停" }
         if !accessibilityTrustProvider() { return "启用前需要辅助功能授权" }
-        if providerConfiguration.validationError != nil || !hasAPIKey { return "需要配置 OpenAI" }
-        return "按 ⌥D 翻译选中文本"
+        if providerConfiguration.validationError != nil { return "需要配置 OpenAI" }
+
+        switch apiKeyState {
+        case .missing, .error:
+            return "需要配置 OpenAI"
+        case .unknown, .present:
+            return "按 ⌥D 翻译选中文本"
+        }
+    }
+
+    private var hasKnownAPIKey: Bool {
+        switch apiKeyState {
+        case .present:
+            return true
+        case .unknown:
+            return (try? secretStore.containsAPIKey()) == true
+        case .missing, .error:
+            return false
+        }
     }
 
     func saveConfiguration(
@@ -241,12 +281,24 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         }
 
         do {
-            try secretStore.saveAPIKey(apiKey)
+            if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
+                try secretStore.saveAPIKey(normalizedAPIKey)
+                cachedAPIKey = normalizedAPIKey
+                didLoadAPIKey = true
+                apiKeyState = .present
+            } else if hasKnownAPIKey {
+                cachedAPIKey = nil
+                didLoadAPIKey = false
+                apiKeyState = .present
+            } else {
+                apiKeyState = .missing
+                onStateChange?()
+                return "API Key 不能为空。"
+            }
             configuration.save(to: storage)
             languagePreferenceStore.savePair(languagePair)
             providerConfiguration = configuration
             self.languagePair = languagePair
-            hasAPIKey = Self.hasNonEmptyAPIKey(try secretStore.loadAPIKey())
             if let coordinator {
                 coordinator.close()
             } else {
@@ -289,14 +341,12 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                     return .missing(message: "请先配置 OpenAI")
                 }
 
-                guard self.providerConfiguration.validationError == nil,
-                      let key = try? self.secretStore.loadAPIKey()
-                else {
+                guard self.providerConfiguration.validationError == nil else {
                     return .missing(message: "请先配置 OpenAI")
                 }
 
-                let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedKey.isEmpty else {
+                self.loadCachedAPIKeyIfNeeded()
+                guard let trimmedKey = Self.normalizedAPIKey(self.cachedAPIKey) else {
                     return .missing(message: "请先配置 OpenAI")
                 }
 
@@ -314,5 +364,27 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
 
     private static func hasNonEmptyAPIKey(_ apiKey: String?) -> Bool {
         apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private static func normalizedAPIKey(_ apiKey: String?) -> String? {
+        let trimmedKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmedKey.isEmpty ? nil : trimmedKey
+    }
+
+    private func loadCachedAPIKeyIfNeeded() {
+        guard !didLoadAPIKey else {
+            return
+        }
+
+        do {
+            cachedAPIKey = try secretStore.loadAPIKey()
+        } catch {
+            cachedAPIKey = nil
+            apiKeyState = .error(error.localizedDescription)
+            didLoadAPIKey = true
+            return
+        }
+        didLoadAPIKey = true
+        apiKeyState = Self.hasNonEmptyAPIKey(cachedAPIKey) ? .present : .missing
     }
 }

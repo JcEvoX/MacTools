@@ -10,7 +10,7 @@ struct CalendarComponentView: View {
         static let headerHeight: CGFloat = 20
         static let weekdayHeight: CGFloat = 10
         static let dayCellSize: CGFloat = 36
-        static let cornerRadius: CGFloat = 16
+        static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
     }
 
     @StateObject private var viewModel: CalendarComponentViewModel
@@ -54,7 +54,7 @@ struct CalendarComponentView: View {
             )
         }
         .padding(Layout.contentPadding)
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(CalendarComponentBackground(cornerRadius: Layout.cornerRadius))
     }
 

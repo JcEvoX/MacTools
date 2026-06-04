@@ -38,6 +38,10 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         static let exitPhysicalCleanMode = "exit-physical-clean-mode"
     }
 
+    private enum ShortcutSettingsGroupID {
+        static let exitPhysicalCleanMode = "physical-clean-mode.exit"
+    }
+
     let metadata = PluginMetadata(
         id: "physical-clean-mode",
         title: "清洁模式",
@@ -115,7 +119,12 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
                     keyCode: UInt16(kVK_Escape),
                     modifiers: [.control, .command]
                 ),
-                isRequired: true
+                isRequired: true,
+                settingsGroupID: ShortcutSettingsGroupID.exitPhysicalCleanMode,
+                settingsGroupTitle: "退出快捷键",
+                settingsGroupDescription: "清洁模式启用时恢复输入并关闭黑屏覆盖。",
+                settingsControlTitle: "退出",
+                settingsControlSystemImage: "keyboard"
             )
         ]
     }

@@ -87,9 +87,12 @@ struct OpenAICompatibleConfiguration: Equatable, Sendable {
 
         let basePath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let pathComponents = basePath.isEmpty ? [] : basePath.split(separator: "/").map(String.init)
+        let lowercasedPathComponents = pathComponents.map { $0.lowercased() }
         let completionPathComponents: [String]
 
-        if pathComponents.last == "v1" {
+        if Array(lowercasedPathComponents.suffix(2)) == ["chat", "completions"] {
+            completionPathComponents = pathComponents
+        } else if lowercasedPathComponents.last == "v1" {
             completionPathComponents = pathComponents + ["chat", "completions"]
         } else {
             completionPathComponents = pathComponents + ["v1", "chat", "completions"]

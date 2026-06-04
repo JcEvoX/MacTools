@@ -1,7 +1,15 @@
 import Foundation
+import LocalAuthentication
 import Security
 
-struct OpenAICompatibleSecretStore: Sendable {
+protocol TranslatorSecretStoring: Sendable {
+    func containsAPIKey() throws -> Bool
+    func loadAPIKey() throws -> String?
+    func saveAPIKey(_ apiKey: String) throws
+    func deleteAPIKey() throws
+}
+
+struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
     static let defaultService = "cc.ggbond.mactools.translator"
     static let defaultAccount = "translator.openai.api-key"
 
@@ -14,6 +22,31 @@ struct OpenAICompatibleSecretStore: Sendable {
     ) {
         self.service = service
         self.account = account
+    }
+
+    func containsAPIKey() throws -> Bool {
+        var query = baseQuery
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecReturnAttributes as String] = true
+        query[kSecUseAuthenticationContext as String] = context
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        switch status {
+        case errSecSuccess:
+            return true
+        case errSecItemNotFound:
+            return false
+        case errSecInteractionNotAllowed:
+            // The item likely exists but cannot be inspected without user interaction.
+            // Treat it as present so a blank settings save preserves it.
+            return true
+        default:
+            throw OpenAICompatibleSecretStoreError.security(status)
+        }
     }
 
     func loadAPIKey() throws -> String? {

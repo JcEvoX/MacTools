@@ -7,18 +7,22 @@ enum MenuBarStatusItemInvocation: Equatable {
     case featurePanel
     case componentPanel
 
-    static func invocation(for event: NSEvent?) -> MenuBarStatusItemInvocation {
-        guard let event else {
-            return .componentPanel
-        }
+    static func invocation(
+        for event: NSEvent?,
+        swapped: Bool = false
+    ) -> MenuBarStatusItemInvocation {
+        // A secondary click is a right-click or a Control-click; everything else
+        // (including a nil event for programmatic fallback) is a primary click.
+        let isSecondary: Bool = {
+            guard let event else { return false }
+            return event.type == .rightMouseDown
+                || event.type == .rightMouseUp
+                || event.modifierFlags.contains(.control)
+        }()
 
-        if event.type == .rightMouseDown
-            || event.type == .rightMouseUp
-            || event.modifierFlags.contains(.control) {
-            return .featurePanel
-        }
-
-        return .componentPanel
+        let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
+        let secondary: MenuBarStatusItemInvocation = swapped ? .componentPanel : .featurePanel
+        return isSecondary ? secondary : primary
     }
 }
 
@@ -270,7 +274,10 @@ final class MenuBarStatusItemController: NSObject {
 
     @objc
     private func handleStatusItemAction(_ sender: NSStatusBarButton) {
-        switch MenuBarStatusItemInvocation.invocation(for: NSApp.currentEvent) {
+        // Read the preference live on each click so a settings change takes
+        // effect immediately without re-observing.
+        let swapped = MenuBarClickBehaviorPreference.current().isSwapped
+        switch MenuBarStatusItemInvocation.invocation(for: NSApp.currentEvent, swapped: swapped) {
         case .featurePanel:
             toggleFeaturePanel(relativeTo: sender)
         case .componentPanel:

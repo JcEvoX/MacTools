@@ -122,6 +122,20 @@ final class PluginPackageStoreTests: XCTestCase {
         XCTAssertEqual(record.state, .enabled)
     }
 
+    func testUpdateKeepsDisabledPluginDisabled() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let updateURL = try makePackage(id: "com.example.demo", version: "2.0.0")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        store.setEnabled(false, for: "com.example.demo")
+
+        _ = try store.updatePackage(from: updateURL)
+
+        let record = try XCTUnwrap(store.installedRecords().first)
+        XCTAssertEqual(record.manifest.version, "2.0.0")
+        XCTAssertEqual(record.state, .disabled)
+    }
+
     func testDefaultRootDirectoryUsesCurrentApplicationSupportScope() {
         let rootDirectory = PluginPackageStore.defaultRootDirectory(fileManager: .default)
 

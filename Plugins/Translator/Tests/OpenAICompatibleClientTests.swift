@@ -45,6 +45,7 @@ final class OpenAICompatibleClientTests: XCTestCase {
         XCTAssertEqual(request.timeoutInterval, 30)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "test-key")
 
         let body = try Self.requestBody(from: request)
         XCTAssertEqual(body.model, "gpt-test")

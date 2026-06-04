@@ -37,6 +37,8 @@ final class SystemStatusPluginTests: XCTestCase {
     func testSystemStatusLayoutUsesFourColumnTwoRowOrder() {
         XCTAssertEqual(SystemStatusComponentLayout.columns, 4)
         XCTAssertEqual(SystemStatusComponentLayout.rows, 2)
+        XCTAssertEqual(SystemStatusComponentLayout.cardSpacing, 6)
+        XCTAssertEqual(SystemStatusComponentLayout.cardContentPadding, 6)
         XCTAssertEqual(
             SystemStatusComponentLayout.orderedMetricKinds,
             [.cpu, .memory, .disk, .battery, .network, .topProcesses]

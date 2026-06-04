@@ -80,15 +80,42 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(didNotify)
     }
 
-    func testPrimaryPanelStartsEnabledWithSetupSubtitleWhenOpenAIIsMissing() {
+    func testPrimaryPanelShowsSetupSubtitleAfterOpenAIKeyIsKnownMissing() {
         let storage = TranslatorInMemoryPluginStorage()
-        let plugin = makePlugin(storage: storage, accessibilityTrustProvider: { true })
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let plugin = makePlugin(
+            storage: storage,
+            accessibilityTrustProvider: { true },
+            secretStore: secretStore
+        )
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://gateway.example.com",
+            model: "gpt-test",
+            promptTemplate: "{{text}}"
+        )
+
+        let message = plugin.saveConfiguration(
+            configuration,
+            apiKey: "",
+            languagePair: TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+        )
         let state = plugin.primaryPanelState
 
+        XCTAssertEqual(message, "API Key 不能为空。")
         XCTAssertTrue(state.isVisible)
         XCTAssertTrue(state.isEnabled)
         XCTAssertTrue(state.isOn)
         XCTAssertEqual(state.subtitle, "需要配置 OpenAI")
+    }
+
+    func testPrimaryPanelDoesNotClaimOpenAIIsMissingBeforeAPIKeyStateIsKnown() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: "sk-cached")
+        let plugin = makePlugin(accessibilityTrustProvider: { true }, secretStore: secretStore)
+        let state = plugin.primaryPanelState
+
+        XCTAssertEqual(secretStore.loadCount, 0)
+        XCTAssertEqual(secretStore.containsCount, 0)
+        XCTAssertEqual(state.subtitle, "按 ⌥D 翻译选中文本")
     }
 
     func testPrimaryPanelShowsAccessibilitySubtitleBeforeOpenAISetupWhenPermissionIsMissing() {
@@ -98,15 +125,111 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "启用前需要辅助功能授权")
     }
 
-    func testWhitespaceOnlyAPIKeyKeepsSetupSubtitle() throws {
-        let secretStore = OpenAICompatibleSecretStore(service: uniqueTestKeychainService())
-        try secretStore.saveAPIKey("   \n\t  ")
+    func testWhitespaceOnlyAPIKeyShowsSetupSubtitleAfterProviderBuild() async {
+        let secretStore = CountingTranslatorSecretStore(apiKey: "   \n\t  ")
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let plugin = makePlugin(
+            secretStore: secretStore,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
 
-        let plugin = makePlugin(secretStore: secretStore)
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
 
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+    }
 
-        try secretStore.deleteAPIKey()
+    func testConfigurationViewDoesNotLoadAPIKeyFromKeychain() throws {
+        let secretStore = CountingTranslatorSecretStore(apiKey: "sk-cached")
+        let plugin = makePlugin(secretStore: secretStore)
+
+        XCTAssertEqual(secretStore.loadCount, 0)
+
+        let configuration = try XCTUnwrap(plugin.configuration)
+
+        _ = configuration.makeView(PluginConfigurationContext(pluginID: "translator"))
+        _ = configuration.makeView(PluginConfigurationContext(pluginID: "translator"))
+
+        XCTAssertEqual(secretStore.loadCount, 0)
+    }
+
+    func testShortcutLoadsAPIKeyOnlyWhenBuildingProvider() async {
+        let secretStore = CountingTranslatorSecretStore(apiKey: "sk-cached")
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let panelController = RecordingTranslatorPanelController()
+        let plugin = makePlugin(
+            secretStore: secretStore,
+            panelController: panelController,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
+
+        XCTAssertEqual(secretStore.loadCount, 0)
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        XCTAssertEqual(secretStore.loadCount, 1)
+    }
+
+    func testSavingBlankAPIKeyWithoutExistingKeyReturnsConfigurationError() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let plugin = makePlugin(secretStore: secretStore)
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://gateway.example.com",
+            model: "gpt-test",
+            promptTemplate: "{{text}}"
+        )
+
+        let message = plugin.saveConfiguration(
+            configuration,
+            apiKey: "  ",
+            languagePair: TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+        )
+
+        XCTAssertEqual(message, "API Key 不能为空。")
+        XCTAssertEqual(secretStore.saveCount, 0)
+    }
+
+    func testSavingBlankAPIKeyPreservesExistingKeyWithoutLoadingSecretValue() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: "sk-cached")
+        let plugin = makePlugin(secretStore: secretStore)
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://gateway.example.com",
+            model: "gpt-test",
+            promptTemplate: "{{text}}"
+        )
+
+        let message = plugin.saveConfiguration(
+            configuration,
+            apiKey: "  ",
+            languagePair: TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+        )
+
+        XCTAssertNil(message)
+        XCTAssertEqual(secretStore.loadCount, 0)
+        XCTAssertEqual(secretStore.containsCount, 1)
+        XCTAssertEqual(secretStore.saveCount, 0)
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
     }
 
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
@@ -297,6 +420,35 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(provider.requests.isEmpty)
     }
 
+    func testDeactivateClosesPanelAndCancelsPendingTranslation() async {
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let provider = RecordingTranslationProvider(resultText: "你好")
+        let panelController = RecordingTranslatorPanelController()
+        let plugin = makePlugin(
+            panelController: panelController,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture]),
+            translationProviderFactoryOverride: { .provider(provider) }
+        )
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+
+        plugin.deactivate(reason: .disabled)
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        XCTAssertTrue(panelController.didClose)
+        XCTAssertTrue(provider.requests.isEmpty)
+    }
+
     func testSavingIdenticalLanguagePairDoesNotPersistProviderOrLanguageData() {
         let storage = TranslatorInMemoryPluginStorage()
         let plugin = makePlugin(storage: storage)
@@ -325,7 +477,7 @@ final class TranslatorPluginTests: XCTestCase {
         accessibilityTrustProvider: @escaping () -> Bool = { true },
         accessibilityTrustRequester: @escaping (Bool) -> Bool = { _ in true },
         selectTranslationStarter: (() -> Void)? = nil,
-        secretStore: OpenAICompatibleSecretStore? = nil,
+        secretStore: (any TranslatorSecretStoring)? = nil,
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil
@@ -346,6 +498,36 @@ final class TranslatorPluginTests: XCTestCase {
 
     private func uniqueTestKeychainService() -> String {
         "cc.ggbond.mactools.translator.tests.plugin.\(UUID().uuidString)"
+    }
+}
+
+private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unchecked Sendable {
+    private var apiKey: String?
+    private(set) var loadCount = 0
+    private(set) var containsCount = 0
+    private(set) var saveCount = 0
+
+    init(apiKey: String?) {
+        self.apiKey = apiKey
+    }
+
+    func containsAPIKey() throws -> Bool {
+        containsCount += 1
+        return apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    func loadAPIKey() throws -> String? {
+        loadCount += 1
+        return apiKey
+    }
+
+    func saveAPIKey(_ apiKey: String) throws {
+        saveCount += 1
+        self.apiKey = apiKey
+    }
+
+    func deleteAPIKey() throws {
+        apiKey = nil
     }
 }
 

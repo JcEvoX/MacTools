@@ -96,6 +96,7 @@ struct GeneralSettingsView: View {
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @AppStorage(AppAppearancePreference.userDefaultsKey) private var appearancePreferenceRawValue = AppAppearancePreference.system.rawValue
+    @AppStorage(MenuBarClickBehaviorPreference.userDefaultsKey) private var clickBehaviorRawValue = MenuBarClickBehaviorPreference.standard.rawValue
 
     var body: some View {
         Form {
@@ -104,7 +105,7 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("启动")
             }
-            
+
             Section {
                 AppearanceSettingsRow(selection: appearancePreferenceBinding)
             } header: {
@@ -116,6 +117,7 @@ struct GeneralSettingsView: View {
                     iconSettings: menuBarIconSettings,
                     gallery: menuBarIconGallery
                 )
+                MenuBarClickBehaviorSettingsRow(selection: clickBehaviorBinding)
             } header: {
                 Text("状态栏图标")
             }
@@ -129,6 +131,67 @@ struct GeneralSettingsView: View {
         } set: { preference in
             appearancePreferenceRawValue = preference.rawValue
             preference.apply()
+        }
+    }
+
+    private var clickBehaviorBinding: Binding<MenuBarClickBehaviorPreference> {
+        Binding {
+            MenuBarClickBehaviorPreference(rawValue: clickBehaviorRawValue) ?? .standard
+        } set: { preference in
+            clickBehaviorRawValue = preference.rawValue
+        }
+    }
+}
+
+private struct MenuBarClickBehaviorSettingsRow: View {
+    @Binding var selection: MenuBarClickBehaviorPreference
+    @State private var toggleID = UUID()
+
+    private var isSwapped: Binding<Bool> {
+        Binding {
+            selection.isSwapped
+        } set: { enabled in
+            selection = enabled ? .swapped : .standard
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: GeneralSettingsCardLayout.headerSpacing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: GeneralSettingsCardLayout.iconCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.12))
+
+                Image(systemName: "cursorarrow.click.2")
+                    .font(PluginSettingsTheme.Typography.pageDescription.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("交换左右键点击行为")
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                Text("关闭时左键打开仪表盘、右键打开功能面板；开启后左右键行为互换。")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("交换左右键点击行为", isOn: isSwapped)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .id(toggleID)
+        }
+        .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
+        .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
+        .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
+        .help("开启后左键打开功能面板，右键打开仪表盘")
+        .onAppear {
+            DispatchQueue.main.async {
+                toggleID = UUID()
+            }
         }
     }
 }
@@ -731,8 +794,43 @@ private struct PluginShortcutSection: View {
     var body: some View {
         PluginConfigurationSection(title: "快捷键", systemImage: "command") {
             VStack(alignment: .leading, spacing: 0) {
-                ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                if groupedItems.isEmpty {
+                    ShortcutSettingsRowsView(pluginHost: pluginHost, items: items)
+                } else {
+                    GroupedShortcutSettingsRowsView(pluginHost: pluginHost, groups: groupedItems)
+                }
             }
+        }
+    }
+
+    private var groupedItems: [ShortcutSettingsGroup] {
+        guard items.allSatisfy({ $0.settingsGroupID != nil }) else {
+            return []
+        }
+
+        var groupOrder: [String] = []
+        var groups: [String: [ShortcutSettingsItem]] = [:]
+
+        for item in items {
+            guard let groupID = item.settingsGroupID else {
+                continue
+            }
+
+            if groups[groupID] == nil {
+                groupOrder.append(groupID)
+            }
+            groups[groupID, default: []].append(item)
+        }
+
+        return groupOrder.compactMap { groupID in
+            guard let groupItems = groups[groupID], let firstItem = groupItems.first else { return nil }
+
+            return ShortcutSettingsGroup(
+                id: groupID,
+                title: firstItem.settingsGroupTitle ?? firstItem.title,
+                description: firstItem.settingsGroupDescription ?? firstItem.description,
+                items: groupItems
+            )
         }
     }
 }

@@ -71,7 +71,7 @@ struct TranslatorSettingsView: View {
 
                 PluginSettingsListDivider()
 
-                fieldRow(title: "API Key", description: "保存在系统钥匙串。") {
+                fieldRow(title: "API Key", description: "留空则保留当前钥匙串内容。") {
                     SecureField("sk-...", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
