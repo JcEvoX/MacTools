@@ -1,0 +1,157 @@
+import SwiftUI
+import MacToolsPluginKit
+
+/// Launcher settings. Host renders the page header; this view starts at the first
+/// group (per the settings spec). Bindings write straight through to the persisted
+/// `LaunchpadPreferences`.
+struct LaunchpadSettingsView: View {
+    @ObservedObject var preferences: LaunchpadPreferences
+
+    private var isAutoColumns: Binding<Bool> {
+        Binding(
+            get: { preferences.columns == LaunchpadPreferences.autoColumns },
+            set: { preferences.columns = $0 ? LaunchpadPreferences.autoColumns : 7 }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            windowSection
+            gridSection
+            hiddenSection
+        }
+    }
+
+    private var sortedHiddenIDs: [String] {
+        preferences.hiddenAppIDs.sorted {
+            appName(for: $0).localizedCaseInsensitiveCompare(appName(for: $1)) == .orderedAscending
+        }
+    }
+
+    /// Hidden ids are absolute paths; derive a display name without needing the catalog
+    /// (the app may even be uninstalled).
+    private func appName(for id: String) -> String {
+        URL(fileURLWithPath: id).deletingPathExtension().lastPathComponent
+    }
+
+    @ViewBuilder
+    private var hiddenSection: some View {
+        if !preferences.hiddenAppIDs.isEmpty {
+            let ids = sortedHiddenIDs
+            section(title: "隐藏的应用", icon: "eye.slash") {
+                VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                    ForEach(ids, id: \.self) { id in
+                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                            Text(appName(for: id))
+                                .font(PluginSettingsTheme.Typography.rowTitle)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+                            Button("恢复") { preferences.unhide(id) }
+                                .controlSize(.small)
+                        }
+                        if id != ids.last { Divider() }
+                    }
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Button("全部恢复") { preferences.unhideAll() }
+                            .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private var windowSection: some View {
+        section(title: "窗口", icon: "macwindow") {
+            VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                row(
+                    title: "唤出方式",
+                    description: preferences.windowMode == .fullscreen
+                        ? "铺满当前屏幕，点击空白处关闭"
+                        : "屏幕中央的浮窗，点击窗外关闭"
+                ) {
+                    Picker("", selection: $preferences.windowMode) {
+                        ForEach(LaunchpadPreferences.WindowMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 168)
+                }
+                Divider()
+                row(title: "热区唤起", description: "光标停在所选屏幕角落即唤出启动台") {
+                    Picker("", selection: $preferences.hotCorner) {
+                        ForEach(LaunchpadPreferences.HotCorner.allCases) { corner in
+                            Text(corner.label).tag(corner)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 110)
+                }
+            }
+        }
+    }
+
+    private var gridSection: some View {
+        section(title: "网格", icon: "square.grid.3x3") {
+            VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                row(title: "自动列数", description: "按窗口宽度自动排布") {
+                    Toggle("", isOn: isAutoColumns)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+                if preferences.columns != LaunchpadPreferences.autoColumns {
+                    Divider()
+                    row(title: "每行图标", description: "固定每行的应用数量") {
+                        Stepper(
+                            value: $preferences.columns,
+                            in: LaunchpadPreferences.minColumns...LaunchpadPreferences.maxColumns
+                        ) {
+                            Text("\(preferences.columns) 个")
+                                .font(PluginSettingsTheme.Typography.monospacedValue)
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                        .fixedSize()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Building blocks
+
+    private func section<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            Label(title, systemImage: icon)
+                .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.secondary)
+            content()
+                .pluginSettingsListRowPadding()
+                .pluginSettingsCardBackground(.host)
+        }
+    }
+
+    private func row<Control: View>(
+        title: String,
+        description: String,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title).font(PluginSettingsTheme.Typography.rowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+            control()
+        }
+    }
+}

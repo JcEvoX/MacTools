@@ -52,6 +52,7 @@
 | IP Check | View public IPv4/IPv6, local LAN IP, location, ISP, ASN, and timezone, with copy support for single fields or the full result. |
 | Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services and automatic language selection. |
 | App Shortcuts | Bind global shortcuts to common apps; pressing a shortcut opens or activates the app, and hides it if it is already frontmost. |
+| Launchpad | Summon an app grid in fullscreen or a compact window, with instant search, horizontal paging, keyboard navigation, a global shortcut, and IME-composition safety. |
 | Lock Screen | Lock the screen immediately, equivalent to Cmd+Ctrl+Q. |
 | Launch Items | Browse LaunchAgent/LaunchDaemon entries with search, field explanations, and user-level enable/disable controls. |
 | Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events in the component panel. |
