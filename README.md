@@ -4,15 +4,9 @@
   <p><a href="README.zh-CN.md">[中文]</a> [English]</p>
 
   <p>
-    <a href="https://github.com/ggbond268/MacTools/stargazers" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars" style="vertical-align: middle;">
-    </a>
-    <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/license/ggbond268/MacTools?label=" alt="License" style="vertical-align: middle;">
-    </a>
-    <a href="https://github.com/ggbond268/MacTools/releases" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/v/release/ggbond268/MacTools?label=" alt="Latest release" style="vertical-align: middle;">
-    </a>
+    <a href="https://github.com/ggbond268/MacTools/stargazers"><img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars"></a>
+    <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ggbond268/MacTools" alt="License"></a>
+    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools" alt="Latest release"></a>
   </p>
 
   <p>MacTools brings frequently used system actions together in a lightweight, fast, and unobtrusive menu bar app. Built with SwiftUI + AppKit for macOS 14.0 and later.</p>

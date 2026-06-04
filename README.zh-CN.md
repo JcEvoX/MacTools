@@ -5,15 +5,9 @@
   <p>[中文] <a href="README.md">[English]</a></p>
 
   <p>
-    <a href="https://github.com/ggbond268/MacTools/stargazers" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars" style="vertical-align: middle;">
-    </a>
-    <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/license/ggbond268/MacTools?label=" alt="License" style="vertical-align: middle;">
-    </a>
-    <a href="https://github.com/ggbond268/MacTools/releases" style="text-decoration: none;">
-      <img src="https://img.shields.io/github/v/release/ggbond268/MacTools?label=" alt="Latest release" style="vertical-align: middle;">
-    </a>
+    <a href="https://github.com/ggbond268/MacTools/stargazers"><img src="https://img.shields.io/github/stars/ggbond268/MacTools?style=social" alt="GitHub stars"></a>
+    <a href="https://github.com/ggbond268/MacTools/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ggbond268/MacTools" alt="License"></a>
+    <a href="https://github.com/ggbond268/MacTools/releases"><img src="https://img.shields.io/github/v/release/ggbond268/MacTools" alt="Latest release"></a>
   </p>
 
   <p>聚合高频系统能力，保持轻量、快速、低打扰。使用 SwiftUI + AppKit 构建，支持 macOS 14.0 及以上版本。</p>
