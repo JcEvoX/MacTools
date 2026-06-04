@@ -48,7 +48,18 @@ struct LaunchpadGridView: View {
         let visible = catalog.apps.filter { !sessionHidden.contains($0.id) }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return visible }
-        return visible.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        // Fuzzy (subsequence) match, ranked by relevance; ties keep alphabetical order.
+        var scored: [(app: LaunchpadAppItem, score: Int)] = []
+        for app in visible {
+            if let s = LaunchpadFuzzy.score(name: app.name, query: query) {
+                scored.append((app, s))
+            }
+        }
+        scored.sort { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.app.name.localizedCaseInsensitiveCompare(rhs.app.name) == .orderedAscending
+        }
+        return scored.map(\.app)
     }
 
     private var perPage: Int { max(1, columnCount * rowCount) }
