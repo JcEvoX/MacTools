@@ -31,6 +31,13 @@ final class ComponentPanelLayoutTests: XCTestCase {
         XCTAssertEqual(ComponentPanelLayout.panelWidth, 316)
     }
 
+    func testScrollClipCornerRadiusMatchesPanelCornerRadius() {
+        XCTAssertEqual(
+            ComponentPanelLayout.scrollClipCornerRadius,
+            MenuBarPanelLayout.cornerRadius
+        )
+    }
+
     func testGridUsesCompactRowsForDenseComponents() {
         XCTAssertLessThan(ComponentPanelLayout.cellHeight, ComponentPanelLayout.cellWidth)
         XCTAssertEqual(ComponentPanelLayout.itemHeight(for: .oneByOne), ComponentPanelLayout.cellHeight)

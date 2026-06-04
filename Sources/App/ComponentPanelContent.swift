@@ -37,6 +37,10 @@ enum ComponentPanelLayout {
         verticalPadding * 2
     }
 
+    static var scrollClipCornerRadius: CGFloat {
+        MenuBarPanelLayout.cornerRadius
+    }
+
     static func itemWidth(for span: PluginComponentSpan) -> CGFloat {
         metrics.itemWidth(forSpanWidth: span.width)
     }
@@ -248,6 +252,12 @@ struct ComponentPanelContent: View {
                     )
                 }
                 .background(ScrollViewScrollerVisibilityConfigurator())
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: ComponentPanelLayout.scrollClipCornerRadius,
+                        style: .continuous
+                    )
+                )
             }
         }
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
