@@ -154,7 +154,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         // isn't silent (Codex P1) — the launched app, on success, wins focus itself.
         NSWorkspace.shared.openApplication(at: app.url, configuration: config) { _, error in
             if let error {
-                logger.error("launch failed for \(app.url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                // Privacy: never log the full path (it can contain ~/<user>); the bundle
+                // name is enough, and the error may itself embed the path so keep it private.
+                logger.error("launch failed for \(app.url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .private)")
                 NSSound.beep()
             }
         }
@@ -224,7 +226,10 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.window === session else { return }
-                self.close()
+                // The user switched away (Cmd+Tab / clicked another app): don't yank focus
+                // back to the previously-frontmost app and fight their intent. Only the
+                // explicit Esc / background-click paths restore focus.
+                self.close(restoringFocus: false)
             }
         }
     }

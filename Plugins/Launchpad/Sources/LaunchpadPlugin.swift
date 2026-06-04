@@ -19,6 +19,9 @@ private struct LaunchpadPluginProvider: PluginProvider {
 
 @MainActor
 final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
+    private enum ControlID {
+        static let execute = "execute"
+    }
     private enum ActionID {
         static let toggle = "toggleLaunchpad"
     }
@@ -92,7 +95,7 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        guard case let .invokeAction(controlID) = action, controlID == "execute" else {
+        guard case let .invokeAction(controlID) = action, controlID == ControlID.execute else {
             return
         }
         openLaunchpad()
