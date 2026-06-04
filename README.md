@@ -50,6 +50,7 @@
 | Empty Trash | Show the number of Trash items and empty Trash through Finder; the action is disabled when Trash is empty. |
 | Clear Clipboard | Clear the current clipboard content to protect privacy and avoid accidental paste. |
 | IP Check | View public IPv4/IPv6, local LAN IP, location, ISP, ASN, and timezone, with copy support for single fields or the full result. |
+| Translator | Translate the currently selected text with a global shortcut; the first version supports OpenAI-compatible services and automatic language selection. |
 | App Shortcuts | Bind global shortcuts to common apps; pressing a shortcut opens or activates the app, and hides it if it is already frontmost. |
 | Lock Screen | Lock the screen immediately, equivalent to Cmd+Ctrl+Q. |
 | Launch Items | Browse LaunchAgent/LaunchDaemon entries with search, field explanations, and user-level enable/disable controls. |

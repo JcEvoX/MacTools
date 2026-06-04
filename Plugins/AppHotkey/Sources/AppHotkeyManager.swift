@@ -65,8 +65,10 @@ final class AppHotkeyManager {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
+        // 与宿主全局快捷键同样使用事件分发目标，避免不同 Carbon target
+        // 的路由差异。handler 仍通过独立 signature 只处理 AppHotkey 事件。
         InstallEventHandler(
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             Self.hotKeyHandler,
             1,
             &eventType,
@@ -85,7 +87,7 @@ final class AppHotkeyManager {
             UInt32(binding.keyCode),
             binding.modifiers.carbonFlags,
             hotKeyID,
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             0,
             &ref
         )

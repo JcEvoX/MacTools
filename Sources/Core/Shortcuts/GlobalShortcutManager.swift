@@ -72,9 +72,12 @@ final class GlobalShortcutManager {
             )
         ]
 
+        // 使用事件分发目标注册/监听热键（与 Magnet、MASShortcut 等一致）。
+        // 在本 App 的运行循环下，全局热键事件不会路由到 GetApplicationEventTarget()，
+        // 会导致热键虽注册成功却从不触发回调。
         _ = eventTypes.withUnsafeBufferPointer { buffer in
             InstallEventHandler(
-                GetApplicationEventTarget(),
+                GetEventDispatcherTarget(),
                 Self.hotKeyHandler,
                 buffer.count,
                 buffer.baseAddress,
@@ -98,7 +101,7 @@ final class GlobalShortcutManager {
             UInt32(binding.keyCode),
             binding.modifiers.carbonFlags,
             hotKeyID,
-            GetApplicationEventTarget(),
+            GetEventDispatcherTarget(),
             0,
             &hotKeyReference
         )
