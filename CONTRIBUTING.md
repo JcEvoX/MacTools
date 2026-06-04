@@ -1,6 +1,6 @@
 # Contributing to MacTools
 
-[中文](CONTRIBUTING.zh-CN.md) [English]
+<a href="CONTRIBUTING.zh-CN.md">[中文]</a> [English]
 
 Thanks for your interest in MacTools. Please keep each contribution small and clear: explain the problem, provide verifiable changes, and avoid mixing unrelated refactors into the same pull request.
 

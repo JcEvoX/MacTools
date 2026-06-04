@@ -1,6 +1,6 @@
 # Contributing to MacTools
 
-[中文] [English](CONTRIBUTING.md)
+[中文] <a href="CONTRIBUTING.md">[English]</a>
 
 感谢你关注 MacTools。请让每次贡献保持小而清晰：说明问题、给出可验证改动，并避免混入无关重构。
 
