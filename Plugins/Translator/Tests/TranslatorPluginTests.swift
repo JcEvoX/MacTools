@@ -106,7 +106,7 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(state.isVisible)
         XCTAssertTrue(state.isEnabled)
         XCTAssertTrue(state.isOn)
-        XCTAssertEqual(state.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(state.subtitle, "需要配置翻译服务")
     }
 
     func testPrimaryPanelDoesNotClaimOpenAIIsMissingBeforeAPIKeyStateIsKnown() {
@@ -147,7 +147,7 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testShortcutNotifiesHostWhenLazyAPIKeyLoadFindsMissingKey() async {
@@ -176,7 +176,7 @@ final class TranslatorPluginTests: XCTestCase {
         await capture.waitUntilCompleted()
 
         XCTAssertEqual(notificationCount, 1)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testPanelControllerClampsRestoredFrameIntoVisibleScreen() throws {
@@ -571,6 +571,7 @@ final class TranslatorPluginTests: XCTestCase {
 
 private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unchecked Sendable {
     private var apiKey: String?
+    private var profileAPIKeys: [String: String] = [:]
     private(set) var loadCount = 0
     private(set) var containsCount = 0
     private(set) var saveCount = 0
@@ -584,9 +585,19 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         return apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool {
+        containsCount += 1
+        return profileAPIKeys[profileID]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     func loadAPIKey() throws -> String? {
         loadCount += 1
         return apiKey
+    }
+
+    func loadAPIKey(forProfileID profileID: String) throws -> String? {
+        loadCount += 1
+        return profileAPIKeys[profileID]
     }
 
     func saveAPIKey(_ apiKey: String) throws {
@@ -594,8 +605,17 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         self.apiKey = apiKey
     }
 
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        saveCount += 1
+        profileAPIKeys[profileID] = apiKey
+    }
+
     func deleteAPIKey() throws {
         apiKey = nil
+    }
+
+    func deleteAPIKey(forProfileID profileID: String) throws {
+        profileAPIKeys.removeValue(forKey: profileID)
     }
 }
 
