@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-03T13:07:30Z",
-  "minimumHostVersion": "1.0.14",
+  "generatedAt": "2026-06-04T13:15:05Z",
+  "minimumHostVersion": "1.0.15",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -37,16 +37,16 @@
       "id": "app-hotkey",
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "fa1575d9d7414ee23600e1fe339745ade5147dab5b4d0fba4d661edc1f4745b1",
-        "size": 178000,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.14/app-hotkey.mactoolsplugin.zip"
+        "sha256": "cffc6f5268762d12a38dda1a9e76319abf8efb324f77093a3b61c582cfab3108",
+        "size": 178003,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.15/app-hotkey.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.14",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.15",
       "summary": "为常用应用绑定全局快捷键，快速打开或切换到前台",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "capabilities": {
@@ -477,6 +477,28 @@
     {
       "capabilities": {
         "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "system",
+      "displayName": "启动台",
+      "id": "launchpad",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "efddad800613c25edb51cc93ef82134a86e23c012bb9eeeb20847258afba1faf",
+        "size": 388457,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.15/launchpad.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.15",
+      "summary": "用全局热键或菜单栏唤出全屏应用网格，搜索并启动",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
         "configuration": false,
         "primaryPanel": true
       },
@@ -698,6 +720,31 @@
         "configuration": true,
         "primaryPanel": true
       },
+      "category": "productivity",
+      "displayName": "翻译",
+      "id": "translator",
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "975e766e8d8bb0a1aeb7a1ff579b81bcb86b19ce08643328400c99157f2c086a",
+        "size": 420817,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.15/translator.mactoolsplugin.zip"
+      },
+      "permissions": [
+        "accessibility",
+        "automation"
+      ],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.15",
+      "summary": "划词快捷键翻译",
+      "version": "0.1.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
       "category": "storage",
       "displayName": "Xcode 清理",
       "id": "xcode-clean",
@@ -739,6 +786,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "xA/Y1yHW3z1TDzBbPRKKz2L+T5qm0vKmm10qfTqN2h//FpIOrCikWxpdMY0Xv0gjbNV8anmD5hvokuD9Pcb7CA=="
+    "value": "Ub2Ha2BYIuYv24Iomoki5sq07wT8iwm3W47AHu3kybjbEqXCFE1De5zMmFixCwkYoQ7W/KF5m7lfcLHuuF/LAg=="
   }
 }
