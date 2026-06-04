@@ -79,12 +79,8 @@ struct LaunchpadSettingsView: View {
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
             content()
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
-                .background(
-                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card)
-                        .fill(PluginSettingsTheme.Palette.nativeCardBackground)
-                )
+                .pluginSettingsListRowPadding()
+                .pluginSettingsCardBackground(.host)
         }
     }
 
