@@ -32,11 +32,21 @@ final class LaunchpadPreferences: ObservableObject {
         }
     }
 
+    /// App ids (resolved absolute paths) the user has hidden from the grid.
+    @Published private(set) var hiddenAppIDs: Set<String> {
+        didSet { storage.set(Array(hiddenAppIDs), forKey: Keys.hidden) }
+    }
+
+    func hide(_ id: String) { hiddenAppIDs.insert(id) }
+    func unhide(_ id: String) { hiddenAppIDs.remove(id) }
+    func unhideAll() { hiddenAppIDs.removeAll() }
+
     private let storage: PluginStorage
 
     private enum Keys {
         static let windowMode = "windowMode"
         static let columns = "columns"
+        static let hidden = "hiddenAppIDs"
     }
 
     static func normalizedColumns(_ value: Int) -> Int {
@@ -49,5 +59,6 @@ final class LaunchpadPreferences: ObservableObject {
             ?? .fullscreen
         // `integer(forKey:)` is 0 when unset → autoColumns, our default.
         self.columns = Self.normalizedColumns(storage.integer(forKey: Keys.columns))
+        self.hiddenAppIDs = Set(storage.stringArray(forKey: Keys.hidden) ?? [])
     }
 }

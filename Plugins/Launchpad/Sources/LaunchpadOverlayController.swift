@@ -109,8 +109,10 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             catalog: catalog,
             columns: preferences.columns,
             isCompact: isCompact,
+            hiddenAppIDs: preferences.hiddenAppIDs,
             onActivate: { [weak self] app in self?.launch(app) },
             onReveal: { [weak self] app in self?.reveal(app) },
+            onHide: { [weak self] app in self?.preferences.hide(app.id) },
             onDismiss: { [weak self] in self?.close() }
         ))
         win.contentView = host

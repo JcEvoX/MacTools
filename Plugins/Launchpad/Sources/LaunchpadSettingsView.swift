@@ -18,6 +18,48 @@ struct LaunchpadSettingsView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             windowSection
             gridSection
+            hiddenSection
+        }
+    }
+
+    private var sortedHiddenIDs: [String] {
+        preferences.hiddenAppIDs.sorted {
+            appName(for: $0).localizedCaseInsensitiveCompare(appName(for: $1)) == .orderedAscending
+        }
+    }
+
+    /// Hidden ids are absolute paths; derive a display name without needing the catalog
+    /// (the app may even be uninstalled).
+    private func appName(for id: String) -> String {
+        URL(fileURLWithPath: id).deletingPathExtension().lastPathComponent
+    }
+
+    @ViewBuilder
+    private var hiddenSection: some View {
+        if !preferences.hiddenAppIDs.isEmpty {
+            let ids = sortedHiddenIDs
+            section(title: "隐藏的应用", icon: "eye.slash") {
+                VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                    ForEach(ids, id: \.self) { id in
+                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                            Text(appName(for: id))
+                                .font(PluginSettingsTheme.Typography.rowTitle)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+                            Button("恢复") { preferences.unhide(id) }
+                                .controlSize(.small)
+                        }
+                        if id != ids.last { Divider() }
+                    }
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Button("全部恢复") { preferences.unhideAll() }
+                            .controlSize(.small)
+                    }
+                }
+            }
         }
     }
 

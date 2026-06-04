@@ -22,13 +22,19 @@ struct LaunchpadGridView: View {
     /// panel dismisses by clicking *outside* it (→ app resigns active), drops the
     /// inside-the-panel click-to-dismiss that fullscreen Launchpad uses.
     var isCompact: Bool = false
+    /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
+    var hiddenAppIDs: Set<String> = []
     var onActivate: (LaunchpadAppItem) -> Void
     var onReveal: (LaunchpadAppItem) -> Void
+    var onHide: (LaunchpadAppItem) -> Void
     var onDismiss: () -> Void
 
     @State private var searchText = ""
     @State private var selectedIndex = 0
     @State private var currentPage = 0
+    /// Hiding an app removes it from the grid immediately (live), while `onHide`
+    /// persists it; seeded from `hiddenAppIDs` on appear.
+    @State private var sessionHidden: Set<String> = []
     @State private var columnCount = 7
     @State private var rowCount = 5
 
@@ -39,9 +45,10 @@ struct LaunchpadGridView: View {
     private let rowSpacing: CGFloat = 16
 
     private var filtered: [LaunchpadAppItem] {
+        let visible = catalog.apps.filter { !sessionHidden.contains($0.id) }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return catalog.apps }
-        return catalog.apps.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return visible }
+        return visible.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     private var perPage: Int { max(1, columnCount * rowCount) }
@@ -71,7 +78,7 @@ struct LaunchpadGridView: View {
             .padding(.bottom, isCompact ? 20 : 32)
             .padding(.horizontal, isCompact ? 24 : 48)
         }
-        .onAppear { selectedIndex = 0; currentPage = 0 }
+        .onAppear { selectedIndex = 0; currentPage = 0; sessionHidden = hiddenAppIDs }
         .onChange(of: searchText) { _, _ in selectedIndex = 0; currentPage = 0 }
     }
 
@@ -182,6 +189,15 @@ struct LaunchpadGridView: View {
             NSPasteboard.general.setString(app.url.path, forType: .string)
         } label: {
             Label("拷贝路径", systemImage: "doc.on.doc")
+        }
+        Divider()
+        Button {
+            sessionHidden.insert(app.id)        // drop from this grid immediately
+            selectedIndex = 0
+            currentPage = 0
+            onHide(app)                         // persist (settings page can restore)
+        } label: {
+            Label("隐藏", systemImage: "eye.slash")
         }
     }
 

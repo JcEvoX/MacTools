@@ -79,4 +79,34 @@ final class LaunchpadPreferencesTests: XCTestCase {
         XCTAssertEqual(LaunchpadPreferences.normalizedColumns(2), LaunchpadPreferences.minColumns)
         XCTAssertEqual(LaunchpadPreferences.normalizedColumns(50), LaunchpadPreferences.maxColumns)
     }
+
+    func testHideUnhidePersists() {
+        let store = FakeStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.hide("/Applications/A.app")
+        prefs.hide("/Applications/B.app")
+        XCTAssertEqual(prefs.hiddenAppIDs, ["/Applications/A.app", "/Applications/B.app"])
+        XCTAssertEqual(Set(store.values["hiddenAppIDs"] as? [String] ?? []), prefs.hiddenAppIDs)
+
+        prefs.unhide("/Applications/A.app")
+        XCTAssertEqual(prefs.hiddenAppIDs, ["/Applications/B.app"])
+        XCTAssertEqual(store.values["hiddenAppIDs"] as? [String], ["/Applications/B.app"])
+    }
+
+    func testHiddenLoadedFromStorage() {
+        let store = FakeStorage()
+        store.values["hiddenAppIDs"] = ["/Applications/X.app", "/Applications/Y.app"]
+        let prefs = LaunchpadPreferences(storage: store)
+        XCTAssertEqual(prefs.hiddenAppIDs, ["/Applications/X.app", "/Applications/Y.app"])
+    }
+
+    func testUnhideAll() {
+        let store = FakeStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.hide("/Applications/A.app")
+        prefs.hide("/Applications/B.app")
+        prefs.unhideAll()
+        XCTAssertTrue(prefs.hiddenAppIDs.isEmpty)
+        XCTAssertEqual(store.values["hiddenAppIDs"] as? [String], [])
+    }
 }
