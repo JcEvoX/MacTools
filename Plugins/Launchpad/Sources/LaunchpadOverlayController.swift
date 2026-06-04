@@ -110,6 +110,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             columns: preferences.columns,
             isCompact: isCompact,
             onActivate: { [weak self] app in self?.launch(app) },
+            onReveal: { [weak self] app in self?.reveal(app) },
             onDismiss: { [weak self] in self?.close() }
         ))
         win.contentView = host
@@ -160,6 +161,12 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
                 NSSound.beep()
             }
         }
+        close(restoringFocus: false)
+    }
+
+    private func reveal(_ app: LaunchpadAppItem) {
+        // Reveal brings Finder forward, so close without restoring focus (Finder wins).
+        NSWorkspace.shared.activateFileViewerSelecting([app.url])
         close(restoringFocus: false)
     }
 

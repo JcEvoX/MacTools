@@ -23,6 +23,7 @@ struct LaunchpadGridView: View {
     /// inside-the-panel click-to-dismiss that fullscreen Launchpad uses.
     var isCompact: Bool = false
     var onActivate: (LaunchpadAppItem) -> Void
+    var onReveal: (LaunchpadAppItem) -> Void
     var onDismiss: () -> Void
 
     @State private var searchText = ""
@@ -162,9 +163,26 @@ struct LaunchpadGridView: View {
                         selectedIndex = globalIndex
                         onActivate(app)
                     }
+                    .contextMenu { cellMenu(for: app) }
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func cellMenu(for app: LaunchpadAppItem) -> some View {
+        Button {
+            onReveal(app)
+        } label: {
+            Label("在 Finder 中显示", systemImage: "folder")
+        }
+        Button {
+            // Lightweight clipboard action — no lifecycle effect, so keep the launcher open.
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(app.url.path, forType: .string)
+        } label: {
+            Label("拷贝路径", systemImage: "doc.on.doc")
+        }
     }
 
     private func pageIndicator(current: Int) -> some View {
