@@ -1,3 +1,4 @@
+import AppKit
 import Carbon
 import Foundation
 import MacToolsPluginKit
@@ -147,6 +148,61 @@ final class TranslatorPluginTests: XCTestCase {
         await capture.waitUntilCompleted()
 
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+    }
+
+    func testShortcutNotifiesHostWhenLazyAPIKeyLoadFindsMissingKey() async {
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let plugin = makePlugin(
+            secretStore: secretStore,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
+        var notificationCount = 0
+        plugin.onStateChange = {
+            notificationCount += 1
+        }
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        XCTAssertEqual(notificationCount, 1)
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+    }
+
+    func testPanelControllerClampsRestoredFrameIntoVisibleScreen() throws {
+        _ = NSApplication.shared
+        closeTranslatorPanels()
+        defer { closeTranslatorPanels() }
+
+        let controller = TranslatorPanelController()
+        controller.show(snapshot: .idle)
+        let panel = try XCTUnwrap(translatorPanel())
+        let visibleFrame = try XCTUnwrap((panel.screen ?? NSScreen.main)?.visibleFrame)
+        let offscreenFrame = NSRect(
+            x: visibleFrame.maxX + 1_000,
+            y: visibleFrame.maxY + 1_000,
+            width: panel.frame.width,
+            height: panel.frame.height
+        )
+
+        panel.setFrame(offscreenFrame, display: false)
+        controller.close()
+        controller.show(snapshot: .idle)
+
+        XCTAssertGreaterThanOrEqual(panel.frame.minX, visibleFrame.minX)
+        XCTAssertLessThanOrEqual(panel.frame.maxX, visibleFrame.maxX)
+        XCTAssertGreaterThanOrEqual(panel.frame.minY, visibleFrame.minY)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, visibleFrame.maxY)
     }
 
     func testConfigurationViewDoesNotLoadAPIKeyFromKeychain() throws {
@@ -498,6 +554,18 @@ final class TranslatorPluginTests: XCTestCase {
 
     private func uniqueTestKeychainService() -> String {
         "cc.ggbond.mactools.translator.tests.plugin.\(UUID().uuidString)"
+    }
+
+    private func translatorPanel() -> TranslatorPanelWindow? {
+        NSApp.windows.compactMap { $0 as? TranslatorPanelWindow }.last
+    }
+
+    private func closeTranslatorPanels() {
+        for panel in NSApp.windows.compactMap({ $0 as? TranslatorPanelWindow }) {
+            panel.performProgrammaticClose {
+                panel.close()
+            }
+        }
     }
 }
 

@@ -73,8 +73,8 @@ struct OpenAICompatibleConfiguration: Equatable, Sendable {
     }
 
     func endpointURL() throws -> URL {
-        guard validationError != .blankBaseURL else {
-            throw OpenAICompatibleConfigurationError.invalidBaseURL
+        if let validationError {
+            throw validationError
         }
 
         guard var components = URLComponents(string: normalizedBaseURL),

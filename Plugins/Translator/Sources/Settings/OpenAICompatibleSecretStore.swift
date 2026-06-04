@@ -63,7 +63,10 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
                 throw OpenAICompatibleSecretStoreError.unexpectedItemData
             }
 
-            return String(data: data, encoding: .utf8)
+            guard let apiKey = String(data: data, encoding: .utf8) else {
+                throw OpenAICompatibleSecretStoreError.unexpectedItemData
+            }
+            return apiKey
         case errSecItemNotFound:
             return nil
         default:

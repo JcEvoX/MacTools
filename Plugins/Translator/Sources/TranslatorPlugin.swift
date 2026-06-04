@@ -375,6 +375,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         guard !didLoadAPIKey else {
             return
         }
+        let previousState = apiKeyState
 
         do {
             cachedAPIKey = try secretStore.loadAPIKey()
@@ -382,9 +383,15 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             cachedAPIKey = nil
             apiKeyState = .error(error.localizedDescription)
             didLoadAPIKey = true
+            if apiKeyState != previousState {
+                onStateChange?()
+            }
             return
         }
         didLoadAPIKey = true
         apiKeyState = Self.hasNonEmptyAPIKey(cachedAPIKey) ? .present : .missing
+        if apiKeyState != previousState {
+            onStateChange?()
+        }
     }
 }

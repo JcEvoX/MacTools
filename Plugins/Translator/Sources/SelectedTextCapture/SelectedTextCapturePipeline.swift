@@ -44,7 +44,7 @@ struct SelectedTextCapturePipeline {
             let result = await strategy.capture(context: context)
             guard let success = successfulResult(from: result) else {
                 if permissionRequiredResult == nil,
-                   result.failureReason == "需要辅助功能授权" {
+                   result.failureReason == TranslatorPanelError.permissionRequired.message {
                     permissionRequiredResult = result
                 }
 

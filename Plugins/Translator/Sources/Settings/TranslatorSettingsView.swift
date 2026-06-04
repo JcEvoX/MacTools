@@ -63,7 +63,7 @@ struct TranslatorSettingsView: View {
             sectionHeader("OpenAI 兼容服务", icon: "network")
 
             VStack(spacing: 0) {
-                fieldRow(title: "Base URL", description: "OpenAI 或兼容网关地址。") {
+                fieldRow(title: "服务地址", description: "OpenAI 或兼容网关地址。") {
                     TextField("https://api.openai.com", text: $baseURL)
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
@@ -71,7 +71,7 @@ struct TranslatorSettingsView: View {
 
                 PluginSettingsListDivider()
 
-                fieldRow(title: "API Key", description: "留空则保留当前钥匙串内容。") {
+                fieldRow(title: "接口密钥", description: "留空则保留当前钥匙串内容。") {
                     SecureField("sk-...", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)

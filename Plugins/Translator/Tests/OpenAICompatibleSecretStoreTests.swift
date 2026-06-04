@@ -39,4 +39,20 @@ final class OpenAICompatibleSecretStoreTests: XCTestCase {
 
         XCTAssertNil(try store.loadAPIKey())
     }
+
+    func testLoadAPIKeyThrowsWhenStoredDataIsNotUTF8() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service!,
+            kSecAttrAccount as String: OpenAICompatibleSecretStore.defaultAccount,
+            kSecValueData as String: Data([0xFF, 0xFE]),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        let status = SecItemAdd(query as CFDictionary, nil)
+        XCTAssertEqual(status, errSecSuccess)
+
+        XCTAssertThrowsError(try store.loadAPIKey()) { error in
+            XCTAssertEqual(error as? OpenAICompatibleSecretStoreError, .unexpectedItemData)
+        }
+    }
 }

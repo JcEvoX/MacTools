@@ -108,6 +108,18 @@ final class OpenAICompatibleConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.validationError?.localizedDescription, "模型不能为空。")
     }
 
+    func testEndpointThrowsValidationErrorForBlankModel() {
+        let configuration = OpenAICompatibleConfiguration(
+            baseURL: "https://gateway.example.com",
+            model: " \n\t ",
+            promptTemplate: "{{text}}"
+        )
+
+        XCTAssertThrowsError(try configuration.endpointURL()) { error in
+            XCTAssertEqual(error as? OpenAICompatibleConfigurationError, .blankModel)
+        }
+    }
+
     func testSaveTrimsBaseURLAndModelButPreservesPromptTemplate() {
         let storage = TranslatorInMemoryPluginStorage()
         let promptTemplate = "  翻译：{{text}}  "

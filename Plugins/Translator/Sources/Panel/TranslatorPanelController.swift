@@ -16,12 +16,13 @@ final class TranslatorPanelController: TranslatorPanelControlling {
         model.snapshot = snapshot
         let panel = panelWindow ?? makePanel()
         panelWindow = panel
+        panel.setFrame(clampedFrame(for: panel.frame, panel: panel), display: true)
 
         panel.orderFrontRegardless()
 
-        // 取词阶段保持非 key，避免抢走前台 App 的键盘焦点而影响 AX 取词与模拟 ⌘C；
-        // 结果态才成为 key 以支持按钮点击、文本选择与 Esc 关闭。不调用 NSApp.activate，
-        // 与仓库内其他 .nonactivatingPanel 浮窗保持一致，不让整个 App 抢占前台。
+        // Keep the panel non-key while capturing so the frontmost app keeps keyboard focus
+        // for AX selection and simulated Cmd-C. Result states become key to support buttons,
+        // text selection, and Esc close without activating the whole app.
         if snapshot.phase != .capturing {
             panel.makeKey()
         }
@@ -62,7 +63,8 @@ final class TranslatorPanelController: TranslatorPanelControlling {
 
         panel.contentView = effectView
         panel.setContentSize(Self.panelSize)
-        panel.setFrame(lastFrame ?? defaultFrame(for: panel), display: true)
+        let initialFrame = lastFrame ?? defaultFrame(for: panel)
+        panel.setFrame(clampedFrame(for: initialFrame, panel: panel), display: true)
         return panel
     }
 
@@ -86,6 +88,11 @@ final class TranslatorPanelController: TranslatorPanelControlling {
         let x = maxX >= minX ? min(max(frame.minX, minX), maxX) : visibleFrame.midX - frame.width / 2
         let y = maxY >= minY ? min(max(frame.minY, minY), maxY) : visibleFrame.midY - frame.height / 2
         return NSRect(origin: CGPoint(x: x, y: y), size: frame.size)
+    }
+
+    private func clampedFrame(for frame: NSRect, panel: NSPanel) -> NSRect {
+        let visibleFrame = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        return clampedFrame(frame, within: visibleFrame)
     }
 
     private static func roundedMaskImage(size: NSSize, cornerRadius: CGFloat) -> NSImage {
