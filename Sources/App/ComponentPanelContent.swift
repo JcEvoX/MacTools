@@ -15,12 +15,12 @@ enum ComponentPanelLayout {
     static let columns = metrics.columns
     static let cellWidth = metrics.cellWidth
     static let horizontalSpacing = metrics.horizontalSpacing
-    static let verticalSpacing = metrics.verticalSpacing
     static let originalCellHeight = metrics.originalCellHeight
     static let cellHeight = metrics.cellHeight
     static let spacing = horizontalSpacing
     static let horizontalPadding = MenuBarPanelLayout.outerPadding
     static let verticalPadding = MenuBarPanelLayout.outerPadding
+    static let verticalSpacing = horizontalPadding
     static let emptyContentHeight: CGFloat = 164
     static let maximumPanelHeight = MenuBarPanelLayout.maximumPanelHeight
     static let minimumPanelHeight = MenuBarPanelLayout.minimumPanelHeight
@@ -217,10 +217,17 @@ struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     let panelHeight: CGFloat
     let isPanelVisible: Bool
+    let onPreferredHeightChange: () -> Void
     let onDismiss: () -> Void
 
     private var placements: [ComponentGridPlacement] {
         ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
+    }
+
+    private var componentLayoutSignature: String {
+        pluginHost.componentItems
+            .map { "\($0.id):\($0.span.width)x\($0.span.height)" }
+            .joined(separator: "|")
     }
 
     var body: some View {
@@ -246,6 +253,20 @@ struct ComponentPanelContent: View {
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
         .padding(.vertical, ComponentPanelLayout.verticalPadding)
         .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
+        .onAppear {
+            guard isPanelVisible else {
+                return
+            }
+
+            onPreferredHeightChange()
+        }
+        .onChange(of: componentLayoutSignature) {
+            guard isPanelVisible else {
+                return
+            }
+
+            onPreferredHeightChange()
+        }
     }
 
     private var emptyState: some View {

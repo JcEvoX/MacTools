@@ -11,16 +11,19 @@ final class LaunchControlController: ObservableObject {
     private let scanner: LaunchControlScanner
     private let runner: any LaunchControlCommandRunning
     private let favoritesStore: LaunchControlFavoritesStore
+    private let notesStore: LaunchControlNotesStore
     private var refreshTask: Task<Void, Never>?
 
     init(
         scanner: LaunchControlScanner? = nil,
         runner: any LaunchControlCommandRunning = ProcessLaunchControlCommandRunner(),
         favoritesStore: LaunchControlFavoritesStore? = nil,
+        notesStore: LaunchControlNotesStore? = nil,
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control")
     ) {
         self.runner = runner
         self.favoritesStore = favoritesStore ?? LaunchControlFavoritesStore(context: context)
+        self.notesStore = notesStore ?? LaunchControlNotesStore(context: context)
         self.scanner = scanner ?? LaunchControlScanner(runner: runner)
     }
 
@@ -88,8 +91,16 @@ final class LaunchControlController: ObservableObject {
 
     func setFavorite(_ isFavorite: Bool, for item: LaunchControlItem) {
         favoritesStore.setFavorite(isFavorite, for: item.id)
-        replaceItem(item, isFavorite: isFavorite)
+        refreshPersistedState(for: item)
         snapshot.operationMessage = isFavorite ? "已关注 \(item.label)" : "已取消关注 \(item.label)"
+        onStateChange?()
+    }
+
+    func setNote(_ note: String, for item: LaunchControlItem) {
+        notesStore.setNote(note, for: item.id)
+        refreshPersistedState(for: item)
+        let isCleared = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        snapshot.operationMessage = isCleared ? "已清除备注：\(item.label)" : "已保存备注：\(item.label)"
         onStateChange?()
     }
 
@@ -151,7 +162,7 @@ final class LaunchControlController: ObservableObject {
 
     private func apply(result: LaunchControlScanResult) {
         let selectedID = snapshot.selectedItemID
-        snapshot.items = sortedItems(result.items.map(applyingFavoriteState))
+        snapshot.items = sortedItems(result.items.map(applyingPersistedState))
         snapshot.selectedItemID = result.items.contains(where: { $0.id == selectedID })
             ? selectedID
             : result.items.first?.id
@@ -181,7 +192,7 @@ final class LaunchControlController: ObservableObject {
     }
 
     private func upsertScannedItem(_ item: LaunchControlItem) {
-        let item = applyingFavoriteState(item)
+        let item = applyingPersistedState(item)
 
         if let index = snapshot.items.firstIndex(where: { $0.id == item.id }) {
             snapshot.items[index] = item
@@ -194,56 +205,20 @@ final class LaunchControlController: ObservableObject {
         }
     }
 
-    private func replaceItem(_ item: LaunchControlItem, isFavorite: Bool) {
+    private func refreshPersistedState(for item: LaunchControlItem) {
         guard let index = snapshot.items.firstIndex(where: { $0.id == item.id }) else {
             return
         }
 
-        let updatedItem = LaunchControlItem(
-            id: item.id,
-            label: item.label,
-            plistURL: item.plistURL,
-            scope: item.scope,
-            origin: item.origin,
-            state: item.state,
-            pid: item.pid,
-            lastExitStatus: item.lastExitStatus,
-            programArguments: item.programArguments,
-            runAtLoad: item.runAtLoad,
-            keepAliveDescription: item.keepAliveDescription,
-            startInterval: item.startInterval,
-            startCalendarDescription: item.startCalendarDescription,
-            rawPlist: item.rawPlist,
-            launchctlDomain: item.launchctlDomain,
-            isDisabled: item.isDisabled,
-            isLoaded: item.isLoaded,
-            isFavorite: isFavorite
-        )
-        snapshot.items[index] = updatedItem
+        snapshot.items[index] = applyingPersistedState(snapshot.items[index])
         snapshot.items = sortedItems(snapshot.items)
     }
 
-    private func applyingFavoriteState(_ item: LaunchControlItem) -> LaunchControlItem {
-        LaunchControlItem(
-            id: item.id,
-            label: item.label,
-            plistURL: item.plistURL,
-            scope: item.scope,
-            origin: item.origin,
-            state: item.state,
-            pid: item.pid,
-            lastExitStatus: item.lastExitStatus,
-            programArguments: item.programArguments,
-            runAtLoad: item.runAtLoad,
-            keepAliveDescription: item.keepAliveDescription,
-            startInterval: item.startInterval,
-            startCalendarDescription: item.startCalendarDescription,
-            rawPlist: item.rawPlist,
-            launchctlDomain: item.launchctlDomain,
-            isDisabled: item.isDisabled,
-            isLoaded: item.isLoaded,
-            isFavorite: favoritesStore.isFavorite(item.id)
-        )
+    private func applyingPersistedState(_ item: LaunchControlItem) -> LaunchControlItem {
+        var updated = item
+        updated.isFavorite = favoritesStore.isFavorite(item.id)
+        updated.note = notesStore.note(for: item.id)
+        return updated
     }
 
     private func sortedItems(_ items: [LaunchControlItem]) -> [LaunchControlItem] {

@@ -75,7 +75,7 @@ final class PluginPackageManifestTests: XCTestCase {
         }
     }
 
-    func testManifestDecodesWithCategory() throws {
+    func testManifestDecodesWithCategoryAndReleaseChannel() throws {
         let json = """
         {
           "id": "demo",
@@ -86,16 +86,18 @@ final class PluginPackageManifestTests: XCTestCase {
           "bundleRelativePath": "Demo.bundle",
           "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
           "permissions": [],
-          "category": "display"
+          "category": "display",
+          "releaseChannel": "beta"
         }
         """.data(using: .utf8)!
 
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertEqual(manifest.category, "display")
+        XCTAssertEqual(manifest.releaseChannel, "beta")
     }
 
-    func testManifestDecodesWithoutCategoryGracefully() throws {
-        // Legacy plugin.json files without category should still decode.
+    func testManifestDecodesWithoutCategoryAndReleaseChannelGracefully() throws {
+        // Legacy plugin.json files without category/releaseChannel should still decode.
         let json = """
         {
           "id": "demo",
@@ -111,5 +113,6 @@ final class PluginPackageManifestTests: XCTestCase {
 
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertNil(manifest.category)
+        XCTAssertNil(manifest.releaseChannel)
     }
 }

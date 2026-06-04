@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
     case cpu
@@ -32,6 +33,9 @@ struct SystemStatusGridPosition: Equatable, Sendable {
 }
 
 enum SystemStatusComponentLayout {
+    static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
+    static let cardSpacing: CGFloat = 6
+    static let cardContentPadding: CGFloat = 6
     static let columns = 4
     static let rows = 2
     static let orderedMetricKinds: [SystemStatusMetricKind] = [

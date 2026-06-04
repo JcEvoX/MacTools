@@ -3,7 +3,6 @@ import Foundation
 enum DeviceBatteryLayoutMode: String, CaseIterable, Equatable {
     case grid
     case list
-    case showcase
 
     var title: String {
         switch self {
@@ -11,21 +10,18 @@ enum DeviceBatteryLayoutMode: String, CaseIterable, Equatable {
             return "列表"
         case .list:
             return "圆环"
-        case .showcase:
-            return "大卡片"
         }
     }
 
     var subtitle: String {
         switch self {
         case .grid:
-            return "AirBattery 行列表"
+            return "按设备逐行显示"
         case .list:
             return "多设备圆环"
-        case .showcase:
-            return "突出单个设备"
         }
     }
+
 }
 
 enum DeviceBatteryChargeState: Equatable, Sendable {
@@ -50,6 +46,15 @@ enum DeviceBatteryChargeState: Equatable, Sendable {
             return "外接电源"
         case .invalid:
             return "电量无效"
+        }
+    }
+
+    var isActiveChargingState: Bool {
+        switch self {
+        case .charging, .charged, .plugged:
+            return true
+        case .unknown, .normal, .invalid:
+            return false
         }
     }
 }
@@ -97,6 +102,22 @@ enum DeviceBatteryKind: Equatable, Sendable {
     }
 }
 
+enum DeviceBatteryComponentRole: String, Equatable, Sendable {
+    case aggregate
+    case left
+    case right
+    case chargingCase
+
+    var isPart: Bool {
+        self != .aggregate
+    }
+}
+
+struct DeviceBatteryComponentIdentity: Equatable, Sendable {
+    let groupID: String
+    let role: DeviceBatteryComponentRole
+}
+
 struct DeviceBatteryItem: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -109,6 +130,35 @@ struct DeviceBatteryItem: Identifiable, Equatable, Sendable {
     let lastUpdated: Date?
     let isConnected: Bool
     let detail: String?
+    let componentIdentity: DeviceBatteryComponentIdentity?
+
+    init(
+        id: String,
+        name: String,
+        model: String?,
+        kind: DeviceBatteryKind,
+        level: Int?,
+        chargeState: DeviceBatteryChargeState,
+        parentName: String?,
+        source: String,
+        lastUpdated: Date?,
+        isConnected: Bool,
+        detail: String?,
+        componentIdentity: DeviceBatteryComponentIdentity? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.model = model
+        self.kind = kind
+        self.level = level
+        self.chargeState = chargeState
+        self.parentName = parentName
+        self.source = source
+        self.lastUpdated = lastUpdated
+        self.isConnected = isConnected
+        self.detail = detail
+        self.componentIdentity = componentIdentity
+    }
 
     var clampedLevel: Int? {
         guard let level else {
@@ -116,6 +166,47 @@ struct DeviceBatteryItem: Identifiable, Equatable, Sendable {
         }
 
         return min(max(level, 0), 100)
+    }
+}
+
+enum DeviceBatteryItemNormalizer {
+    static func removingRedundantComponentAggregates(
+        _ items: [DeviceBatteryItem]
+    ) -> [DeviceBatteryItem] {
+        let componentGroups = Set(items.compactMap(componentGroupID))
+        guard !componentGroups.isEmpty else {
+            return items
+        }
+
+        return items.filter { item in
+            guard let aggregateGroupID = aggregateGroupID(item) else {
+                return true
+            }
+
+            return !componentGroups.contains(aggregateGroupID)
+        }
+    }
+
+    private static func aggregateGroupID(_ item: DeviceBatteryItem) -> String? {
+        guard let identity = item.componentIdentity,
+              identity.role == .aggregate,
+              item.clampedLevel != nil
+        else {
+            return nil
+        }
+
+        return identity.groupID
+    }
+
+    private static func componentGroupID(_ item: DeviceBatteryItem) -> String? {
+        guard let identity = item.componentIdentity,
+              identity.role.isPart,
+              item.clampedLevel != nil
+        else {
+            return nil
+        }
+
+        return identity.groupID
     }
 }
 

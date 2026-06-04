@@ -23,6 +23,7 @@ struct PluginManagementItem: Identifiable, Equatable {
     let requiresRestartToFullyUnload: Bool
     let releaseNotesURL: URL?
     let category: String?
+    let releaseChannel: String?
 
     init(
         id: String,
@@ -33,7 +34,8 @@ struct PluginManagementItem: Identifiable, Equatable {
         packageURL: URL?,
         requiresRestartToFullyUnload: Bool,
         releaseNotesURL: URL?,
-        category: String? = nil
+        category: String? = nil,
+        releaseChannel: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -44,6 +46,7 @@ struct PluginManagementItem: Identifiable, Equatable {
         self.requiresRestartToFullyUnload = requiresRestartToFullyUnload
         self.releaseNotesURL = releaseNotesURL
         self.category = category
+        self.releaseChannel = releaseChannel
     }
 
     var statusText: String {
@@ -205,6 +208,20 @@ final class DynamicPluginManager: ObservableObject {
         return activePlugins(from: records)
     }
 
+    func prepareInstalledPluginsWithoutLoading() {
+        let records = packageStore.installedRecords()
+        deactivateMissingOrDisabledPlugins(records: records)
+        latestLoadErrorsByID = [:]
+        let results = records.map { record in
+            DynamicPluginLoadResult(
+                record: deferredPluginIDs.contains(record.id) ? record.markingRestartRequired() : record,
+                plugins: [],
+                errorMessage: nil
+            )
+        }
+        rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
+    }
+
     func reloadInstalledPlugins() {
         onPluginsChanged?(loadInstalledPlugins())
     }
@@ -229,7 +246,8 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func updatePluginPackages(
-        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)]
+        _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
+        reloadAfterUpdate: Bool = true
     ) -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
             return []
@@ -239,7 +257,7 @@ final class DynamicPluginManager: ObservableObject {
         var didUpdatePackage = false
 
         defer {
-            if didUpdatePackage {
+            if reloadAfterUpdate && didUpdatePackage {
                 reloadInstalledPlugins()
             }
         }
@@ -302,10 +320,26 @@ final class DynamicPluginManager: ObservableObject {
         )
     }
 
+    func installedPackageVersionsByID() -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.version)
+            }
+        )
+    }
+
     func installedCategoriesByID() -> [String: String?] {
         Dictionary(
             uniqueKeysWithValues: packageStore.installedRecords().map {
                 ($0.id, $0.manifest.category)
+            }
+        )
+    }
+
+    func installedReleaseChannelsByID() -> [String: String?] {
+        Dictionary(
+            uniqueKeysWithValues: packageStore.installedRecords().map {
+                ($0.id, $0.manifest.releaseChannel)
             }
         )
     }
@@ -428,6 +462,10 @@ final class DynamicPluginManager: ObservableObject {
         guard manifest.pluginKitVersion == entry.pluginKitVersion else {
             throw PluginPackageResolverError.manifestMismatch(field: "pluginKitVersion")
         }
+
+        guard manifest.releaseChannel == entry.releaseChannel else {
+            throw PluginPackageResolverError.manifestMismatch(field: "releaseChannel")
+        }
     }
 
     private func rebuildManagementItems(
@@ -464,7 +502,8 @@ final class DynamicPluginManager: ObservableObject {
                         packageURL: nil,
                         requiresRestartToFullyUnload: false,
                         releaseNotesURL: entry.releaseNotesURL,
-                        category: entry.category
+                        category: entry.category,
+                        releaseChannel: entry.releaseChannel
                     )
                 )
             }
@@ -528,7 +567,8 @@ final class DynamicPluginManager: ObservableObject {
             packageURL: record.packageURL,
             requiresRestartToFullyUnload: record.requiresRestartToFullyUnload,
             releaseNotesURL: catalogEntry?.releaseNotesURL,
-            category: catalogEntry?.category ?? record.manifest.category
+            category: catalogEntry?.category ?? record.manifest.category,
+            releaseChannel: catalogEntry?.releaseChannel ?? record.manifest.releaseChannel
         )
     }
 

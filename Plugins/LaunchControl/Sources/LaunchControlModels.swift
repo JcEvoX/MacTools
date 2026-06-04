@@ -210,7 +210,9 @@ struct LaunchControlItem: Identifiable, Equatable, Sendable {
     let launchctlDomain: String
     let isDisabled: Bool
     let isLoaded: Bool
-    let isFavorite: Bool
+    var isFavorite: Bool
+    /// User-authored local note (persisted separately; never written to the plist).
+    var note: String = ""
 
     var commandText: String {
         if !programArguments.isEmpty {
@@ -305,6 +307,52 @@ final class LaunchControlFavoritesStore {
             favorites.remove(itemID)
         }
         storage.set(favorites.sorted(), forKey: StorageKey.storage)
+    }
+}
+
+/// Persists per-item user notes locally (keyed by item ID / plist path). Notes are
+/// never written back to the launchd plist — they live only in plugin storage.
+@MainActor
+final class LaunchControlNotesStore {
+    private enum StorageKey {
+        static let storage = "launch-control.item-notes"
+    }
+
+    private let storage: PluginStorage
+
+    init(
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
+        userDefaults: UserDefaults? = nil
+    ) {
+        self.storage = userDefaults.map {
+            UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
+        } ?? context.storage
+    }
+
+    func allNotes() -> [String: String] {
+        guard
+            let data = storage.data(forKey: StorageKey.storage),
+            let notes = try? JSONDecoder().decode([String: String].self, from: data)
+        else {
+            return [:]
+        }
+        return notes
+    }
+
+    func note(for itemID: String) -> String {
+        allNotes()[itemID] ?? ""
+    }
+
+    func setNote(_ note: String, for itemID: String) {
+        var notes = allNotes()
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            notes.removeValue(forKey: itemID)
+        } else {
+            notes[itemID] = trimmed
+        }
+        guard let data = try? JSONEncoder().encode(notes) else { return }
+        storage.set(data, forKey: StorageKey.storage)
     }
 }
 

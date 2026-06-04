@@ -115,10 +115,6 @@ private struct PluginFilterChip: View {
                 Capsule(style: .continuous)
                     .fill(chipBackground)
             )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(strokeColor, lineWidth: 1)
-            )
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
@@ -156,13 +152,5 @@ private struct PluginFilterChip: View {
         }
 
         return Color(nsColor: .controlBackgroundColor).opacity(0.5)
-    }
-
-    private var strokeColor: Color {
-        if isSelected {
-            return Color.accentColor
-        }
-
-        return Color(nsColor: .separatorColor).opacity(0.5)
     }
 }
