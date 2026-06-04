@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import OSLog
 import SwiftUI
@@ -55,11 +56,19 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let preferences: LaunchpadPreferences
     private let overlay: LaunchpadOverlayController
+    private let hotCornerMonitor = LaunchpadHotCornerMonitor()
+    private var cancellables = Set<AnyCancellable>()
 
     init(context: PluginRuntimeContext) {
         let preferences = LaunchpadPreferences(storage: context.storage)
         self.preferences = preferences
         self.overlay = LaunchpadOverlayController(preferences: preferences)
+
+        hotCornerMonitor.onTrigger = { [weak self] in self?.openLaunchpad() }
+        // Apply the saved corner now and whenever the user changes it in settings.
+        preferences.$hotCorner
+            .sink { [weak hotCornerMonitor] corner in hotCornerMonitor?.update(corner: corner) }
+            .store(in: &cancellables)
     }
 
     var configuration: PluginConfiguration? {
@@ -112,6 +121,7 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func deactivate(reason: PluginDeactivationReason) {
         if reason.requiresStateCleanup {
+            hotCornerMonitor.stop()      // stop the cursor poll; no runaway timer
             overlay.close()
         }
     }

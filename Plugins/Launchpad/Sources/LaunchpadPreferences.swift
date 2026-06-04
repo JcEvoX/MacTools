@@ -13,6 +13,26 @@ final class LaunchpadPreferences: ObservableObject {
         var label: String { self == .fullscreen ? "全屏" : "紧凑窗口" }
     }
 
+    /// Screen corner that summons the launcher when the cursor dwells there. `off` = none.
+    enum HotCorner: String, CaseIterable, Identifiable {
+        case off
+        case topLeft
+        case topRight
+        case bottomLeft
+        case bottomRight
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .off: return "关闭"
+            case .topLeft: return "左上"
+            case .topRight: return "右上"
+            case .bottomLeft: return "左下"
+            case .bottomRight: return "右下"
+            }
+        }
+    }
+
     /// `columns == autoColumns` means "fit to width"; otherwise a fixed count.
     static let autoColumns = 0
     static let minColumns = 4
@@ -41,12 +61,17 @@ final class LaunchpadPreferences: ObservableObject {
     func unhide(_ id: String) { hiddenAppIDs.remove(id) }
     func unhideAll() { hiddenAppIDs.removeAll() }
 
+    @Published var hotCorner: HotCorner {
+        didSet { storage.set(hotCorner.rawValue, forKey: Keys.hotCorner) }
+    }
+
     private let storage: PluginStorage
 
     private enum Keys {
         static let windowMode = "windowMode"
         static let columns = "columns"
         static let hidden = "hiddenAppIDs"
+        static let hotCorner = "hotCorner"
     }
 
     static func normalizedColumns(_ value: Int) -> Int {
@@ -60,5 +85,6 @@ final class LaunchpadPreferences: ObservableObject {
         // `integer(forKey:)` is 0 when unset → autoColumns, our default.
         self.columns = Self.normalizedColumns(storage.integer(forKey: Keys.columns))
         self.hiddenAppIDs = Set(storage.stringArray(forKey: Keys.hidden) ?? [])
+        self.hotCorner = HotCorner(rawValue: storage.string(forKey: Keys.hotCorner) ?? "") ?? .off
     }
 }

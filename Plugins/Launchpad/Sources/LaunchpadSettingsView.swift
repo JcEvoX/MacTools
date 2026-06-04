@@ -65,20 +65,32 @@ struct LaunchpadSettingsView: View {
 
     private var windowSection: some View {
         section(title: "窗口", icon: "macwindow") {
-            row(
-                title: "唤出方式",
-                description: preferences.windowMode == .fullscreen
-                    ? "铺满当前屏幕，点击空白处关闭"
-                    : "屏幕中央的浮窗，点击窗外关闭"
-            ) {
-                Picker("", selection: $preferences.windowMode) {
-                    ForEach(LaunchpadPreferences.WindowMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+            VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                row(
+                    title: "唤出方式",
+                    description: preferences.windowMode == .fullscreen
+                        ? "铺满当前屏幕，点击空白处关闭"
+                        : "屏幕中央的浮窗，点击窗外关闭"
+                ) {
+                    Picker("", selection: $preferences.windowMode) {
+                        ForEach(LaunchpadPreferences.WindowMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 168)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 168)
+                Divider()
+                row(title: "热区唤起", description: "光标停在所选屏幕角落即唤出启动台") {
+                    Picker("", selection: $preferences.hotCorner) {
+                        ForEach(LaunchpadPreferences.HotCorner.allCases) { corner in
+                            Text(corner.label).tag(corner)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 110)
+                }
             }
         }
     }
