@@ -24,10 +24,10 @@ struct TranslatorPanelView: View {
         VStack(spacing: 14) {
             sourceCard
             languageRow
-            resultCard
+            resultCards
         }
         .padding(16)
-        .frame(width: 520, height: 520)
+        .frame(width: 560, height: 560)
     }
 
     private var sourceCard: some View {
@@ -75,10 +75,10 @@ struct TranslatorPanelView: View {
         }
     }
 
-    private var resultCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var resultCards: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("OpenAI 翻译")
+                Text("译文")
                     .font(.headline)
                 if case .translating = snapshot.phase {
                     ProgressView()
@@ -87,23 +87,54 @@ struct TranslatorPanelView: View {
                 Spacer()
                 iconButton("speaker.wave.2", help: "朗读译文", action: .speakTranslation)
                     .disabled(resultTextForDisplay.isEmpty)
-                iconButton("doc.on.doc", help: "复制译文", action: .copyTranslation)
+                iconButton("doc.on.doc", help: "复制首个译文", action: .copyTranslation)
                     .disabled(resultTextForDisplay.isEmpty)
                 iconButton("arrow.clockwise", help: "重试", action: .retry)
                 iconButton("gearshape", help: "设置", action: .openSettings)
             }
 
             ScrollView {
-                Text(resultBodyText)
-                    .font(.body)
-                    .foregroundStyle(resultTextColor)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: 10) {
+                    let results = providerResultsForDisplay
+                    ForEach(results) { result in
+                        providerResultCard(result)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, minHeight: 202, maxHeight: 202, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 222, maxHeight: 222, alignment: .topLeading)
         }
         .padding(14)
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func providerResultCard(_ result: TranslatorProviderResult) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(result.providerTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if result.phase == .translating || result.phase == .waiting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Spacer()
+                iconButton(
+                    "doc.on.doc",
+                    help: "复制\(result.providerTitle)译文",
+                    action: .copyProviderTranslation(result.id)
+                )
+                .disabled((result.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            Text(providerResultBodyText(result))
+                .font(.body)
+                .foregroundStyle(providerResultTextColor(result))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func languagePill(flag: String, title: String) -> some View {
@@ -145,6 +176,35 @@ struct TranslatorPanelView: View {
         snapshot.translation?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
+    private var providerResultsForDisplay: [TranslatorProviderResult] {
+        if !snapshot.providerResults.isEmpty {
+            return snapshot.providerResults
+        }
+
+        return [
+            TranslatorProviderResult(
+                id: "placeholder",
+                providerTitle: snapshot.translation?.providerTitle ?? "OpenAI 翻译",
+                phase: placeholderProviderPhase,
+                translation: snapshot.translation,
+                errorMessage: snapshot.errorMessage
+            ),
+        ]
+    }
+
+    private var placeholderProviderPhase: TranslatorProviderResultPhase {
+        switch snapshot.phase {
+        case .translating:
+            return .translating
+        case .success:
+            return .success
+        case .error:
+            return .error
+        case .idle, .capturing:
+            return .waiting
+        }
+    }
+
     private var sourcePlaceholder: String {
         switch snapshot.phase {
         case .capturing:
@@ -158,26 +218,30 @@ struct TranslatorPanelView: View {
         }
     }
 
-    private var resultBodyText: String {
-        if !resultTextForDisplay.isEmpty {
-            return resultTextForDisplay
+    private func providerResultBodyText(_ result: TranslatorProviderResult) -> String {
+        let text = result.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !text.isEmpty {
+            return text
         }
 
-        switch snapshot.phase {
+        switch result.phase {
         case .translating:
             return "正在翻译..."
         case .error:
-            return snapshot.errorMessage ?? "请求失败，请稍后重试"
-        default:
+            return result.errorMessage ?? "请求失败，请稍后重试"
+        case .waiting:
             return "等待翻译"
+        case .success:
+            return "响应为空"
         }
     }
 
-    private var resultTextColor: Color {
-        if case .error = snapshot.phase {
+    private func providerResultTextColor(_ result: TranslatorProviderResult) -> Color {
+        if result.phase == .error {
             return .red
         }
 
-        return resultTextForDisplay.isEmpty ? .secondary : .primary
+        let text = result.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? .secondary : .primary
     }
 }

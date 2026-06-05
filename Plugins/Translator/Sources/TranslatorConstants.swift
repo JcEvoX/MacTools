@@ -18,6 +18,7 @@ enum TranslatorConstants {
 
     enum StorageKey {
         static let shortcutEnabled = "translator.shortcut.enabled"
+        static let providerProfiles = "translator.providers.profiles"
         static let openAIBaseURL = "translator.openai.base-url"
         static let openAIModel = "translator.openai.model"
         static let openAIPromptTemplate = "translator.openai.prompt-template"

@@ -106,7 +106,7 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(state.isVisible)
         XCTAssertTrue(state.isEnabled)
         XCTAssertTrue(state.isOn)
-        XCTAssertEqual(state.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(state.subtitle, "需要配置翻译服务")
     }
 
     func testPrimaryPanelDoesNotClaimOpenAIIsMissingBeforeAPIKeyStateIsKnown() {
@@ -147,7 +147,7 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testShortcutNotifiesHostWhenLazyAPIKeyLoadFindsMissingKey() async {
@@ -176,7 +176,7 @@ final class TranslatorPluginTests: XCTestCase {
         await capture.waitUntilCompleted()
 
         XCTAssertEqual(notificationCount, 1)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testPanelControllerClampsRestoredFrameIntoVisibleScreen() throws {
@@ -244,7 +244,8 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(secretStore.loadCount, 1)
+        // 默认 profile 未命中 profile 密钥时回退读取 legacy 单密钥，故加载两次存储项。
+        XCTAssertEqual(secretStore.loadCount, 2)
     }
 
     func testSavingBlankAPIKeyWithoutExistingKeyReturnsConfigurationError() {
@@ -283,8 +284,66 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertNil(message)
         XCTAssertEqual(secretStore.loadCount, 0)
-        XCTAssertEqual(secretStore.containsCount, 1)
+        // 先检查 profile 密钥是否存在，未命中再回退检查 legacy 单密钥，故存在性检查两次。
+        XCTAssertEqual(secretStore.containsCount, 2)
         XCTAssertEqual(secretStore.saveCount, 0)
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
+    }
+
+    func testSavingProfilesDeletesKeychainEntriesForRemovedProfiles() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let plugin = makePlugin(secretStore: secretStore)
+        let first = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let second = TranslatorProviderProfile(id: "second", name: "Second")
+        let languagePair = TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first, second],
+            apiKeys: [first.id: "sk-1", second.id: "sk-2"],
+            languagePair: languagePair
+        ))
+
+        // 第二次保存移除了 second，应清理它残留的 Keychain 凭据。
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first],
+            apiKeys: [first.id: "sk-1"],
+            languagePair: languagePair
+        ))
+
+        XCTAssertEqual(secretStore.deletedProfileIDs, ["second"])
+    }
+
+    func testAPIKeyStatePresentWhenOneEnabledProfileHealthyAndAnotherMissesKey() async {
+        let storage = TranslatorInMemoryPluginStorage()
+        let healthy = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let missing = TranslatorProviderProfile(id: "second", name: "Second")
+        try? TranslatorProviderProfileStore(storage: storage).saveProfiles([healthy, missing])
+
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        // 仅 healthy profile 有可用密钥，missing profile 缺密钥。
+        try? secretStore.saveAPIKey("sk-1", forProfileID: healthy.id)
+
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let plugin = makePlugin(
+            storage: storage,
+            secretStore: secretStore,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        // 存在一个可用 provider，整体状态应保持可用，而非被缺密钥的 profile 拉成 missing。
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
     }
 
@@ -571,9 +630,11 @@ final class TranslatorPluginTests: XCTestCase {
 
 private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unchecked Sendable {
     private var apiKey: String?
+    private var profileAPIKeys: [String: String] = [:]
     private(set) var loadCount = 0
     private(set) var containsCount = 0
     private(set) var saveCount = 0
+    private(set) var deletedProfileIDs: [String] = []
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -584,9 +645,19 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         return apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool {
+        containsCount += 1
+        return profileAPIKeys[profileID]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     func loadAPIKey() throws -> String? {
         loadCount += 1
         return apiKey
+    }
+
+    func loadAPIKey(forProfileID profileID: String) throws -> String? {
+        loadCount += 1
+        return profileAPIKeys[profileID]
     }
 
     func saveAPIKey(_ apiKey: String) throws {
@@ -594,8 +665,18 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         self.apiKey = apiKey
     }
 
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        saveCount += 1
+        profileAPIKeys[profileID] = apiKey
+    }
+
     func deleteAPIKey() throws {
         apiKey = nil
+    }
+
+    func deleteAPIKey(forProfileID profileID: String) throws {
+        deletedProfileIDs.append(profileID)
+        profileAPIKeys.removeValue(forKey: profileID)
     }
 }
 

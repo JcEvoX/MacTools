@@ -56,9 +56,13 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private let panelController: any TranslatorPanelControlling
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
     private let translationProviderFactoryOverride: TranslatorProviderFactory?
+    private let providerProfileStore: TranslatorProviderProfileStore
     private var providerConfiguration: OpenAICompatibleConfiguration
+    private var providerProfiles: [TranslatorProviderProfile]
     private var languagePair: TranslatorLanguagePair
     private var cachedAPIKey: String?
+    private var cachedAPIKeys: [String: String]
+    private var didLoadProfileAPIKeys: Set<String>
     private var didLoadAPIKey = false
     private var apiKeyState: APIKeyState
     private var coordinator: TranslatorCoordinator?
@@ -81,11 +85,18 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         self.panelController = panelController
         self.selectedTextCapturePipeline = selectedTextCapturePipeline
         self.translationProviderFactoryOverride = translationProviderFactoryOverride
+        let providerProfileStore = TranslatorProviderProfileStore(storage: context.storage)
+        let providerProfiles = providerProfileStore.loadProfiles()
+        self.providerProfileStore = providerProfileStore
+        self.providerProfiles = providerProfiles
         let languagePreferenceStore = LanguagePreferenceStore(storage: context.storage)
         self.languagePreferenceStore = languagePreferenceStore
-        self.providerConfiguration = OpenAICompatibleConfiguration(storage: context.storage)
+        self.providerConfiguration = providerProfiles.first?.configuration
+            ?? OpenAICompatibleConfiguration(storage: context.storage)
         self.languagePair = languagePreferenceStore.loadPair()
         self.cachedAPIKey = nil
+        self.cachedAPIKeys = [:]
+        self.didLoadProfileAPIKeys = []
         self.apiKeyState = .unknown
         panelController.onAction = { [weak self] action in
             self?.handlePanelAction(action)
@@ -144,14 +155,19 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: false) { [weak self] _ in
             if let self {
                 TranslatorSettingsView(
-                    configuration: self.providerConfiguration,
-                    apiKey: self.cachedAPIKey ?? "",
+                    profiles: self.providerProfiles,
+                    apiKeys: self.cachedAPIKeys,
                     languagePair: self.languagePair,
-                    onSave: { [weak self] configuration, apiKey, languagePair in
-                        self?.saveConfiguration(configuration, apiKey: apiKey, languagePair: languagePair)
+                    onSave: { [weak self] profiles, apiKeys, languagePair in
+                        self?.saveConfiguration(
+                            profiles: profiles,
+                            apiKeys: apiKeys,
+                            languagePair: languagePair
+                        )
                     },
-                    onRestoreDefaults: {
-                        OpenAICompatibleConfiguration()
+                    onMakeNewProfile: { [weak self] profiles in
+                        self?.providerProfileStore.makeNewProfile(existingProfiles: profiles)
+                            ?? TranslatorProviderProfile(name: "OpenAI", isEnabled: false)
                     }
                 )
             } else {
@@ -246,14 +262,18 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private var panelSubtitle: String {
         if !isShortcutEnabled { return "快捷键已暂停" }
         if !accessibilityTrustProvider() { return "启用前需要辅助功能授权" }
-        if providerConfiguration.validationError != nil { return "需要配置 OpenAI" }
+        if enabledValidProfiles.isEmpty { return "需要配置翻译服务" }
 
         switch apiKeyState {
         case .missing, .error:
-            return "需要配置 OpenAI"
+            return "需要配置翻译服务"
         case .unknown, .present:
             return "按 ⌥D 翻译选中文本"
         }
+    }
+
+    private var enabledValidProfiles: [TranslatorProviderProfile] {
+        providerProfiles.filter { $0.isEnabled && $0.validationError == nil }
     }
 
     private var hasKnownAPIKey: Bool {
@@ -272,33 +292,85 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         apiKey: String,
         languagePair: TranslatorLanguagePair
     ) -> String? {
+        let profile = TranslatorProviderProfile(
+            id: TranslatorProviderProfile.defaultID,
+            name: TranslatorProviderProfile.defaultName,
+            isEnabled: true,
+            baseURL: configuration.baseURL,
+            model: configuration.model,
+            promptTemplate: configuration.promptTemplate
+        )
+        return saveConfiguration(
+            profiles: [profile],
+            apiKeys: [profile.id: apiKey],
+            languagePair: languagePair
+        )
+    }
+
+    func saveConfiguration(
+        profiles: [TranslatorProviderProfile],
+        apiKeys: [String: String],
+        languagePair: TranslatorLanguagePair
+    ) -> String? {
         guard languagePair.first != languagePair.second else {
             return "两种偏好语言不能相同。"
         }
 
-        if let validationError = configuration.validationError {
-            return validationError.localizedDescription
+        guard profiles.contains(where: \.isEnabled) else {
+            return "至少启用一个翻译服务。"
+        }
+
+        for profile in profiles where profile.isEnabled {
+            if let validationError = profile.validationError {
+                return "\(profile.normalizedName.isEmpty ? "翻译服务" : profile.normalizedName)：\(validationError.localizedDescription)"
+            }
         }
 
         do {
-            if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
-                try secretStore.saveAPIKey(normalizedAPIKey)
-                cachedAPIKey = normalizedAPIKey
-                didLoadAPIKey = true
-                apiKeyState = .present
-            } else if hasKnownAPIKey {
-                cachedAPIKey = nil
-                didLoadAPIKey = false
-                apiKeyState = .present
-            } else {
-                apiKeyState = .missing
-                onStateChange?()
-                return "API Key 不能为空。"
+            // 保存前先算出被移除的 profile（旧 providerProfiles 此时仍为持久化中的值）。
+            let retainedProfileIDs = Set(profiles.map(\.id))
+            let removedProfileIDs = providerProfiles
+                .map(\.id)
+                .filter { !retainedProfileIDs.contains($0) }
+
+            for profile in profiles where profile.isEnabled {
+                let apiKey = apiKeys[profile.id]
+                if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
+                    try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id)
+                    cachedAPIKeys[profile.id] = normalizedAPIKey
+                    didLoadProfileAPIKeys.insert(profile.id)
+                } else if try secretStore.containsAPIKey(forProfileID: profile.id) {
+                    cachedAPIKeys.removeValue(forKey: profile.id)
+                    didLoadProfileAPIKeys.remove(profile.id)
+                } else if profile.id == TranslatorProviderProfile.defaultID, hasKnownAPIKey {
+                    cachedAPIKeys.removeValue(forKey: profile.id)
+                    didLoadProfileAPIKeys.remove(profile.id)
+                } else {
+                    apiKeyState = .missing
+                    onStateChange?()
+                    if profiles.count == 1, profile.id == TranslatorProviderProfile.defaultID {
+                        return "API Key 不能为空。"
+                    }
+                    return "\(profile.normalizedName)：API Key 不能为空。"
+                }
             }
-            configuration.save(to: storage)
+
+            // 清理已删除 profile 残留的 Keychain 凭据与缓存。
+            for removedID in removedProfileIDs {
+                try secretStore.deleteAPIKey(forProfileID: removedID)
+                cachedAPIKeys.removeValue(forKey: removedID)
+                didLoadProfileAPIKeys.remove(removedID)
+            }
+
+            try providerProfileStore.saveProfiles(profiles)
             languagePreferenceStore.savePair(languagePair)
-            providerConfiguration = configuration
+            providerProfiles = providerProfileStore.loadProfiles()
+            providerConfiguration = providerProfiles.first?.configuration
+                ?? OpenAICompatibleConfiguration()
             self.languagePair = languagePair
+            cachedAPIKey = cachedAPIKeys[TranslatorProviderProfile.defaultID]
+            didLoadAPIKey = didLoadProfileAPIKeys.contains(TranslatorProviderProfile.defaultID)
+            apiKeyState = .present
             if let coordinator {
                 coordinator.close()
             } else {
@@ -338,28 +410,77 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             languagePreferenceStore: LanguagePreferenceStore(storage: storage),
             providerFactory: translationProviderFactoryOverride ?? { [weak self] in
                 guard let self else {
-                    return .missing(message: "请先配置 OpenAI")
+                    return .missing(message: "请先启用翻译服务")
                 }
 
-                guard self.providerConfiguration.validationError == nil else {
-                    return .missing(message: "请先配置 OpenAI")
+                let resolvedProviders = self.resolvedTranslationProviders()
+                guard !resolvedProviders.isEmpty else {
+                    return .missing(message: "请先启用翻译服务")
                 }
 
-                self.loadCachedAPIKeyIfNeeded()
-                guard let trimmedKey = Self.normalizedAPIKey(self.cachedAPIKey) else {
-                    return .missing(message: "请先配置 OpenAI")
-                }
-
-                return .provider(
-                    OpenAITranslationProviderAdapter(
-                        client: OpenAICompatibleClient(),
-                        configuration: self.providerConfiguration,
-                        apiKey: trimmedKey
-                    )
-                )
+                return .providers(resolvedProviders)
             },
             panelController: panelController
         )
+    }
+
+    private func resolvedTranslationProviders() -> [ResolvedTranslationProvider] {
+        // 在解析前捕获状态：loadAPIKey 会通过 updateLegacyAPIKeyCacheIfNeeded 提前改写 apiKeyState，
+        // 故比较基准须取解析开始前的值，否则会漏发状态变化通知。
+        let previousState = apiKeyState
+        let resolved = providerProfiles.filter(\.isEnabled).map { profile -> ResolvedTranslationProvider in
+            if let validationError = profile.validationError {
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName.isEmpty ? "翻译服务" : profile.normalizedName,
+                    errorMessage: validationError.localizedDescription
+                )
+            }
+
+            do {
+                let apiKey = try loadAPIKey(for: profile.id)
+                guard let trimmedKey = Self.normalizedAPIKey(apiKey) else {
+                    return ResolvedTranslationProvider(
+                        id: profile.id,
+                        title: profile.normalizedName,
+                        errorMessage: "请配置 API Key"
+                    )
+                }
+
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName,
+                    provider: OpenAITranslationProviderAdapter(
+                        client: OpenAICompatibleClient(),
+                        configuration: profile.configuration,
+                        apiKey: trimmedKey,
+                        providerTitle: profile.normalizedName
+                    )
+                )
+            } catch {
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName,
+                    errorMessage: error.localizedDescription
+                )
+            }
+        }
+
+        updateAPIKeyState(forResolvedProviders: resolved, previousState: previousState)
+        return resolved
+    }
+
+    /// 在解析完所有启用 profile 后聚合整体密钥状态：只要存在一个可用 provider 即视为可用，
+    /// 避免单个缺失密钥的 profile 把整体状态拉成 missing。
+    private func updateAPIKeyState(
+        forResolvedProviders resolved: [ResolvedTranslationProvider],
+        previousState: APIKeyState
+    ) {
+        guard !resolved.isEmpty else { return }
+        apiKeyState = resolved.contains { $0.provider != nil } ? .present : .missing
+        if apiKeyState != previousState {
+            onStateChange?()
+        }
     }
 
     private static func hasNonEmptyAPIKey(_ apiKey: String?) -> Bool {
@@ -393,5 +514,44 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         if apiKeyState != previousState {
             onStateChange?()
         }
+    }
+
+    private func loadAPIKey(for profileID: String) throws -> String? {
+        if didLoadProfileAPIKeys.contains(profileID) {
+            return cachedAPIKeys[profileID]
+        }
+
+        let profileKey = try secretStore.loadAPIKey(forProfileID: profileID)
+        if Self.hasNonEmptyAPIKey(profileKey) {
+            cachedAPIKeys[profileID] = profileKey
+            didLoadProfileAPIKeys.insert(profileID)
+            updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: profileKey)
+            return profileKey
+        }
+
+        if profileID == TranslatorProviderProfile.defaultID {
+            let legacyKey = try secretStore.loadAPIKey()
+            if Self.hasNonEmptyAPIKey(legacyKey) {
+                cachedAPIKeys[profileID] = legacyKey
+                didLoadProfileAPIKeys.insert(profileID)
+                updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: legacyKey)
+                return legacyKey
+            }
+        }
+
+        cachedAPIKeys.removeValue(forKey: profileID)
+        didLoadProfileAPIKeys.insert(profileID)
+        updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: nil)
+        return nil
+    }
+
+    private func updateLegacyAPIKeyCacheIfNeeded(profileID: String, apiKey: String?) {
+        guard profileID == TranslatorProviderProfile.defaultID else {
+            return
+        }
+
+        cachedAPIKey = apiKey
+        didLoadAPIKey = true
+        apiKeyState = Self.hasNonEmptyAPIKey(apiKey) ? .present : .missing
     }
 }

@@ -39,6 +39,35 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertTrue(panel.updatedSnapshots.contains { $0.phase == .error(.missingSelection) })
     }
 
+    func testMissingSelectionPreservesConfiguredProviderCards() async {
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            captureResult: .missing,
+            providerFactory: {
+                .providers([
+                    ResolvedTranslationProvider(
+                        id: "openai",
+                        title: "OpenAI",
+                        provider: RecordingTranslationProvider(resultText: "unused")
+                    ),
+                    ResolvedTranslationProvider(
+                        id: "deepseek",
+                        title: "DeepSeek",
+                        provider: RecordingTranslationProvider(resultText: "unused")
+                    ),
+                ])
+            },
+            panelController: panel
+        )
+
+        coordinator.startSelectTranslation()
+        await panel.waitUntilShown(.error(.missingSelection))
+
+        XCTAssertEqual(coordinator.snapshot.phase, .error(.missingSelection))
+        XCTAssertEqual(coordinator.snapshot.providerResults.map(\.providerTitle), ["OpenAI", "DeepSeek"])
+        XCTAssertEqual(coordinator.snapshot.providerResults.map(\.phase), [.waiting, .waiting])
+    }
+
     func testAccessibilityFailureShowsPermissionRequiredError() async {
         let panel = RecordingTranslatorPanelController()
         let coordinator = makeCoordinator(
@@ -114,6 +143,90 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertTrue(panel.updatedSnapshots.contains { $0.phase == .capturing })
         XCTAssertTrue(panel.updatedSnapshots.contains { $0.phase == .translating })
         XCTAssertTrue(panel.updatedSnapshots.contains { $0.phase == .success })
+    }
+
+    func testMultipleProvidersUpdateIndependentResultsAndFirstSuccess() async throws {
+        let firstProvider = RecordingTranslationProvider(resultText: "你好")
+        let secondProvider = RecordingTranslationProvider(error: TestTranslationError(message: "服务失败"))
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            captureResult: selectedText("hello"),
+            providerFactory: {
+                .providers([
+                    ResolvedTranslationProvider(id: "first", title: "服务一", provider: firstProvider),
+                    ResolvedTranslationProvider(id: "second", title: "服务二", provider: secondProvider),
+                ])
+            },
+            panelController: panel
+        )
+
+        coordinator.startSelectTranslation()
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(coordinator.snapshot.phase, .success)
+        XCTAssertEqual(coordinator.snapshot.translation?.text, "你好")
+        XCTAssertEqual(coordinator.snapshot.providerResults.count, 2)
+        XCTAssertEqual(coordinator.snapshot.providerResults[0].phase, .success)
+        XCTAssertEqual(coordinator.snapshot.providerResults[0].translation?.text, "你好")
+        XCTAssertEqual(coordinator.snapshot.providerResults[1].phase, .error)
+        XCTAssertEqual(coordinator.snapshot.providerResults[1].errorMessage, "服务失败")
+    }
+
+    func testAllProvidersFailShowsRequestFailedButKeepsProviderErrors() async {
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            captureResult: selectedText("hello"),
+            providerFactory: {
+                .providers([
+                    ResolvedTranslationProvider(
+                        id: "first",
+                        title: "服务一",
+                        provider: RecordingTranslationProvider(error: TestTranslationError(message: "服务一失败"))
+                    ),
+                    ResolvedTranslationProvider(
+                        id: "second",
+                        title: "服务二",
+                        provider: RecordingTranslationProvider(error: TestTranslationError(message: "服务二失败"))
+                    ),
+                ])
+            },
+            panelController: panel
+        )
+
+        coordinator.startSelectTranslation()
+        await panel.waitUntilShown(.error(.requestFailed("服务一失败")))
+
+        XCTAssertEqual(coordinator.snapshot.phase, .error(.requestFailed("服务一失败")))
+        XCTAssertNil(coordinator.snapshot.translation)
+        XCTAssertEqual(coordinator.snapshot.providerResults.map(\.phase), [.error, .error])
+    }
+
+    func testProviderScopedCopyWritesSelectedProviderTranslation() async {
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            captureResult: selectedText("hello"),
+            providerFactory: {
+                .providers([
+                    ResolvedTranslationProvider(
+                        id: "first",
+                        title: "服务一",
+                        provider: RecordingTranslationProvider(resultText: "你好")
+                    ),
+                    ResolvedTranslationProvider(
+                        id: "second",
+                        title: "服务二",
+                        provider: RecordingTranslationProvider(resultText: "您好")
+                    ),
+                ])
+            },
+            panelController: panel
+        )
+
+        coordinator.startSelectTranslation()
+        await panel.waitUntilShown(.success)
+        await coordinator.handle(.copyProviderTranslation("second"))
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "您好")
     }
 
     func testTranslationFailurePreservesSourceAndLanguageSelection() async throws {

@@ -24,18 +24,27 @@ struct OpenAITranslationProviderAdapter: TranslationProviding {
     let client: OpenAICompatibleClient
     let configuration: OpenAICompatibleConfiguration
     let apiKey: String
+    let providerTitle: String
 
     func translate(
         text: String,
         languageSelection: TranslatorLanguageSelection
     ) async throws -> TranslationResult {
-        try await client.translate(
+        var result = try await client.translate(
             text: text,
             languageSelection: languageSelection,
             configuration: configuration,
             apiKey: apiKey
         )
+        result.providerTitle = providerTitle
+        return result
     }
+}
+
+private struct ProviderTranslationOutcome: Sendable {
+    var providerID: String
+    var translation: TranslationResult?
+    var errorMessage: String?
 }
 
 @MainActor
@@ -79,11 +88,14 @@ final class TranslatorCoordinator {
         let currentSessionID = UUID()
         sessionID = currentSessionID
         lastSourceText = nil
+        let providerBuildResult = providerFactory()
+        let initialProviderResults = providerBuildResult.waitingProviderResults
         snapshot = TranslatorPanelSnapshot(
             phase: .capturing,
             sourceText: nil,
             languageSelection: nil,
             translation: nil,
+            providerResults: initialProviderResults,
             errorMessage: nil
         )
         // 立即展示取词加载态；capturing 阶段面板不抢焦点，避免影响 AX 取词与模拟复制。
@@ -101,27 +113,50 @@ final class TranslatorCoordinator {
               !sourceText.isEmpty
         else {
             if result.failureReason == TranslatorPanelError.permissionRequired.message {
-                setError(.permissionRequired, sourceText: nil, languageSelection: nil)
+                setError(
+                    .permissionRequired,
+                    sourceText: nil,
+                    languageSelection: nil,
+                    providerResults: initialProviderResults
+                )
                 panelController?.show(snapshot: snapshot)
                 return
             }
 
-            setError(.missingSelection, sourceText: nil, languageSelection: nil)
+            setError(
+                .missingSelection,
+                sourceText: nil,
+                languageSelection: nil,
+                providerResults: initialProviderResults
+            )
             panelController?.show(snapshot: snapshot)
             return
         }
 
         lastSourceText = sourceText
 
-        switch providerFactory() {
+        switch providerBuildResult {
         case let .provider(provider):
-            await translate(sourceText: sourceText, provider: provider, sessionID: currentSessionID)
+            await translate(
+                sourceText: sourceText,
+                providers: [
+                    ResolvedTranslationProvider(
+                        id: "default",
+                        title: "OpenAI 翻译",
+                        provider: provider
+                    ),
+                ],
+                sessionID: currentSessionID
+            )
+        case let .providers(providers):
+            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
         case let .missing(message):
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.missingConfiguration),
                 sourceText: sourceText,
                 languageSelection: nil,
                 translation: nil,
+                providerResults: initialProviderResults,
                 errorMessage: message
             )
             panelController?.show(snapshot: snapshot)
@@ -138,6 +173,8 @@ final class TranslatorCoordinator {
             copy(snapshot.sourceText)
         case .copyTranslation:
             copy(snapshot.translation?.text)
+        case let .copyProviderTranslation(providerID):
+            copy(snapshot.providerResults.first { $0.id == providerID }?.translation?.text)
         case .speakSource:
             speak(snapshot.sourceText, language: snapshot.languageSelection?.source)
         case .speakTranslation:
@@ -169,16 +206,30 @@ final class TranslatorCoordinator {
     private func runRetry(sourceText: String) async {
         let currentSessionID = UUID()
         sessionID = currentSessionID
+        let providerBuildResult = providerFactory()
 
-        switch providerFactory() {
+        switch providerBuildResult {
         case let .provider(provider):
-            await translate(sourceText: sourceText, provider: provider, sessionID: currentSessionID)
+            await translate(
+                sourceText: sourceText,
+                providers: [
+                    ResolvedTranslationProvider(
+                        id: "default",
+                        title: "OpenAI 翻译",
+                        provider: provider
+                    ),
+                ],
+                sessionID: currentSessionID
+            )
+        case let .providers(providers):
+            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
         case let .missing(message):
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.missingConfiguration),
                 sourceText: sourceText,
                 languageSelection: snapshot.languageSelection,
                 translation: nil,
+                providerResults: providerBuildResult.waitingProviderResults,
                 errorMessage: message
             )
             panelController?.show(snapshot: snapshot)
@@ -187,64 +238,162 @@ final class TranslatorCoordinator {
 
     private func translate(
         sourceText: String,
-        provider: any TranslationProviding,
+        providers: [ResolvedTranslationProvider],
         sessionID currentSessionID: UUID
     ) async {
         let languageSelection = AutomaticLanguageSelector(
             preferredPair: languagePreferenceStore.loadPair()
         ).select(text: sourceText)
+        let initialProviderResults = providers.map {
+            TranslatorProviderResult(
+                id: $0.id,
+                providerTitle: $0.title,
+                phase: $0.provider == nil ? .error : .translating,
+                translation: nil,
+                errorMessage: $0.errorMessage
+            )
+        }
 
         snapshot = TranslatorPanelSnapshot(
             phase: .translating,
             sourceText: sourceText,
             languageSelection: languageSelection,
             translation: nil,
+            providerResults: initialProviderResults,
             errorMessage: nil
         )
         panelController?.show(snapshot: snapshot)
 
-        do {
-            try Task.checkCancellation()
-            let translation = try await provider.translate(
-                text: sourceText,
-                languageSelection: languageSelection
-            )
-
+        guard providers.contains(where: { $0.provider != nil }) else {
             guard !Task.isCancelled, sessionID == currentSessionID else { return }
-
-            snapshot = TranslatorPanelSnapshot(
-                phase: .success,
+            finishProviderBatch(
                 sourceText: sourceText,
                 languageSelection: languageSelection,
-                translation: translation,
-                errorMessage: nil
+                sessionID: currentSessionID
             )
-            panelController?.show(snapshot: snapshot)
-        } catch {
-            guard !Task.isCancelled, sessionID == currentSessionID else { return }
-
-            TranslatorLog.provider.error("translation failed")
-            setError(
-                .requestFailed(error.localizedDescription),
-                sourceText: sourceText,
-                languageSelection: languageSelection
-            )
-            panelController?.show(snapshot: snapshot)
+            return
         }
+
+        await withTaskGroup(of: ProviderTranslationOutcome.self) { group in
+            for resolvedProvider in providers {
+                guard let provider = resolvedProvider.provider else {
+                    continue
+                }
+
+                group.addTask {
+                    do {
+                        try Task.checkCancellation()
+                        let translation = try await provider.translate(
+                            text: sourceText,
+                            languageSelection: languageSelection
+                        )
+                        return ProviderTranslationOutcome(
+                            providerID: resolvedProvider.id,
+                            translation: translation,
+                            errorMessage: nil
+                        )
+                    } catch is CancellationError {
+                        return ProviderTranslationOutcome(
+                            providerID: resolvedProvider.id,
+                            translation: nil,
+                            errorMessage: nil
+                        )
+                    } catch {
+                        TranslatorLog.provider.error("translation failed")
+                        return ProviderTranslationOutcome(
+                            providerID: resolvedProvider.id,
+                            translation: nil,
+                            errorMessage: error.localizedDescription
+                        )
+                    }
+                }
+            }
+
+            for await outcome in group {
+                guard !Task.isCancelled, sessionID == currentSessionID else {
+                    group.cancelAll()
+                    return
+                }
+
+                apply(outcome)
+                panelController?.show(snapshot: snapshot)
+            }
+        }
+
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
+        finishProviderBatch(
+            sourceText: sourceText,
+            languageSelection: languageSelection,
+            sessionID: currentSessionID
+        )
     }
 
     private func setError(
         _ error: TranslatorPanelError,
         sourceText: String?,
-        languageSelection: TranslatorLanguageSelection?
+        languageSelection: TranslatorLanguageSelection?,
+        providerResults: [TranslatorProviderResult] = []
     ) {
         snapshot = TranslatorPanelSnapshot(
             phase: .error(error),
             sourceText: sourceText,
             languageSelection: languageSelection,
             translation: nil,
+            providerResults: providerResults,
             errorMessage: error.message
         )
+    }
+
+    private func apply(_ outcome: ProviderTranslationOutcome) {
+        guard let index = snapshot.providerResults.firstIndex(where: { $0.id == outcome.providerID }) else {
+            return
+        }
+
+        if let translation = outcome.translation {
+            snapshot.providerResults[index].phase = .success
+            snapshot.providerResults[index].translation = translation
+            snapshot.providerResults[index].errorMessage = nil
+            if snapshot.translation == nil {
+                snapshot.translation = translation
+            }
+        } else if let errorMessage = outcome.errorMessage {
+            snapshot.providerResults[index].phase = .error
+            snapshot.providerResults[index].translation = nil
+            snapshot.providerResults[index].errorMessage = errorMessage
+        }
+    }
+
+    private func finishProviderBatch(
+        sourceText: String,
+        languageSelection: TranslatorLanguageSelection,
+        sessionID currentSessionID: UUID
+    ) {
+        let firstSuccess = snapshot.providerResults.first { $0.phase == .success }?.translation
+        snapshot.translation = firstSuccess
+
+        if let firstSuccess {
+            snapshot = TranslatorPanelSnapshot(
+                phase: .success,
+                sourceText: sourceText,
+                languageSelection: languageSelection,
+                translation: firstSuccess,
+                providerResults: snapshot.providerResults,
+                errorMessage: nil
+            )
+        } else {
+            let message = snapshot.providerResults.compactMap(\.errorMessage).first
+                ?? TranslatorPanelError.requestFailed("请求失败，请稍后重试").message
+            snapshot = TranslatorPanelSnapshot(
+                phase: .error(.requestFailed(message)),
+                sourceText: sourceText,
+                languageSelection: languageSelection,
+                translation: nil,
+                providerResults: snapshot.providerResults,
+                errorMessage: message
+            )
+        }
+        panelController?.show(snapshot: snapshot)
     }
 
     private func copy(_ text: String?) {
