@@ -55,14 +55,19 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     )
 
     private let preferences: LaunchpadPreferences
+    private let layoutStore: LaunchpadLayoutStore
     private let overlay: LaunchpadOverlayController
     private let hotCornerMonitor = LaunchpadHotCornerMonitor()
     private var cancellables = Set<AnyCancellable>()
 
     init(context: PluginRuntimeContext) {
         let preferences = LaunchpadPreferences(storage: context.storage)
+        // Same scoped storage as preferences; owned here so the layout (and its @Published
+        // changes) outlives individual overlay sessions and drives grid re-renders.
+        let layoutStore = LaunchpadLayoutStore(storage: context.storage)
         self.preferences = preferences
-        self.overlay = LaunchpadOverlayController(preferences: preferences)
+        self.layoutStore = layoutStore
+        self.overlay = LaunchpadOverlayController(preferences: preferences, layoutStore: layoutStore)
 
         hotCornerMonitor.onTrigger = { [weak self] in self?.openLaunchpad() }
         // Apply the saved corner now and whenever the user changes it in settings.

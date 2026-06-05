@@ -16,6 +16,10 @@ import SwiftUI
 /// navigation, page dots and drag all stay consistent.
 struct LaunchpadGridView: View {
     @ObservedObject var catalog: LaunchpadAppCatalog
+    /// Custom-order layout. Observed so a reorder / reset (which mutates `@Published layout`)
+    /// re-evaluates `filtered` and re-renders — the overlay grid does NOT observe
+    /// `onStateChange`, so this injection is the only reorder-refresh path (design §5.5 / R1).
+    @ObservedObject var layoutStore: LaunchpadLayoutStore
     /// Fixed column count, or `LaunchpadPreferences.autoColumns` (0) to fit to width.
     var columns: Int = LaunchpadPreferences.autoColumns
     /// Compact (centered panel) vs fullscreen — tightens padding and, since a small
@@ -45,9 +49,24 @@ struct LaunchpadGridView: View {
     private let rowSpacing: CGFloat = 16
 
     private var filtered: [LaunchpadAppItem] {
-        let visible = catalog.apps.filter { !sessionHidden.contains($0.id) }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return visible }
+        guard query.isEmpty else { return searchResults(query: query) }
+        // Layout state: custom order via the pure reconcile projection. `layout == nil` →
+        // alphabetical, byte-for-byte the previous behaviour. 19a only yields `.app` cells,
+        // so the grid stays a flat `[LaunchpadAppItem]` and every paging / selection path
+        // below is untouched (design §5.2: output set == visible, only order differs).
+        return LaunchpadLayoutReconciler
+            .reconcile(apps: catalog.apps, layout: layoutStore.layout, hidden: sessionHidden)
+            .compactMap { cell -> LaunchpadAppItem? in
+                guard case .app(let item) = cell else { return nil }
+                return item
+            }
+    }
+
+    /// Flat fuzzy search — ignores layout/folders entirely and never touches persistence
+    /// (design §6); clearing the query returns to the reconciled layout for free.
+    private func searchResults(query: String) -> [LaunchpadAppItem] {
+        let visible = catalog.apps.filter { !sessionHidden.contains($0.id) }
         // Fuzzy (subsequence) match, ranked by relevance; ties keep alphabetical order.
         var scored: [(app: LaunchpadAppItem, score: Int)] = []
         for app in visible {

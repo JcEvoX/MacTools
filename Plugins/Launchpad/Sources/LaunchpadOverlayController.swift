@@ -47,6 +47,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
 
     private let catalog = LaunchpadAppCatalog()
     private let preferences: LaunchpadPreferences
+    /// Custom-order layout shared with the grid as `@ObservedObject` so a reorder /
+    /// reset re-renders the open overlay (the grid does NOT observe `onStateChange`).
+    private let layoutStore: LaunchpadLayoutStore
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
     /// `preferences`, which could drift mid-session and desync frame vs. content (Codex P2).
@@ -56,8 +59,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         category: "LaunchpadOverlay"
     )
 
-    init(preferences: LaunchpadPreferences) {
+    init(preferences: LaunchpadPreferences, layoutStore: LaunchpadLayoutStore) {
         self.preferences = preferences
+        self.layoutStore = layoutStore
         super.init()
     }
 
@@ -107,6 +111,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         win.setFrame(frame, display: true)
         let host = NSHostingView(rootView: LaunchpadGridView(
             catalog: catalog,
+            layoutStore: layoutStore,
             columns: preferences.columns,
             isCompact: isCompact,
             hiddenAppIDs: preferences.hiddenAppIDs,
