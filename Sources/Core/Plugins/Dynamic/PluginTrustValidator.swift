@@ -10,13 +10,18 @@ enum PluginTrustValidatorError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .signatureCheckFailed(reason):
-            return "插件签名校验失败：\(reason)"
+            return AppL10n.pluginsFormat("plugin.error.trust.signatureCheckFailedFormat", defaultValue: "插件签名校验失败：%@", reason)
         case let .teamIdentifierUnavailable(url):
-            return "无法读取插件签名团队：\(url.path)"
+            return AppL10n.pluginsFormat("plugin.error.trust.teamUnavailableFormat", defaultValue: "无法读取插件签名团队：%@", url.path)
         case let .teamIdentifierMismatch(expected, actual):
-            return "插件签名团队不匹配，期望 \(expected)，实际 \(actual)。"
+            return AppL10n.pluginsFormat(
+                "plugin.error.trust.teamMismatchFormat",
+                defaultValue: "插件签名团队不匹配，期望 %@，实际 %@。",
+                expected,
+                actual
+            )
         case .hostTeamIdentifierUnavailable:
-            return "无法确定宿主签名团队，已拒绝加载插件。"
+            return AppL10n.plugins("plugin.error.trust.hostTeamUnavailable", defaultValue: "无法确定宿主签名团队，已拒绝加载插件。")
         }
     }
 }

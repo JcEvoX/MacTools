@@ -72,8 +72,14 @@ final class LaunchAtLoginController: ObservableObject {
                 "Failed to \(enabled ? "register" : "unregister", privacy: .public) login item: \(error.localizedDescription, privacy: .public)"
             )
             lastErrorMessage = enabled
-                ? "无法开启开机自启动，请稍后重试或前往系统设置 > 通用 > 登录项中检查权限。"
-                : "无法关闭开机自启动，请稍后重试或前往系统设置 > 通用 > 登录项中手动移除。"
+                ? AppL10n.settings(
+                    "launchAtLogin.error.enableFailed",
+                    defaultValue: "无法开启开机自启动，请稍后重试或前往系统设置 > 通用 > 登录项中检查权限。"
+                )
+                : AppL10n.settings(
+                    "launchAtLogin.error.disableFailed",
+                    defaultValue: "无法关闭开机自启动，请稍后重试或前往系统设置 > 通用 > 登录项中手动移除。"
+                )
         }
 
         let updated = service.isRegistered

@@ -187,10 +187,13 @@ final class TranslatorPluginTests: XCTestCase {
         let controller = TranslatorPanelController()
         controller.show(snapshot: .idle)
         let panel = try XCTUnwrap(translatorPanel())
-        let visibleFrame = try XCTUnwrap((panel.screen ?? NSScreen.main)?.visibleFrame)
+        let allVisibleFrames = NSScreen.screens.map(\.visibleFrame)
+        let visibleFrameUnion = allVisibleFrames.reduce(NSRect.null) { partialResult, frame in
+            partialResult.union(frame)
+        }
         let offscreenFrame = NSRect(
-            x: visibleFrame.maxX + 1_000,
-            y: visibleFrame.maxY + 1_000,
+            x: visibleFrameUnion.maxX + 1_000,
+            y: visibleFrameUnion.maxY + 1_000,
             width: panel.frame.width,
             height: panel.frame.height
         )
@@ -199,10 +202,11 @@ final class TranslatorPluginTests: XCTestCase {
         controller.close()
         controller.show(snapshot: .idle)
 
-        XCTAssertGreaterThanOrEqual(panel.frame.minX, visibleFrame.minX)
-        XCTAssertLessThanOrEqual(panel.frame.maxX, visibleFrame.maxX)
-        XCTAssertGreaterThanOrEqual(panel.frame.minY, visibleFrame.minY)
-        XCTAssertLessThanOrEqual(panel.frame.maxY, visibleFrame.maxY)
+        let restoredVisibleFrame = try XCTUnwrap((panel.screen ?? NSScreen.main)?.visibleFrame)
+        XCTAssertGreaterThanOrEqual(panel.frame.minX, restoredVisibleFrame.minX)
+        XCTAssertLessThanOrEqual(panel.frame.maxX, restoredVisibleFrame.maxX)
+        XCTAssertGreaterThanOrEqual(panel.frame.minY, restoredVisibleFrame.minY)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, restoredVisibleFrame.maxY)
     }
 
     func testConfigurationViewDoesNotLoadAPIKeyFromKeychain() throws {

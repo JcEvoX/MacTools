@@ -15,7 +15,7 @@ public final class FanControlPluginFactory: NSObject, MacToolsPluginBundleFactor
 private struct FanControlPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
     func makePlugins() -> [any MacToolsPlugin] {
-        [FanControlPlugin(context: context)]
+        [FanControlPlugin(context: context, localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -36,14 +36,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: Metadata
 
-    let metadata = PluginMetadata(
-        id: "fan-control",
-        title: "风扇控制",
-        iconName: "fan",
-        iconTint: Color(nsColor: .systemCyan),
-        order: 45,
-        defaultDescription: "管理风扇转速预设"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -61,6 +54,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     let presetStore: FanControlPresetStore
     private let smcReader: any FanControlSMCReading
     private let smcWriter: any FanControlSMCWriting
+    private let localization: PluginLocalization
 
     private var isExpanded = false
     private var fanSnapshot = FanSnapshot.empty
@@ -74,11 +68,24 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "fan-control"),
         smcReader: any FanControlSMCReading = FanControlSMCReader(),
-        smcWriter: (any FanControlSMCWriting)? = nil
+        smcWriter: (any FanControlSMCWriting)? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.presetStore = FanControlPresetStore(storage: context.storage)
+        self.localization = localization
+        self.presetStore = FanControlPresetStore(storage: context.storage, localization: localization)
         self.smcReader = smcReader
-        self.smcWriter = smcWriter ?? FanControlSMCWriter(resourceBundle: context.resourceBundle)
+        self.smcWriter = smcWriter ?? FanControlSMCWriter(
+            resourceBundle: context.resourceBundle,
+            localization: localization
+        )
+        self.metadata = PluginMetadata(
+            id: "fan-control",
+            title: localization.string("metadata.title", defaultValue: "风扇控制"),
+            iconName: "fan",
+            iconTint: Color(nsColor: .systemCyan),
+            order: 45,
+            defaultDescription: localization.string("metadata.description", defaultValue: "管理风扇转速预设")
+        )
     }
 
     // MARK: - MacToolsPlugin
@@ -131,7 +138,8 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         PluginConfiguration(description: metadata.defaultDescription) { [self] _ in
             FanControlPresetManagerView(
                 presetStore: self.presetStore,
-                fanSnapshot: self.fanSnapshot
+                fanSnapshot: self.fanSnapshot,
+                localization: self.localization
             )
         }
     }
@@ -205,7 +213,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let snapshot = fanSnapshot.fanCount > 0 ? fanSnapshot : smcReader.readSnapshot()
         let result = smcWriter.apply(strategy: preset.strategy, snapshot: snapshot)
         if let err = result {
-            lastErrorMessage = err.errorDescription
+            lastErrorMessage = err.localizedDescription(localization: localization)
             FanControlLog.plugin.error("Apply preset failed: \(err.localizedDescription, privacy: .public)")
         } else {
             lastErrorMessage = nil
@@ -280,9 +288,14 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var panelSubtitle: String {
         let preset = presetStore.activePreset
         if let rpm = fanSnapshot.averageSpeed, rpm > 0 {
-            return "\(preset.name) · \(rpm) RPM"
+            return localization.format(
+                "panel.subtitle.withRPM",
+                defaultValue: "%@ · %@",
+                preset.displayName(localization: localization),
+                "\(rpm) RPM"
+            )
         }
-        return preset.name
+        return preset.displayName(localization: localization)
     }
 
     private func buildDetail() -> PluginPanelDetail {
@@ -292,7 +305,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let presetOptions = presetStore.allPresets.map {
             PluginPanelControlOption(
                 id: $0.id,
-                title: $0.name,
+                title: $0.displayName(localization: localization),
                 subtitle: presetSubtitle(for: $0)
             )
         }
@@ -324,7 +337,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 minimumDate: nil,
                 displayedComponents: nil,
                 datePickerStyle: nil,
-                sectionTitle: "目标转速",
+                sectionTitle: localization.string("panel.slider.targetRPM", defaultValue: "目标转速"),
                 sliderValue: Double(rpm),
                 sliderBounds: Double(FanRPMLimits.absoluteMin)...maxSlider,
                 sliderStep: 100,
@@ -343,7 +356,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "删除此预设",
+                actionTitle: localization.string("panel.action.deletePreset", defaultValue: "删除此预设"),
                 actionIconSystemName: "trash",
                 isEnabled: true
             ))
@@ -360,7 +373,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            actionTitle: "管理预设…",
+            actionTitle: localization.string("panel.action.managePresets", defaultValue: "管理预设…"),
             actionIconSystemName: "slider.horizontal.3",
             actionBehavior: .dismissBeforeHandling,
             showsLeadingDivider: true,
@@ -379,7 +392,7 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "风扇控制组件缺失",
+                actionTitle: localization.string("panel.action.missingHelper", defaultValue: "风扇控制组件缺失"),
                 actionIconSystemName: "exclamationmark.triangle",
                 actionBehavior: .dismissBeforeHandling,
                 showsLeadingDivider: true,
@@ -393,10 +406,12 @@ final class FanControlPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func presetSubtitle(for preset: FanPreset) -> String? {
         switch preset.strategy {
         case .auto:
-            return "由 macOS 管理"
+            return localization.string("preset.auto.subtitle", defaultValue: "由 macOS 管理")
         case .fullSpeed:
             let maxRPM = fanSnapshot.globalMaxSpeed
-            return maxRPM > 0 ? "最高 \(maxRPM) RPM" : "最高转速"
+            return maxRPM > 0
+                ? localization.format("preset.fullSpeed.subtitleWithRPM", defaultValue: "最高 %d RPM", maxRPM)
+                : localization.string("preset.fullSpeed.subtitle", defaultValue: "最高转速")
         case .fixed(let rpm):
             return "\(rpm) RPM"
         }

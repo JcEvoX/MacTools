@@ -8,7 +8,9 @@ struct TranslatorSettingsView: View {
     @State private var apiKeys: [String: String]
     @State private var selectedProfileID: String?
     @State private var message: String?
+    @State private var messageIsError = false
 
+    private let localization: PluginLocalization
     private let onSave: ([TranslatorProviderProfile], [String: String], TranslatorLanguagePair) -> String?
     private let onMakeNewProfile: ([TranslatorProviderProfile]) -> TranslatorProviderProfile
 
@@ -16,14 +18,16 @@ struct TranslatorSettingsView: View {
         profiles: [TranslatorProviderProfile],
         apiKeys: [String: String],
         languagePair: TranslatorLanguagePair,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         onSave: @escaping ([TranslatorProviderProfile], [String: String], TranslatorLanguagePair) -> String?,
         onMakeNewProfile: @escaping ([TranslatorProviderProfile]) -> TranslatorProviderProfile
     ) {
         _firstLanguage = State(initialValue: languagePair.first)
         _secondLanguage = State(initialValue: languagePair.second)
-        _profiles = State(initialValue: profiles.isEmpty ? [TranslatorProviderProfile.defaultProfile()] : profiles)
+        _profiles = State(initialValue: profiles.isEmpty ? [TranslatorProviderProfile.defaultProfile(localization: localization)] : profiles)
         _apiKeys = State(initialValue: apiKeys)
         _selectedProfileID = State(initialValue: profiles.first?.id ?? TranslatorProviderProfile.defaultID)
+        self.localization = localization
         self.onSave = onSave
         self.onMakeNewProfile = onMakeNewProfile
     }
@@ -39,16 +43,22 @@ struct TranslatorSettingsView: View {
 
     private var languageSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader("偏好语言", icon: "character.book.closed")
+            sectionHeader(localization.string("settings.language.title", defaultValue: "偏好语言"), icon: "character.book.closed")
 
             VStack(spacing: 0) {
-                fieldRow(title: "第一语言", description: "自动识别为其他语言时翻译到这里。") {
+                fieldRow(
+                    title: localization.string("settings.language.first.title", defaultValue: "第一语言"),
+                    description: localization.string("settings.language.first.description", defaultValue: "自动识别为其他语言时翻译到这里。")
+                ) {
                     languagePicker(selection: messageClearing($firstLanguage))
                 }
 
                 PluginSettingsListDivider()
 
-                fieldRow(title: "第二语言", description: "识别为第一语言时翻译到这里。") {
+                fieldRow(
+                    title: localization.string("settings.language.second.title", defaultValue: "第二语言"),
+                    description: localization.string("settings.language.second.description", defaultValue: "识别为第一语言时翻译到这里。")
+                ) {
                     languagePicker(selection: messageClearing($secondLanguage))
                 }
             }
@@ -59,12 +69,12 @@ struct TranslatorSettingsView: View {
     private var providerListSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                sectionHeader("翻译服务", icon: "network")
+                sectionHeader(localization.string("settings.providerList.title", defaultValue: "翻译服务"), icon: "network")
                 Spacer()
                 Button {
                     addProfile()
                 } label: {
-                    Label("添加", systemImage: "plus")
+                    Label(localization.string("settings.providerList.add", defaultValue: "添加"), systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -84,11 +94,14 @@ struct TranslatorSettingsView: View {
 
     private var providerDetailSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            sectionHeader("服务详情", icon: "slider.horizontal.3")
+            sectionHeader(localization.string("settings.providerDetail.title", defaultValue: "服务详情"), icon: "slider.horizontal.3")
 
             if let index = selectedProfileIndex {
                 VStack(spacing: 0) {
-                    editableFieldRow(title: "名称", description: "显示在翻译结果卡片上。") {
+                    editableFieldRow(
+                        title: localization.string("settings.provider.name.title", defaultValue: "名称"),
+                        description: localization.string("settings.provider.name.description", defaultValue: "显示在翻译结果卡片上。")
+                    ) {
                         TextField("OpenAI", text: binding(for: index, keyPath: \.name))
                             .textFieldStyle(.roundedBorder)
                             .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
@@ -96,7 +109,10 @@ struct TranslatorSettingsView: View {
 
                     PluginSettingsListDivider()
 
-                    editableFieldRow(title: "服务地址", description: "OpenAI 或兼容网关地址。") {
+                    editableFieldRow(
+                        title: localization.string("settings.provider.baseURL.title", defaultValue: "服务地址"),
+                        description: localization.string("settings.provider.baseURL.description", defaultValue: "OpenAI 或兼容网关地址。")
+                    ) {
                         TextField("https://api.openai.com", text: binding(for: index, keyPath: \.baseURL))
                             .textFieldStyle(.roundedBorder)
                             .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
@@ -104,7 +120,10 @@ struct TranslatorSettingsView: View {
 
                     PluginSettingsListDivider()
 
-                    editableFieldRow(title: "接口密钥", description: "留空则保留当前钥匙串内容。") {
+                    editableFieldRow(
+                        title: localization.string("settings.provider.apiKey.title", defaultValue: "接口密钥"),
+                        description: localization.string("settings.provider.apiKey.description", defaultValue: "留空则保留当前钥匙串内容。")
+                    ) {
                         SecureField("sk-...", text: apiKeyBinding(profileID: profiles[index].id))
                             .textFieldStyle(.roundedBorder)
                             .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
@@ -112,7 +131,10 @@ struct TranslatorSettingsView: View {
 
                     PluginSettingsListDivider()
 
-                    editableFieldRow(title: "模型", description: "用于翻译的模型名称。") {
+                    editableFieldRow(
+                        title: localization.string("settings.provider.model.title", defaultValue: "模型"),
+                        description: localization.string("settings.provider.model.description", defaultValue: "用于翻译的模型名称。")
+                    ) {
                         TextField("gpt-5.4-mini", text: binding(for: index, keyPath: \.model))
                             .textFieldStyle(.roundedBorder)
                             .frame(minWidth: 280, idealWidth: 320, maxWidth: 420)
@@ -124,7 +146,7 @@ struct TranslatorSettingsView: View {
                 }
                 .pluginSettingsCardBackground(.host)
             } else {
-                Text("请选择一个翻译服务。")
+                Text(localization.string("settings.providerDetail.empty", defaultValue: "请选择一个翻译服务。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .pluginSettingsListRowPadding()
@@ -135,11 +157,12 @@ struct TranslatorSettingsView: View {
 
     private var actions: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
-            Button("恢复默认") {
-                profiles = [TranslatorProviderProfile.defaultProfile()]
+            Button(localization.string("settings.action.restoreDefaults", defaultValue: "恢复默认")) {
+                profiles = [TranslatorProviderProfile.defaultProfile(localization: localization)]
                 selectedProfileID = profiles[0].id
                 apiKeys = [:]
                 message = nil
+                messageIsError = false
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -149,10 +172,10 @@ struct TranslatorSettingsView: View {
             if let message {
                 Text(message)
                     .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(message == "已保存" ? Color.secondary : Color.red)
+                    .foregroundStyle(messageIsError ? Color.red : Color.secondary)
             }
 
-            Button("保存") {
+            Button(localization.string("settings.action.save", defaultValue: "保存")) {
                 save()
             }
             .buttonStyle(.borderedProminent)
@@ -176,9 +199,13 @@ struct TranslatorSettingsView: View {
             } label: {
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                     VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                        Text(profile.normalizedName.isEmpty ? "未命名服务" : profile.normalizedName)
+                        Text(profile.normalizedName.isEmpty
+                            ? localization.string("settings.providerRow.unnamed", defaultValue: "未命名服务")
+                            : profile.normalizedName)
                             .font(PluginSettingsTheme.Typography.rowTitle)
-                        Text(profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未设置模型" : profile.model)
+                        Text(profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? localization.string("settings.providerRow.missingModel", defaultValue: "未设置模型")
+                            : profile.model)
                             .font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -187,7 +214,7 @@ struct TranslatorSettingsView: View {
                     Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
                     if profile.isEnabled, let validationError = profile.validationError {
-                        Text(validationError.localizedDescription)
+                        Text(validationError.errorDescription(localization: localization))
                             .font(PluginSettingsTheme.Typography.statusBadge)
                             .foregroundStyle(.orange)
                             .lineLimit(1)
@@ -197,17 +224,17 @@ struct TranslatorSettingsView: View {
             }
             .buttonStyle(.plain)
 
-            iconButton("chevron.up", help: "上移") {
+            iconButton("chevron.up", help: localization.string("settings.providerRow.moveUpHelp", defaultValue: "上移")) {
                 moveProfile(from: index, offset: -1)
             }
             .disabled(index == 0)
 
-            iconButton("chevron.down", help: "下移") {
+            iconButton("chevron.down", help: localization.string("settings.providerRow.moveDownHelp", defaultValue: "下移")) {
                 moveProfile(from: index, offset: 1)
             }
             .disabled(index == profiles.count - 1)
 
-            iconButton("trash", help: "删除") {
+            iconButton("trash", help: localization.string("settings.providerRow.deleteHelp", defaultValue: "删除")) {
                 deleteProfile(at: index)
             }
             .disabled(profiles.count == 1)
@@ -225,9 +252,12 @@ struct TranslatorSettingsView: View {
 
     private func promptEditor(index: Int) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-            Text("提示词")
+            Text(localization.string("settings.prompt.template.title", defaultValue: "模板"))
                 .font(PluginSettingsTheme.Typography.rowTitle)
-            Text("必须包含 {{text}}。可使用 {{source_language}} 和 {{target_language}}。")
+            Text(localization.string(
+                "settings.prompt.template.description",
+                defaultValue: "必须包含 {{text}}。可使用 {{source_language}} 和 {{target_language}}。"
+            ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
 
@@ -280,7 +310,7 @@ struct TranslatorSettingsView: View {
     private func languagePicker(selection: Binding<TranslatorLanguage>) -> some View {
         Picker("", selection: selection) {
             ForEach(TranslatorLanguage.allCases) { language in
-                Text("\(language.flag) \(language.displayName)")
+                Text("\(language.flag) \(language.displayName(localization: localization))")
                     .tag(language)
             }
         }
@@ -344,6 +374,7 @@ struct TranslatorSettingsView: View {
             set: {
                 binding.wrappedValue = $0
                 message = nil
+                messageIsError = false
             }
         )
     }
@@ -353,6 +384,7 @@ struct TranslatorSettingsView: View {
         profiles.append(profile)
         selectedProfileID = profile.id
         message = nil
+        messageIsError = false
     }
 
     private func deleteProfile(at index: Int) {
@@ -361,6 +393,7 @@ struct TranslatorSettingsView: View {
         apiKeys.removeValue(forKey: deletedID)
         selectedProfileID = profiles.indices.contains(index) ? profiles[index].id : profiles.last?.id
         message = nil
+        messageIsError = false
     }
 
     private func moveProfile(from index: Int, offset: Int) {
@@ -372,16 +405,24 @@ struct TranslatorSettingsView: View {
         profiles.swapAt(index, target)
         selectedProfileID = profiles[target].id
         message = nil
+        messageIsError = false
     }
 
     private func save() {
         let languagePair = TranslatorLanguagePair(first: firstLanguage, second: secondLanguage)
 
         guard languagePair.first != languagePair.second else {
-            message = "两种偏好语言不能相同。"
+            message = localization.string("settings.error.sameLanguages", defaultValue: "两种偏好语言不能相同。")
+            messageIsError = true
             return
         }
 
-        message = onSave(profiles, apiKeys, languagePair) ?? "已保存"
+        if let errorMessage = onSave(profiles, apiKeys, languagePair) {
+            message = errorMessage
+            messageIsError = true
+        } else {
+            message = localization.string("settings.message.saved", defaultValue: "已保存")
+            messageIsError = false
+        }
     }
 }

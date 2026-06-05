@@ -2,6 +2,16 @@
   "id": "stage-manager",
   "displayName": "台前调度",
   "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "台前调度",
+      "summary": "开启台前调度，集中显示当前窗口并把其他窗口收纳到侧边"
+    },
+    "en": {
+      "displayName": "Stage Manager",
+      "summary": "Turn on Stage Manager to focus the current window and keep others on the side."
+    }
+  },
   "version": "1.0.0",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

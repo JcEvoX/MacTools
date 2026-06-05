@@ -736,7 +736,7 @@ struct MenuBarContent: View {
         VStack(spacing: MenuBarPanelLayout.featureRowSpacing) {
             if pluginHost.panelItems.isEmpty {
                 PanelPluginEmptyState(
-                    title: "暂无插件",
+                    title: AppL10n.plugins("plugin.panel.empty.title", defaultValue: "暂无插件"),
                     systemImage: "shippingbox",
                     iconTint: .blue,
                     onInstall: {
@@ -827,14 +827,14 @@ struct MenuBarContent: View {
             Button {
                 presentSettings()
             } label: {
-                MenuActionRowLabel(title: "设置", systemImage: "gearshape")
+                MenuActionRowLabel(title: AppL10n.settings("settings.window.title", defaultValue: "设置"), systemImage: "gearshape")
             }
             .buttonStyle(.plain)
 
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
-                MenuActionRowLabel(title: "退出", systemImage: "power")
+                MenuActionRowLabel(title: AppL10n.settings("app.quit", defaultValue: "退出"), systemImage: "power")
             }
             .buttonStyle(.plain)
         }
@@ -965,7 +965,7 @@ struct FeatureRowView: View {
                             onActionInvoke(actionID, item.menuActionBehavior)
                         }
                     } label: {
-                        Text(item.buttonTitle ?? "操作")
+                        Text(item.buttonTitle ?? AppL10n.plugins("plugin.panel.actionFallback", defaultValue: "操作"))
                             .font(.system(size: 11))
                             .foregroundStyle(.white)
                             .frame(minWidth: 45, minHeight: 21)
@@ -1491,7 +1491,10 @@ private struct SliderControl: View {
                 .labelsHidden()
                 .disabled(!control.isEnabled)
                 .tint(Color(nsColor: .controlAccentColor))
-                .accessibilityLabel(control.sectionTitle ?? "显示器亮度")
+                .accessibilityLabel(control.sectionTitle ?? AppL10n.plugins(
+                    "plugin.panel.displayBrightnessFallback",
+                    defaultValue: "显示器亮度"
+                ))
             }
         }
         .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)

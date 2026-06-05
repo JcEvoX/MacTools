@@ -2,6 +2,16 @@
   "id": "system-mute",
   "displayName": "系统静音",
   "summary": "快速静音或恢复系统音频输出",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "系统静音",
+      "summary": "快速静音或恢复系统音频输出"
+    },
+    "en": {
+      "displayName": "System Mute",
+      "summary": "Quickly mute or restore system audio output."
+    }
+  },
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

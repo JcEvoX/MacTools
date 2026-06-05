@@ -2,6 +2,16 @@
   "id": "middle-click",
   "displayName": "模拟鼠标中键",
   "summary": "触控板轻点模拟鼠标中键",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "模拟鼠标中键",
+      "summary": "触控板轻点模拟鼠标中键"
+    },
+    "en": {
+      "displayName": "Middle Click",
+      "summary": "Turn trackpad taps into middle-clicks."
+    }
+  },
   "version": "1.0.8",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

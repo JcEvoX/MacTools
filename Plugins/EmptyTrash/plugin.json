@@ -2,6 +2,16 @@
   "id": "empty-trash",
   "displayName": "清空废纸篓",
   "summary": "清空废纸篓中的所有项目",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "清空废纸篓",
+      "summary": "清空废纸篓中的所有项目"
+    },
+    "en": {
+      "displayName": "Empty Trash",
+      "summary": "Empty all items in the Trash."
+    }
+  },
   "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

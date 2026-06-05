@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MacToolsPluginKit
 
 // MARK: - Constants
 
@@ -182,11 +183,14 @@ enum MenuBarHiddenSection: String, Codable, CaseIterable, Equatable {
     case hidden
     case alwaysHidden
 
-    var title: String {
+    func title(localization: PluginLocalization) -> String {
         switch self {
-        case .visible: "显示"
-        case .hidden: "隐藏"
-        case .alwaysHidden: "永久隐藏"
+        case .visible:
+            localization.string("section.visible", defaultValue: "显示")
+        case .hidden:
+            localization.string("section.hidden", defaultValue: "隐藏")
+        case .alwaysHidden:
+            localization.string("section.alwaysHidden", defaultValue: "永久隐藏")
         }
     }
 }

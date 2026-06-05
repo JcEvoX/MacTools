@@ -156,9 +156,13 @@ enum PluginCatalogProviderError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .localCatalogMustUseFileURL(url):
-            return "本地开发插件列表必须使用 file:// 地址：\(url.absoluteString)"
+            return AppL10n.pluginsFormat(
+                "plugin.error.catalog.localMustUseFileURLFormat",
+                defaultValue: "本地开发插件列表必须使用 file:// 地址：%@",
+                url.absoluteString
+            )
         case let .httpStatus(statusCode):
-            return "插件列表读取失败：HTTP \(statusCode)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.httpStatusFormat", defaultValue: "插件列表读取失败：HTTP %d", statusCode)
         }
     }
 }

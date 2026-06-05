@@ -22,11 +22,11 @@ struct PluginCatalogStatus: Equatable {
     var title: String {
         switch source {
         case .production:
-            return "插件列表"
+            return AppL10n.plugins("plugin.catalog.title.production", defaultValue: "插件列表")
         case .localDevelopment:
-            return "本地开发列表"
+            return AppL10n.plugins("plugin.catalog.title.localDevelopment", defaultValue: "本地开发列表")
         case .unavailable:
-            return "插件列表未配置"
+            return AppL10n.plugins("plugin.catalog.title.unavailable", defaultValue: "插件列表未配置")
         }
     }
 
@@ -36,14 +36,14 @@ struct PluginCatalogStatus: Equatable {
         }
 
         if isRefreshing {
-            return "正在刷新插件列表..."
+            return AppL10n.plugins("plugin.catalog.detail.refreshing", defaultValue: "正在刷新插件列表...")
         }
 
         switch source {
         case let .production(url), let .localDevelopment(url):
             return url.absoluteString
         case .unavailable:
-            return "已安装插件仍可继续管理。"
+            return AppL10n.plugins("plugin.catalog.detail.unavailable", defaultValue: "已安装插件仍可继续管理。")
         }
     }
 }
@@ -53,7 +53,7 @@ struct PluginCatalogBulkUpdateError: LocalizedError {
 
     var errorDescription: String? {
         let ids = failures.map(\.pluginID).joined(separator: "、")
-        return "部分插件更新失败：\(ids)"
+        return AppL10n.pluginsFormat("plugin.error.catalog.bulkUpdateFailedFormat", defaultValue: "部分插件更新失败：%@", ids)
     }
 }
 
@@ -279,7 +279,7 @@ enum PluginCatalogManagerError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .catalogEntryNotFound(id):
-            return "插件列表中未找到插件：\(id)"
+            return AppL10n.pluginsFormat("plugin.error.catalog.entryNotFoundFormat", defaultValue: "插件列表中未找到插件：%@", id)
         }
     }
 }

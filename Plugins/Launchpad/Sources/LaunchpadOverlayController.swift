@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import OSLog
 import SwiftUI
 
@@ -47,6 +48,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
 
     private let catalog = LaunchpadAppCatalog()
     private let preferences: LaunchpadPreferences
+    private let localization: PluginLocalization
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
     /// `preferences`, which could drift mid-session and desync frame vs. content (Codex P2).
@@ -56,8 +58,12 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         category: "LaunchpadOverlay"
     )
 
-    init(preferences: LaunchpadPreferences) {
+    init(
+        preferences: LaunchpadPreferences,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.preferences = preferences
+        self.localization = localization
         super.init()
     }
 
@@ -110,6 +116,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             columns: preferences.columns,
             isCompact: isCompact,
             hiddenAppIDs: preferences.hiddenAppIDs,
+            localization: localization,
             onActivate: { [weak self] app in self?.launch(app) },
             onReveal: { [weak self] app in self?.reveal(app) },
             onHide: { [weak self] app in self?.preferences.hide(app.id) },

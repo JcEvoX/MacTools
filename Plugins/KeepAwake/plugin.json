@@ -2,6 +2,16 @@
   "id": "keep-awake",
   "displayName": "阻止休眠",
   "summary": "阻止系统空闲休眠，允许显示器息屏",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "阻止休眠",
+      "summary": "阻止系统空闲休眠，允许显示器息屏"
+    },
+    "en": {
+      "displayName": "Keep Awake",
+      "summary": "Prevent system idle sleep while allowing displays to sleep."
+    }
+  },
   "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

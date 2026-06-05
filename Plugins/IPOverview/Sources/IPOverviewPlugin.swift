@@ -14,7 +14,7 @@ private struct IPOverviewPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [IPOverviewPlugin(context: context)]
+        [IPOverviewPlugin(context: context, localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -27,14 +27,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let openDetails = "ip-overview-open-details"
     }
 
-    let metadata = PluginMetadata(
-        id: "ip-overview",
-        title: "IP 检测",
-        iconName: "network",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 12,
-        defaultDescription: "查看公网 IP、本地地址和归属地"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -42,6 +35,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     )
 
     private let viewModel: IPOverviewViewModel
+    private let localization: PluginLocalization
     private var isExpanded = false
 
     var onStateChange: (() -> Void)?
@@ -50,9 +44,22 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "ip-overview"),
-        viewModel: IPOverviewViewModel? = nil
+        viewModel: IPOverviewViewModel? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.viewModel = viewModel ?? IPOverviewViewModel(storage: context.storage)
+        self.localization = localization
+        self.viewModel = viewModel ?? IPOverviewViewModel(storage: context.storage, localization: localization)
+        self.metadata = PluginMetadata(
+            id: "ip-overview",
+            title: localization.string("metadata.title", defaultValue: "IP 检测"),
+            iconName: "network",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 12,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "查看公网 IP、本地地址和归属地"
+            )
+        )
         self.viewModel.onSnapshotChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -89,6 +96,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         ) { _ in
             IPOverviewComponentView(
                 viewModel: self.viewModel,
+                localization: self.localization,
                 startsInDetails: true,
                 showsBackButton: false
             )
@@ -115,7 +123,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private var panelSubtitle: String {
         let snapshot = viewModel.snapshot
         if snapshot.isRefreshing {
-            return "正在检测公网 IP..."
+            return localization.string("panel.subtitle.refreshing", defaultValue: "正在检测公网 IP...")
         }
 
         if let ip = snapshot.preferredPublicIP?.ip {
@@ -141,7 +149,9 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: viewModel.isRefreshingAll ? "刷新中..." : "刷新全部检测",
+                actionTitle: viewModel.isRefreshingAll
+                    ? localization.string("panel.action.refreshing", defaultValue: "刷新中...")
+                    : localization.string("panel.action.refreshAll", defaultValue: "刷新全部检测"),
                 actionIconSystemName: "arrow.clockwise",
                 isEnabled: !viewModel.isRefreshingAll
             ),
@@ -155,7 +165,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "复制公网 IP",
+                actionTitle: localization.string("panel.action.copyPublicIP", defaultValue: "复制公网 IP"),
                 actionIconSystemName: "doc.on.doc",
                 showsLeadingDivider: true,
                 isEnabled: viewModel.snapshot.preferredPublicIP != nil
@@ -170,7 +180,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "复制完整结果",
+                actionTitle: localization.string("panel.action.copyReport", defaultValue: "复制完整结果"),
                 actionIconSystemName: "doc.on.clipboard",
                 isEnabled: viewModel.snapshot.lastUpdated != nil
             ),
@@ -184,7 +194,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 displayedComponents: nil,
                 datePickerStyle: nil,
                 sectionTitle: nil,
-                actionTitle: "打开详情",
+                actionTitle: localization.string("panel.action.openDetails", defaultValue: "打开详情"),
                 actionIconSystemName: "arrow.up.right.square",
                 actionBehavior: .dismissBeforeHandling,
                 showsLeadingDivider: true,
@@ -200,7 +210,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case ControlID.copyIP:
             viewModel.copy(viewModel.snapshot.preferredPublicIP?.ip)
         case ControlID.copyReport:
-            viewModel.copy(viewModel.snapshot.reportText)
+            viewModel.copy(viewModel.snapshot.reportText(localization: localization))
         default:
             break
         }

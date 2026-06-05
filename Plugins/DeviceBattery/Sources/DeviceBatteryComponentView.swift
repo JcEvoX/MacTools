@@ -5,6 +5,7 @@ import MacToolsPluginKit
 struct DeviceBatteryComponentView: View {
     @ObservedObject var viewModel: DeviceBatteryViewModel
     @ObservedObject var store: DeviceBatteryStore
+    let localization: PluginLocalization
     let isPanelVisible: Bool
     let openSettings: () -> Void
 
@@ -17,12 +18,14 @@ struct DeviceBatteryComponentView: View {
                 case .grid:
                     DeviceBatteryListCard(
                         items: Array(visibleItems.prefix(DeviceBatteryLayout.maximumListItems)),
-                        totalCount: visibleItems.count
+                        totalCount: visibleItems.count,
+                        localization: localization
                     )
                 case .list:
                     DeviceBatteryGaugeGrid(
                         items: Array(visibleItems.prefix(DeviceBatteryLayout.maximumGaugeItems)),
-                        totalCount: visibleItems.count
+                        totalCount: visibleItems.count,
+                        localization: localization
                     )
                 }
             }
@@ -65,7 +68,10 @@ struct DeviceBatteryComponentView: View {
 
             if viewModel.snapshot.accessState == .permissionDenied {
                 Button(action: openSettings) {
-                    Label("打开系统设置", systemImage: "gearshape")
+                    Label(
+                        localization.string("empty.openSettings", defaultValue: "打开系统设置"),
+                        systemImage: "gearshape"
+                    )
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .buttonStyle(.bordered)
@@ -81,26 +87,26 @@ struct DeviceBatteryComponentView: View {
     private var emptyTitle: String {
         switch viewModel.snapshot.accessState {
         case .permissionDenied:
-            return "需要输入监控权限"
+            return localization.string("empty.title.permissionDenied", defaultValue: "需要输入监控权限")
         case .scanning:
-            return "正在读取电量"
+            return localization.string("empty.title.scanning", defaultValue: "正在读取电量")
         case .failed:
-            return "读取失败"
+            return localization.string("empty.title.failed", defaultValue: "读取失败")
         case .idle, .ready, .noDevices:
-            return "暂无设备电量"
+            return localization.string("empty.title.noDevices", defaultValue: "暂无设备电量")
         }
     }
 
     private var emptySubtitle: String {
         switch viewModel.snapshot.accessState {
         case .permissionDenied:
-            return "授权后可读取厂商 HID 鼠标"
+            return localization.string("empty.subtitle.permissionDenied", defaultValue: "授权后可读取厂商 HID 鼠标")
         case .failed(let message):
             return message
         case .scanning:
-            return "正在查询系统电源与蓝牙设备"
+            return localization.string("empty.subtitle.scanning", defaultValue: "正在查询系统电源与蓝牙设备")
         case .idle, .ready, .noDevices:
-            return "连接蓝牙设备或厂商 HID 鼠标"
+            return localization.string("empty.subtitle.noDevices", defaultValue: "连接蓝牙设备或厂商 HID 鼠标")
         }
     }
 }
@@ -219,6 +225,7 @@ private typealias DeviceBatteryLayout = DeviceBatteryComponentLayout
 private struct DeviceBatteryListCard: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(spacing: 0) {
@@ -226,7 +233,8 @@ private struct DeviceBatteryListCard: View {
                 DeviceBatteryNativeRow(
                     item: item,
                     rowHeight: DeviceBatteryLayout.rowHeight,
-                    showsDetail: false
+                    showsDetail: false,
+                    localization: localization
                 )
 
                 if index < items.count - 1 {
@@ -236,7 +244,7 @@ private struct DeviceBatteryListCard: View {
 
             if totalCount > items.count {
                 DeviceBatteryDivider()
-                DeviceBatteryOverflowRow(count: totalCount - items.count)
+                DeviceBatteryOverflowRow(count: totalCount - items.count, localization: localization)
             }
         }
         .padding(.vertical, DeviceBatteryLayout.cardVerticalPadding)
@@ -249,6 +257,7 @@ private struct DeviceBatteryListCard: View {
 private struct DeviceBatteryGaugeGrid: View {
     let items: [DeviceBatteryItem]
     let totalCount: Int
+    let localization: PluginLocalization
 
     var body: some View {
         Group {
@@ -257,7 +266,8 @@ private struct DeviceBatteryGaugeGrid: View {
                     DeviceBatteryGaugeTile(
                         item: item,
                         tileSize: tileSize,
-                        lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize)
+                        lineWidth: DeviceBatteryLayout.gaugeLineWidth(for: tileSize),
+                        localization: localization
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -297,6 +307,7 @@ private struct DeviceBatteryGaugeTile: View {
     let item: DeviceBatteryItem
     let tileSize: CGFloat
     let lineWidth: CGFloat
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(spacing: 2) {
@@ -304,7 +315,8 @@ private struct DeviceBatteryGaugeTile: View {
                 DeviceBatteryRing(
                     item: item,
                     size: tileSize,
-                    lineWidth: lineWidth
+                    lineWidth: lineWidth,
+                    localization: localization
                 )
 
                 Image(systemName: deviceSymbolName(for: item))
@@ -335,7 +347,7 @@ private struct DeviceBatteryGaugeTile: View {
         }
         .frame(width: tileSize, height: tileSize + DeviceBatteryLayout.gaugePercentHeight)
         .compositingGroup()
-        .help(helpText(for: item))
+        .help(helpText(for: item, localization: localization))
     }
 
     private var iconTint: Color {
@@ -376,6 +388,7 @@ private struct DeviceBatteryRing: View {
     let item: DeviceBatteryItem
     let size: CGFloat
     let lineWidth: CGFloat
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
     var body: some View {
         ZStack {
@@ -432,7 +445,14 @@ private struct DeviceBatteryRing: View {
         }
         .rotationEffect(.degrees(DeviceBatteryLayout.ringRotation))
         .frame(width: size, height: size)
-        .accessibilityLabel("\(item.name)，\(DeviceBatteryFormatter.percent(item.clampedLevel))")
+        .accessibilityLabel(
+            localization.format(
+                "accessibility.ring",
+                defaultValue: "%@，%@",
+                item.name,
+                DeviceBatteryFormatter.percent(item.clampedLevel)
+            )
+        )
     }
 
     private var progress: CGFloat {
@@ -462,9 +482,10 @@ private struct DeviceBatteryDivider: View {
 
 private struct DeviceBatteryOverflowRow: View {
     let count: Int
+    let localization: PluginLocalization
 
     var body: some View {
-        Text("还有 \(count) 台设备")
+        Text(localization.format("overflow.moreDevices", defaultValue: "还有 %d 台设备", count))
             .font(.caption2.weight(.medium))
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity)
@@ -478,6 +499,7 @@ private struct DeviceBatteryNativeRow: View {
     var showsDetail = false
     var compact = false
     var prominent = false
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
 
     var body: some View {
         HStack(spacing: compact ? 8 : 10) {
@@ -496,7 +518,7 @@ private struct DeviceBatteryNativeRow: View {
                     .minimumScaleFactor(0.72)
 
                 if showsDetail {
-                    Text(deviceDetailText(for: item))
+                    Text(deviceDetailText(for: item, localization: localization))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -520,7 +542,7 @@ private struct DeviceBatteryNativeRow: View {
         }
         .padding(.horizontal, DeviceBatteryLayout.horizontalPadding)
         .frame(height: rowHeight)
-        .help(helpText(for: item))
+        .help(helpText(for: item, localization: localization))
     }
 
     private var titleFont: Font {
@@ -657,14 +679,19 @@ private func batterySymbolName(for item: DeviceBatteryItem) -> String {
     }
 }
 
-private func deviceDetailText(for item: DeviceBatteryItem) -> String {
+private func deviceDetailText(
+    for item: DeviceBatteryItem,
+    localization: PluginLocalization = PluginLocalization(bundle: .main)
+) -> String {
     if let detail = item.detail, !detail.isEmpty {
         return detail
     }
     if let model = item.model, !model.isEmpty, model != item.name {
         return model
     }
-    return item.chargeState.title == "正常" ? "已连接" : item.chargeState.title
+    return item.chargeState == .normal
+        ? localization.string("deviceDetail.connected", defaultValue: "已连接")
+        : item.chargeState.title(localization: localization)
 }
 
 func deviceSymbolName(for item: DeviceBatteryItem) -> String {
@@ -673,7 +700,7 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         item.model,
         item.detail,
         item.parentName,
-        item.kind.title
+        item.kind.title()
     ]
         .compactMap { $0?.lowercased() }
         .joined(separator: " ")
@@ -854,17 +881,31 @@ private func availableSystemSymbolName(_ candidates: [String]) -> String {
     return candidates.last ?? "airpods"
 }
 
-private func helpText(for item: DeviceBatteryItem) -> String {
+private func helpText(
+    for item: DeviceBatteryItem,
+    localization: PluginLocalization = PluginLocalization(bundle: .main)
+) -> String {
     var lines = [
         item.name,
-        "\(DeviceBatteryFormatter.percent(item.clampedLevel)) · \(item.chargeState.title)",
-        "来源：\(item.source)"
+        localization.format(
+            "help.levelAndState",
+            defaultValue: "%@ · %@",
+            DeviceBatteryFormatter.percent(item.clampedLevel),
+            item.chargeState.title(localization: localization)
+        ),
+        localization.format("help.source", defaultValue: "来源：%@", item.source)
     ]
     if let parentName = item.parentName {
-        lines.append("关联：\(parentName)")
+        lines.append(localization.format("help.parent", defaultValue: "关联：%@", parentName))
     }
     if let lastUpdated = item.lastUpdated {
-        lines.append("更新：\(DeviceBatteryFormatter.time(lastUpdated))")
+        lines.append(
+            localization.format(
+                "help.updated",
+                defaultValue: "更新：%@",
+                DeviceBatteryFormatter.time(lastUpdated, localization: localization)
+            )
+        )
     }
     return lines.joined(separator: "\n")
 }

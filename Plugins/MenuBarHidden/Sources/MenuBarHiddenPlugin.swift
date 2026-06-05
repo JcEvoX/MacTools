@@ -15,20 +15,18 @@ private struct MenuBarHiddenPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [MenuBarHiddenPlugin(context: context)]
+        [
+            MenuBarHiddenPlugin(
+                context: context,
+                localization: PluginLocalization(bundle: context.resourceBundle)
+            ),
+        ]
     }
 }
 
 @MainActor
 final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel, MenuBarHostStatusItemRecovering {
-    let metadata = PluginMetadata(
-        id: MenuBarHiddenConstants.pluginID,
-        title: "隐藏菜单栏图标",
-        iconName: "menubar.arrow.up.rectangle",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 12,
-        defaultDescription: "隐藏菜单栏图标并支持拖拽布局与点击转发"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -47,6 +45,7 @@ final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompo
     }
 
     private let context: PluginRuntimeContext
+    private let localization: PluginLocalization
     private let controller: MenuBarHiddenController
     private var launchObserver: NSObjectProtocol?
 
@@ -75,10 +74,23 @@ final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompo
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: MenuBarHiddenConstants.pluginID),
-        controller: MenuBarHiddenController? = nil
+        controller: MenuBarHiddenController? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.context = context
-        let ctrl = controller ?? MenuBarHiddenController(context: context)
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: MenuBarHiddenConstants.pluginID,
+            title: localization.string("metadata.title", defaultValue: "隐藏菜单栏图标"),
+            iconName: "menubar.arrow.up.rectangle",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 12,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "隐藏菜单栏图标并支持拖拽布局与点击转发"
+            )
+        )
+        let ctrl = controller ?? MenuBarHiddenController(context: context, localization: localization)
         self.controller = ctrl
 
         if controller != nil {
@@ -158,14 +170,20 @@ final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompo
             PluginPermissionRequirement(
                 id: "accessibility",
                 kind: .accessibility,
-                title: "辅助功能",
-                description: "用于合成鼠标事件以拖拽菜单栏图标并转发点击"
+                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能"),
+                description: localization.string(
+                    "permission.accessibility.description",
+                    defaultValue: "用于合成鼠标事件以拖拽菜单栏图标并转发点击"
+                )
             ),
             PluginPermissionRequirement(
                 id: "screen-recording",
                 kind: .screenRecording,
-                title: "屏幕录制",
-                description: "用于捕获菜单栏图标的真实外观，仅授权后才能在面板中查看与点击"
+                title: localization.string("permission.screenRecording.title", defaultValue: "屏幕录制"),
+                description: localization.string(
+                    "permission.screenRecording.description",
+                    defaultValue: "用于捕获菜单栏图标的真实外观，仅授权后才能在面板中查看与点击"
+                )
             ),
         ]
     }
@@ -177,13 +195,19 @@ final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompo
             let granted = permissions.hasAccessibility
             return PluginPermissionState(
                 isGranted: granted,
-                footnote: granted ? nil : "未授权时仍可使用隐藏开关，但无法拖拽或转发点击"
+                footnote: granted ? nil : localization.string(
+                    "permission.accessibility.footnote",
+                    defaultValue: "未授权时仍可使用隐藏开关，但无法拖拽或转发点击"
+                )
             )
         case "screen-recording":
             let granted = permissions.hasScreenRecording
             return PluginPermissionState(
                 isGranted: granted,
-                footnote: granted ? nil : "未授权时仍可使用隐藏开关，但布局栏与弹窗不可用"
+                footnote: granted ? nil : localization.string(
+                    "permission.screenRecording.footnote",
+                    defaultValue: "未授权时仍可使用隐藏开关，但布局栏与弹窗不可用"
+                )
             )
         default:
             return PluginPermissionState(isGranted: true, footnote: nil)

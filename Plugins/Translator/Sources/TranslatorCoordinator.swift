@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 protocol TranslatorPanelControlling: AnyObject {
@@ -53,6 +54,7 @@ final class TranslatorCoordinator {
     private let languagePreferenceStore: LanguagePreferenceStore
     private let providerFactory: TranslatorProviderFactory
     private weak var panelController: TranslatorPanelControlling?
+    private let localization: PluginLocalization
     private let speechSynthesizer = AVSpeechSynthesizer()
 
     private var sessionID = UUID()
@@ -69,12 +71,14 @@ final class TranslatorCoordinator {
         selectedTextCapturePipeline: SelectedTextCapturePipeline,
         languagePreferenceStore: LanguagePreferenceStore,
         providerFactory: @escaping TranslatorProviderFactory,
-        panelController: TranslatorPanelControlling?
+        panelController: TranslatorPanelControlling?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.selectedTextCapturePipeline = selectedTextCapturePipeline
         self.languagePreferenceStore = languagePreferenceStore
         self.providerFactory = providerFactory
         self.panelController = panelController
+        self.localization = localization
     }
 
     func startSelectTranslation() {
@@ -89,7 +93,7 @@ final class TranslatorCoordinator {
         sessionID = currentSessionID
         lastSourceText = nil
         let providerBuildResult = providerFactory()
-        let initialProviderResults = providerBuildResult.waitingProviderResults
+        let initialProviderResults = providerBuildResult.waitingProviderResults(localization: localization)
         snapshot = TranslatorPanelSnapshot(
             phase: .capturing,
             sourceText: nil,
@@ -112,7 +116,7 @@ final class TranslatorCoordinator {
         guard let sourceText = result.text?.trimmingCharacters(in: .whitespacesAndNewlines),
               !sourceText.isEmpty
         else {
-            if result.failureReason == TranslatorPanelError.permissionRequired.message {
+            if result.failureReason == TranslatorPanelError.permissionRequired.message(localization: localization) {
                 setError(
                     .permissionRequired,
                     sourceText: nil,
@@ -142,7 +146,7 @@ final class TranslatorCoordinator {
                 providers: [
                     ResolvedTranslationProvider(
                         id: "default",
-                        title: "OpenAI 翻译",
+                        title: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
                         provider: provider
                     ),
                 ],
@@ -215,7 +219,7 @@ final class TranslatorCoordinator {
                 providers: [
                     ResolvedTranslationProvider(
                         id: "default",
-                        title: "OpenAI 翻译",
+                        title: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
                         provider: provider
                     ),
                 ],
@@ -229,7 +233,7 @@ final class TranslatorCoordinator {
                 sourceText: sourceText,
                 languageSelection: snapshot.languageSelection,
                 translation: nil,
-                providerResults: providerBuildResult.waitingProviderResults,
+                providerResults: providerBuildResult.waitingProviderResults(localization: localization),
                 errorMessage: message
             )
             panelController?.show(snapshot: snapshot)
@@ -274,6 +278,7 @@ final class TranslatorCoordinator {
             return
         }
 
+        let localization = self.localization
         await withTaskGroup(of: ProviderTranslationOutcome.self) { group in
             for resolvedProvider in providers {
                 guard let provider = resolvedProvider.provider else {
@@ -303,7 +308,7 @@ final class TranslatorCoordinator {
                         return ProviderTranslationOutcome(
                             providerID: resolvedProvider.id,
                             translation: nil,
-                            errorMessage: error.localizedDescription
+                            errorMessage: Self.userFacingMessage(for: error, localization: localization)
                         )
                     }
                 }
@@ -341,7 +346,7 @@ final class TranslatorCoordinator {
             languageSelection: languageSelection,
             translation: nil,
             providerResults: providerResults,
-            errorMessage: error.message
+            errorMessage: error.message(localization: localization)
         )
     }
 
@@ -383,7 +388,7 @@ final class TranslatorCoordinator {
             )
         } else {
             let message = snapshot.providerResults.compactMap(\.errorMessage).first
-                ?? TranslatorPanelError.requestFailed("请求失败，请稍后重试").message
+                ?? localization.string("openAIClient.error.requestFailed", defaultValue: "请求失败，请稍后重试")
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.requestFailed(message)),
                 sourceText: sourceText,
@@ -394,6 +399,28 @@ final class TranslatorCoordinator {
             )
         }
         panelController?.show(snapshot: snapshot)
+    }
+
+    nonisolated private static func userFacingMessage(
+        for error: Error,
+        localization: PluginLocalization
+    ) -> String {
+        if let error = error as? OpenAICompatibleClientError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? OpenAICompatibleConfigurationError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? TranslationPromptRendererError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? OpenAICompatibleSecretStoreError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? TranslatorProviderProfileValidationError {
+            return error.errorDescription(localization: localization)
+        }
+        return error.localizedDescription
     }
 
     private func copy(_ text: String?) {

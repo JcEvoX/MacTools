@@ -169,6 +169,7 @@ for raw in packages:
         "id": manifest["id"],
         "displayName": manifest.get("displayName", manifest["id"]),
         "summary": manifest.get("summary", manifest.get("displayName", manifest["id"])),
+        "localizedMetadata": manifest.get("localizedMetadata"),
         "version": manifest["version"],
         "minimumHostVersion": manifest.get("minHostVersion", minimum_host_version),
         "pluginKitVersion": manifest_plugin_kit_version,

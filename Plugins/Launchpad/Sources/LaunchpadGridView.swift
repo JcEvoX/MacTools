@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 /// The launcher content: a focused search field over a horizontally **paged** app grid
@@ -24,6 +25,7 @@ struct LaunchpadGridView: View {
     var isCompact: Bool = false
     /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
     var hiddenAppIDs: Set<String> = []
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
     var onActivate: (LaunchpadAppItem) -> Void
     var onReveal: (LaunchpadAppItem) -> Void
     var onHide: (LaunchpadAppItem) -> Void
@@ -96,6 +98,7 @@ struct LaunchpadGridView: View {
     private var searchBar: some View {
         LaunchpadSearchField(
             text: $searchText,
+            localization: localization,
             onMove: handleMove,
             onLaunch: activateSelection,
             onCancel: onDismiss
@@ -115,7 +118,11 @@ struct LaunchpadGridView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 42, weight: .regular))
                     .foregroundStyle(.secondary)
-                Text(searchText.isEmpty ? "未找到应用" : "无匹配应用")
+                Text(
+                    searchText.isEmpty
+                        ? localization.string("grid.empty.noApps", defaultValue: "未找到应用")
+                        : localization.string("grid.empty.noMatches", defaultValue: "无匹配应用")
+                )
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -192,14 +199,14 @@ struct LaunchpadGridView: View {
         Button {
             onReveal(app)
         } label: {
-            Label("在 Finder 中显示", systemImage: "folder")
+            Label(localization.string("grid.menu.revealInFinder", defaultValue: "在 Finder 中显示"), systemImage: "folder")
         }
         Button {
             // Lightweight clipboard action — no lifecycle effect, so keep the launcher open.
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(app.url.path, forType: .string)
         } label: {
-            Label("拷贝路径", systemImage: "doc.on.doc")
+            Label(localization.string("grid.menu.copyPath", defaultValue: "拷贝路径"), systemImage: "doc.on.doc")
         }
         Divider()
         Button {
@@ -208,7 +215,7 @@ struct LaunchpadGridView: View {
             currentPage = 0
             onHide(app)                         // persist (settings page can restore)
         } label: {
-            Label("隐藏", systemImage: "eye.slash")
+            Label(localization.string("grid.menu.hide", defaultValue: "隐藏"), systemImage: "eye.slash")
         }
     }
 
@@ -222,7 +229,9 @@ struct LaunchpadGridView: View {
                     // Mirror the cell fix: `.onTapGesture` is mouse-only, so VoiceOver /
                     // AX press needs an explicit action to actually change page.
                     .accessibilityAction { goToPage(page) }
-                    .accessibilityLabel("第 \(page + 1) 页")
+                    .accessibilityLabel(
+                        localization.format("grid.page.accessibilityLabel", defaultValue: "第 %d 页", page + 1)
+                    )
                     .accessibilityAddTraits(.isButton)
             }
         }

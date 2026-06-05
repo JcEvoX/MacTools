@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MacToolsPluginKit
 
 protocol BrowserAppleScriptExecuting: Sendable {
     func execute(_ script: String) async throws -> String?
@@ -15,37 +16,58 @@ struct BrowserAppleScriptSelectedTextCapture: SelectedTextCapturing {
     let strategyID: SelectedTextCaptureStrategyID = .browserAppleScript
     private let executor: any BrowserAppleScriptExecuting
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         executor: any BrowserAppleScriptExecuting = DefaultBrowserAppleScriptExecutor(),
-        timeout: TimeInterval = 0.2
+        timeout: TimeInterval = 0.2,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.executor = executor
         self.timeout = timeout
+        self.localization = localization
     }
 
     func capture(context: SelectedTextCaptureContext) async -> SelectedTextCaptureResult {
         guard let bundleID = context.frontmostApplicationBundleID else {
-            return failure(context: context, reason: "未找到当前应用")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.missingApplication", defaultValue: "未找到当前应用")
+            )
         }
 
         guard AppCaptureCompatibility.supportsAppleScriptSelection(bundleID) else {
-            return failure(context: context, reason: "当前浏览器不支持自动化取词")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.unsupportedBrowserAutomation", defaultValue: "当前浏览器不支持自动化取词")
+            )
         }
 
         guard let script = script(bundleID: bundleID) else {
-            return failure(context: context, reason: "自动化脚本无效")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.invalidAutomationScript", defaultValue: "自动化脚本无效")
+            )
         }
 
         let selectedText: String?
         do {
             selectedText = try await executeWithTimeout(script)
         } catch BrowserAppleScriptExecutionError.timeout {
-            return failure(context: context, reason: "自动化取词超时")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.automationTimeout", defaultValue: "自动化取词超时")
+            )
         } catch BrowserAppleScriptExecutionError.invalidScript {
-            return failure(context: context, reason: "自动化脚本无效")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.invalidAutomationScript", defaultValue: "自动化脚本无效")
+            )
         } catch {
-            return failure(context: context, reason: "自动化取词失败")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.automationFailed", defaultValue: "自动化取词失败")
+            )
         }
 
         return SelectedTextCaptureResult(
@@ -53,7 +75,9 @@ struct BrowserAppleScriptSelectedTextCapture: SelectedTextCapturing {
             strategyID: strategyID,
             isEditable: false,
             sourceApplicationBundleID: bundleID,
-            failureReason: selectedText == nil ? "未找到选中文本" : nil
+            failureReason: selectedText == nil
+                ? localization.string("capture.error.missingSelection", defaultValue: "未找到选中文本")
+                : nil
         )
     }
 

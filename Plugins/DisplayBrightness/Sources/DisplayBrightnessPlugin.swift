@@ -5,14 +5,16 @@ import MacToolsPluginKit
 
 public final class DisplayBrightnessPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        DisplayBrightnessPluginProvider()
+        DisplayBrightnessPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct DisplayBrightnessPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [DisplayBrightnessPlugin()]
+        [DisplayBrightnessPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -29,12 +31,12 @@ enum DisplayBrightnessShortcutDirection: Equatable {
         }
     }
 
-    var title: String {
+    func title(localization: PluginLocalization) -> String {
         switch self {
         case .decrease:
-            return "降低"
+            return localization.string("shortcut.direction.decrease", defaultValue: "降低")
         case .increase:
-            return "增加"
+            return localization.string("shortcut.direction.increase", defaultValue: "增加")
         }
     }
 
@@ -128,14 +130,7 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         static let shortcutDisplayGroupPrefix = "display-brightness.display-group."
     }
 
-    let metadata = PluginMetadata(
-        id: "display-brightness",
-        title: "显示器亮度",
-        iconName: "sun.max",
-        iconTint: Color(nsColor: .systemYellow),
-        order: 20,
-        defaultDescription: "快速调节每个显示器的亮度"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .disclosure,
@@ -147,12 +142,28 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let controller: DisplayBrightnessControlling
+    private let localization: PluginLocalization
     private var isExpanded = false
     private var shortcutAcceleration = DisplayBrightnessShortcutAcceleration()
     private var shortcutSessions: [String: DisplayBrightnessShortcutSession] = [:]
 
-    init(controller: DisplayBrightnessControlling = DisplayBrightnessController()) {
-        self.controller = controller
+    init(
+        controller: DisplayBrightnessControlling? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
+        self.controller = controller ?? DisplayBrightnessController(localization: localization)
+        self.metadata = PluginMetadata(
+            id: "display-brightness",
+            title: localization.string("metadata.title", defaultValue: "显示器亮度"),
+            iconName: "sun.max",
+            iconTint: Color(nsColor: .systemYellow),
+            order: 20,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "快速调节每个显示器的亮度"
+            )
+        )
         self.controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -164,7 +175,10 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         guard !snapshot.displays.isEmpty else {
             isExpanded = false
             return PluginPanelState(
-                subtitle: "未检测到可调节亮度的显示器",
+                subtitle: localization.string(
+                    "panel.subtitle.noDisplays",
+                    defaultValue: "未检测到可调节亮度的显示器"
+                ),
                 isOn: false,
                 isExpanded: false,
                 isEnabled: false,
@@ -276,7 +290,7 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
             return "\(display.display.name) \(Self.percentText(for: display.brightness))"
         }
 
-        return "\(displays.count) 个显示器"
+        return localization.format("panel.subtitle.displayCountFormat", defaultValue: "%d 个显示器", displays.count)
     }
 
     private func buildDetail(for displays: [DisplayBrightnessDisplay]) -> PluginPanelDetail {
@@ -313,11 +327,22 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     ) -> PluginShortcutDefinition {
         let displayKey = Self.shortcutDisplayKey(for: display)
         let actionID = Self.shortcutActionID(displayKey: displayKey, direction: direction)
+        let directionTitle = direction.title(localization: localization)
 
         return PluginShortcutDefinition(
             id: actionID,
-            title: "\(display.name) \(direction.title)亮度",
-            description: "\(direction.title)\(display.name) 的亮度。",
+            title: localization.format(
+                "shortcut.titleFormat",
+                defaultValue: "%@ %@亮度",
+                display.name,
+                directionTitle
+            ),
+            description: localization.format(
+                "shortcut.descriptionFormat",
+                defaultValue: "%@%@ 的亮度。",
+                directionTitle,
+                display.name
+            ),
             actionID: actionID,
             scope: .global,
             defaultBinding: nil,
@@ -325,8 +350,11 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
             sharedBindingGroupID: direction.sharedBindingGroupID,
             settingsGroupID: "\(Constants.shortcutDisplayGroupPrefix)\(displayKey)",
             settingsGroupTitle: display.name,
-            settingsGroupDescription: "可与其他显示器使用相同快捷键，同时调节。",
-            settingsControlTitle: direction.title,
+            settingsGroupDescription: localization.string(
+                "shortcut.settingsGroupDescription",
+                defaultValue: "可与其他显示器使用相同快捷键，同时调节。"
+            ),
+            settingsControlTitle: directionTitle,
             settingsControlSystemImage: direction.systemImage
         )
     }

@@ -14,7 +14,12 @@ private struct LaunchpadPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [LaunchpadPlugin(context: context)]
+        [
+            LaunchpadPlugin(
+                context: context,
+                localization: PluginLocalization(bundle: context.resourceBundle)
+            ),
+        ]
     }
 }
 
@@ -30,20 +35,9 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
         static let toggle = "launchpad.toggle"
     }
 
-    let metadata = PluginMetadata(
-        id: "launchpad",
-        title: "启动台",
-        iconName: "square.grid.3x3.fill",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 12,
-        defaultDescription: "唤出应用网格，搜索并启动"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "打开"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -56,13 +50,34 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let preferences: LaunchpadPreferences
     private let overlay: LaunchpadOverlayController
+    private let localization: PluginLocalization
     private let hotCornerMonitor = LaunchpadHotCornerMonitor()
     private var cancellables = Set<AnyCancellable>()
 
-    init(context: PluginRuntimeContext) {
+    init(
+        context: PluginRuntimeContext,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "launchpad",
+            title: localization.string("metadata.title", defaultValue: "启动台"),
+            iconName: "square.grid.3x3.fill",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 12,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "唤出应用网格，搜索并启动"
+            )
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.open", defaultValue: "打开")
+        )
         let preferences = LaunchpadPreferences(storage: context.storage)
         self.preferences = preferences
-        self.overlay = LaunchpadOverlayController(preferences: preferences)
+        self.overlay = LaunchpadOverlayController(preferences: preferences, localization: localization)
 
         hotCornerMonitor.onTrigger = { [weak self] in self?.openLaunchpad() }
         // Apply the saved corner now and whenever the user changes it in settings.
@@ -72,8 +87,8 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [preferences] _ in
-            LaunchpadSettingsView(preferences: preferences)
+        PluginConfiguration(description: metadata.defaultDescription) { [preferences, localization] _ in
+            LaunchpadSettingsView(preferences: preferences, localization: localization)
         }
     }
 
@@ -93,8 +108,11 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
         [
             PluginShortcutDefinition(
                 id: ShortcutID.toggle,
-                title: "打开启动台",
-                description: "全局快捷键唤出或收起应用网格。默认未设置，可在此自定义。",
+                title: localization.string("shortcut.toggle.title", defaultValue: "打开启动台"),
+                description: localization.string(
+                    "shortcut.toggle.description",
+                    defaultValue: "全局快捷键唤出或收起应用网格。默认未设置，可在此自定义。"
+                ),
                 actionID: ActionID.toggle,
                 scope: .global,
                 defaultBinding: nil,        // v1 决定：不抢占系统/用户已有热键

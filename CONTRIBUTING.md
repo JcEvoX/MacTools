@@ -31,6 +31,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Add new plugins under `Plugins/<PluginName>/` with at least `plugin.json`, `Sources/`, and `Bundle/`.
 - Ordinary plugins only need to define `plugin.json`, source code, and a bundle entry point. `make generate` scans `Plugins/*/plugin.json` and generates local `Configs/GeneratedPlugins.yml`; do not edit generated files manually.
 - Command workflows for adding and updating plugins are documented in the Development Steps section of `docs/plugins/local-native-plugins.md`.
+- Keep documentation short and task-focused. User-visible behavior changes should update `README.md` or the relevant file under `docs/`; plugin package, catalog, or release flow changes should update `docs/plugins/`.
 - Plugins implement `MacToolsPlugin`; menu panel plugins implement `PluginPrimaryPanel`, and component panel plugins implement `PluginComponentPanel`.
 - `plugin.json.id` must be stable, readable, and exactly match the runtime `PluginMetadata.id`; each plugin package should return exactly one plugin instance.
 - Plugin display state should be expressed through `PluginPanelState`, `PluginPanelDetail`, `PluginPanelControl`, and related models. Do not bypass the existing panel framework.
@@ -39,6 +40,8 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Custom plugin settings views must reuse `MacToolsPluginKit.PluginSettingsTheme` and `.pluginSettingsCardBackground(...)`. Do not copy private plugin settings styles, and do not make plugins depend on `Sources/App/SettingsStyle.swift`.
 - Call `onStateChange?()` after plugin state changes. Long-running scans, file system work, and system calls should not block the main thread for extended periods.
 - User-facing copy is primarily Chinese. Keep it concise, clear, and close to native macOS wording.
+- Localize user-facing copy with `.xcstrings`. App/Core copy belongs under `Sources/Resources/Localization`, PluginKit copy under `Sources/MacToolsPluginKit/Resources`, and plugin copy under `Plugins/<PluginName>/Resources`. Plugin `plugin.json` files should keep `displayName`/`summary` as fallbacks and add `localizedMetadata` for marketplace and unloaded-plugin presentation.
+- New plugins should provide localization whenever practical, at minimum for panel copy, settings copy, permission text, and plugin metadata.
 - Prefer Apple native frameworks. When adding system frameworks, private include paths, or helper executables inside a plugin bundle, declare the smallest necessary differences in the plugin's own `project.yml`. Bundle resource executables that need separate signing should be listed in `plugin.json.package.signPaths`.
 
 ## Testing

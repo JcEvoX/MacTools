@@ -16,7 +16,7 @@ public enum PluginShortcutRecordingResult: Equatable {
 
 @MainActor
 private final class PluginShortcutRecorderDisplayState: ObservableObject {
-    @Published var previewText = "按下录制快捷键"
+    @Published var previewText = PluginKitLocalization.shortcutRecorderPreviewPlaceholder
     @Published private(set) var showEscHint = false
     @Published private(set) var conflictMessage: String?
     @Published private(set) var shakeOffset: CGFloat = 0
@@ -69,7 +69,7 @@ public struct PluginShortcutRecorderField: View {
 
     public init(
         displayText: String,
-        placeholder: String = "未设置",
+        placeholder: String = PluginKitLocalization.defaultShortcutPlaceholder,
         isRecording: Bool,
         minWidth: CGFloat = 90
     ) {
@@ -116,7 +116,7 @@ public struct PluginShortcutRecorder: View {
     public init(
         title: String,
         displayText: String,
-        placeholder: String = "未设置",
+        placeholder: String = PluginKitLocalization.defaultShortcutPlaceholder,
         minWidth: CGFloat = 90,
         onRecord: @escaping (ShortcutBinding) -> PluginShortcutRecordingResult,
         onBeginRecording: (() -> Void)? = nil,
@@ -143,7 +143,7 @@ public struct PluginShortcutRecorder: View {
             )
         }
         .buttonStyle(.plain)
-        .help("点击录制\(title)")
+        .help(PluginKitLocalization.shortcutRecorderHelp(title: title))
         .accessibilityLabel(Text(title))
         .background {
             GeometryReader { proxy in
@@ -188,7 +188,7 @@ private struct PluginShortcutRecorderPopoverView: View {
                         Text(message)
                             .foregroundStyle(.red)
                     } else {
-                        Text("按下 ESC 退出录制")
+                        Text(PluginKitLocalization.shortcutRecorderEscHint)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -386,7 +386,7 @@ private struct PluginShortcutRecorderPopoverAnchor: NSViewRepresentable {
             let modifiers = ShortcutModifiers.from(event.modifierFlags)
 
             displayState?.previewText = modifiers.isEmpty
-                ? "按下录制快捷键"
+                ? PluginKitLocalization.shortcutRecorderPreviewPlaceholder
                 : modifiers.symbolString.map { String($0) }.joined(separator: " + ")
         }
 

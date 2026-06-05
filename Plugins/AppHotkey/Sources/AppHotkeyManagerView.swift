@@ -7,6 +7,7 @@ import MacToolsPluginKit
 
 struct AppHotkeyManagerView: View {
     @ObservedObject var store: AppHotkeyStore
+    let localization: PluginLocalization
     let onUpdate: () -> Void
     var onBeginRecording: ((UUID) -> Void)? = nil
     var onEndRecording: ((UUID) -> Void)? = nil
@@ -22,12 +23,12 @@ struct AppHotkeyManagerView: View {
     private var bindingSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             HStack {
-                Label("应用绑定", systemImage: "keyboard")
+                Label(localization.string("settings.section.bindings", defaultValue: "应用绑定"), systemImage: "keyboard")
                     .font(PluginSettingsTheme.Typography.sectionTitle)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(action: addApp) {
-                    Label("添加", systemImage: "plus")
+                    Label(localization.string("settings.add", defaultValue: "添加"), systemImage: "plus")
                         .font(PluginSettingsTheme.Typography.controlLabel)
                 }
                 .buttonStyle(.bordered)
@@ -49,7 +50,7 @@ struct AppHotkeyManagerView: View {
                 Image(systemName: "keyboard")
                     .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
                     .foregroundStyle(.secondary)
-                Text("点击「添加」选择应用并绑定快捷键")
+                Text(localization.string("settings.empty", defaultValue: "点击「添加」选择应用并绑定快捷键"))
                     .font(PluginSettingsTheme.Typography.pageDescription)
                     .foregroundStyle(.secondary)
             }
@@ -64,6 +65,7 @@ struct AppHotkeyManagerView: View {
             ForEach(store.entries) { entry in
                 AppShortcutEntryRow(
                     entry: entry,
+                    localization: localization,
                     onClearShortcut: {
                         store.updateShortcut(id: entry.id, shortcut: nil)
                         onUpdate()
@@ -76,7 +78,11 @@ struct AppHotkeyManagerView: View {
                     onEndRecording: { onEndRecording?(entry.id) },
                     onRecord: { binding in
                         if let conflict = store.conflictEntry(for: binding, excludingID: entry.id) {
-                            return .rejected("与「\(conflict.displayName)」冲突")
+                            return .rejected(localization.format(
+                                "settings.shortcutConflictFormat",
+                                defaultValue: "与「%@」冲突",
+                                conflict.displayName
+                            ))
                         }
                         store.updateShortcut(id: entry.id, shortcut: binding)
                         onUpdate()
@@ -95,8 +101,8 @@ struct AppHotkeyManagerView: View {
 
     private func addApp() {
         let panel = NSOpenPanel()
-        panel.title = "选择应用"
-        panel.message = "选择要绑定快捷键的应用"
+        panel.title = localization.string("openPanel.title", defaultValue: "选择应用")
+        panel.message = localization.string("openPanel.message", defaultValue: "选择要绑定快捷键的应用")
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -116,6 +122,7 @@ struct AppHotkeyManagerView: View {
 
 private struct AppShortcutEntryRow: View {
     let entry: AppShortcutEntry
+    let localization: PluginLocalization
     let onClearShortcut: () -> Void
     let onDelete: () -> Void
     let onBeginRecording: () -> Void
@@ -131,12 +138,15 @@ private struct AppShortcutEntryRow: View {
 
     private var shortcutText: String {
         ShortcutFormatter.displayString(for: entry.shortcut)
-            .replacingOccurrences(of: "None", with: "未设置")
+            .replacingOccurrences(
+                of: "None",
+                with: localization.string("settings.shortcutUnset", defaultValue: "未设置")
+            )
     }
 
     private var subtitle: String {
         guard let url = entry.bundleURL else {
-            return "应用路径不可用"
+            return localization.string("settings.pathUnavailable", defaultValue: "应用路径不可用")
         }
 
         return url.path(percentEncoded: false)
@@ -162,7 +172,11 @@ private struct AppShortcutEntryRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             PluginShortcutRecorder(
-                title: "\(entry.displayName) 快捷键",
+                title: localization.format(
+                    "settings.shortcutRecorderTitleFormat",
+                    defaultValue: "%@ 快捷键",
+                    entry.displayName
+                ),
                 displayText: shortcutText,
                 onRecord: onRecord,
                 onBeginRecording: onBeginRecording,
@@ -175,7 +189,7 @@ private struct AppShortcutEntryRow: View {
                         .pluginSettingsRowIconStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除快捷键")
+                .help(localization.string("settings.clearShortcut", defaultValue: "清除快捷键"))
             }
 
             Button(action: onDelete) {
@@ -183,7 +197,7 @@ private struct AppShortcutEntryRow: View {
                     .pluginSettingsRowIconStyle(.red.opacity(0.8))
             }
             .buttonStyle(.plain)
-            .help("删除此绑定")
+            .help(localization.string("settings.deleteBinding", defaultValue: "删除此绑定"))
         }
         .pluginSettingsListRowPadding()
     }

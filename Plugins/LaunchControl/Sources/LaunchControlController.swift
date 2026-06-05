@@ -12,6 +12,7 @@ final class LaunchControlController: ObservableObject {
     private let runner: any LaunchControlCommandRunning
     private let favoritesStore: LaunchControlFavoritesStore
     private let notesStore: LaunchControlNotesStore
+    private let localization: PluginLocalization
     private var refreshTask: Task<Void, Never>?
 
     init(
@@ -19,12 +20,14 @@ final class LaunchControlController: ObservableObject {
         runner: any LaunchControlCommandRunning = ProcessLaunchControlCommandRunner(),
         favoritesStore: LaunchControlFavoritesStore? = nil,
         notesStore: LaunchControlNotesStore? = nil,
-        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control")
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "launch-control"),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.runner = runner
         self.favoritesStore = favoritesStore ?? LaunchControlFavoritesStore(context: context)
         self.notesStore = notesStore ?? LaunchControlNotesStore(context: context)
-        self.scanner = scanner ?? LaunchControlScanner(runner: runner)
+        self.localization = localization
+        self.scanner = scanner ?? LaunchControlScanner(runner: runner, localization: localization)
     }
 
     deinit {
@@ -41,7 +44,7 @@ final class LaunchControlController: ObservableObject {
 
         snapshot.isRefreshing = false
         snapshot.currentScanTarget = nil
-        appendScanLog("扫描已停止")
+        appendScanLog(localization.string("controller.scanLog.stopped", defaultValue: "扫描已停止"))
         onStateChange?()
     }
 
@@ -53,7 +56,9 @@ final class LaunchControlController: ObservableObject {
         snapshot.selectedItemID = nil
         snapshot.errorMessage = nil
         snapshot.operationMessage = nil
-        snapshot.scanLogEntries = ["开始扫描 LaunchAgent / LaunchDaemon"]
+        snapshot.scanLogEntries = [
+            localization.string("controller.scanLog.started", defaultValue: "开始扫描 LaunchAgent / LaunchDaemon")
+        ]
         snapshot.currentScanTarget = nil
         onStateChange?()
 
@@ -92,7 +97,9 @@ final class LaunchControlController: ObservableObject {
     func setFavorite(_ isFavorite: Bool, for item: LaunchControlItem) {
         favoritesStore.setFavorite(isFavorite, for: item.id)
         refreshPersistedState(for: item)
-        snapshot.operationMessage = isFavorite ? "已关注 \(item.label)" : "已取消关注 \(item.label)"
+        snapshot.operationMessage = isFavorite
+            ? localization.format("controller.favorite.added", defaultValue: "已关注 %@", item.label)
+            : localization.format("controller.favorite.removed", defaultValue: "已取消关注 %@", item.label)
         onStateChange?()
     }
 
@@ -100,14 +107,16 @@ final class LaunchControlController: ObservableObject {
         notesStore.setNote(note, for: item.id)
         refreshPersistedState(for: item)
         let isCleared = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        snapshot.operationMessage = isCleared ? "已清除备注：\(item.label)" : "已保存备注：\(item.label)"
+        snapshot.operationMessage = isCleared
+            ? localization.format("controller.note.cleared", defaultValue: "已清除备注：%@", item.label)
+            : localization.format("controller.note.saved", defaultValue: "已保存备注：%@", item.label)
         onStateChange?()
     }
 
     func bootstrap(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "加载",
+            title: actionTitle(.bootstrap),
             arguments: ["bootstrap", item.launchctlDomain, item.plistURL.path]
         )
     }
@@ -115,7 +124,7 @@ final class LaunchControlController: ObservableObject {
     func bootout(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "卸载",
+            title: actionTitle(.bootout),
             arguments: ["bootout", item.launchctlDomain, item.plistURL.path]
         )
     }
@@ -123,7 +132,7 @@ final class LaunchControlController: ObservableObject {
     func enable(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "启用",
+            title: actionTitle(.enable),
             arguments: ["enable", "\(item.launchctlDomain)/\(item.label)"]
         )
     }
@@ -131,7 +140,7 @@ final class LaunchControlController: ObservableObject {
     func disable(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "禁用",
+            title: actionTitle(.disable),
             arguments: ["disable", "\(item.launchctlDomain)/\(item.label)"]
         )
     }
@@ -139,7 +148,7 @@ final class LaunchControlController: ObservableObject {
     func start(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "启动",
+            title: actionTitle(.start),
             arguments: ["kickstart", "\(item.launchctlDomain)/\(item.label)"]
         )
     }
@@ -147,7 +156,7 @@ final class LaunchControlController: ObservableObject {
     func stop(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "停止",
+            title: actionTitle(.stop),
             arguments: ["kill", "TERM", "\(item.launchctlDomain)/\(item.label)"]
         )
     }
@@ -155,7 +164,7 @@ final class LaunchControlController: ObservableObject {
     func restart(_ item: LaunchControlItem) {
         performManagedAction(
             item: item,
-            title: "重启",
+            title: actionTitle(.restart),
             arguments: ["kickstart", "-k", "\(item.launchctlDomain)/\(item.label)"]
         )
     }
@@ -170,7 +179,7 @@ final class LaunchControlController: ObservableObject {
         snapshot.lastRefreshDate = Date()
         snapshot.errorMessage = result.warnings.first
         snapshot.currentScanTarget = nil
-        appendScanLog("扫描完成：\(result.items.count) 项")
+        appendScanLog(localization.format("controller.scanLog.completed", defaultValue: "扫描完成：%d 项", result.items.count))
         onStateChange?()
     }
 
@@ -178,10 +187,14 @@ final class LaunchControlController: ObservableObject {
         switch event {
         case let .directory(path):
             snapshot.currentScanTarget = path
-            appendScanLog("目录：\(path)")
+            appendScanLog(localization.format("controller.scanLog.directory", defaultValue: "目录：%@", path))
         case let .file(path):
             snapshot.currentScanTarget = path
-            appendScanLog("读取：\(URL(fileURLWithPath: path).lastPathComponent)")
+            appendScanLog(localization.format(
+                "controller.scanLog.file",
+                defaultValue: "读取：%@",
+                URL(fileURLWithPath: path).lastPathComponent
+            ))
         case let .found(item):
             upsertScannedItem(item)
         case let .message(message):
@@ -249,12 +262,20 @@ final class LaunchControlController: ObservableObject {
         arguments: [String]
     ) {
         guard item.canManage else {
-            snapshot.operationMessage = "系统或全局启动项默认只读，避免误操作。"
+            snapshot.operationMessage = localization.string(
+                "controller.operation.readOnly",
+                defaultValue: "系统或全局启动项默认只读，避免误操作。"
+            )
             onStateChange?()
             return
         }
 
-        snapshot.operationMessage = "\(title) \(item.label)..."
+        snapshot.operationMessage = localization.format(
+            "controller.operation.running",
+            defaultValue: "%@ %@...",
+            title,
+            item.label
+        )
         snapshot.errorMessage = nil
         onStateChange?()
 
@@ -271,20 +292,40 @@ final class LaunchControlController: ObservableObject {
 
             switch result {
             case let .success(commandResult) where commandResult.exitCode == 0:
-                self.snapshot.operationMessage = "\(title)完成"
+                self.snapshot.operationMessage = self.localization.format(
+                    "controller.operation.completed",
+                    defaultValue: "%@完成",
+                    title
+                )
                 self.refresh()
             case let .success(commandResult):
                 let message = commandResult.combinedOutput
-                self.snapshot.operationMessage = "\(title)失败"
+                self.snapshot.operationMessage = self.localization.format(
+                    "controller.operation.failed",
+                    defaultValue: "%@失败",
+                    title
+                )
                 self.snapshot.errorMessage = message.isEmpty
-                    ? "launchctl 返回退出码 \(commandResult.exitCode)"
+                    ? self.localization.format(
+                        "controller.operation.exitCode",
+                        defaultValue: "launchctl 返回退出码 %d",
+                        commandResult.exitCode
+                    )
                     : message
                 self.onStateChange?()
             case let .failure(error):
-                self.snapshot.operationMessage = "\(title)失败"
+                self.snapshot.operationMessage = self.localization.format(
+                    "controller.operation.failed",
+                    defaultValue: "%@失败",
+                    title
+                )
                 self.snapshot.errorMessage = error.localizedDescription
                 self.onStateChange?()
             }
         }
+    }
+
+    private func actionTitle(_ action: LaunchControlManagedAction) -> String {
+        action.title(localization: localization)
     }
 }

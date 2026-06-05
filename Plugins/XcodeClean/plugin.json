@@ -2,6 +2,16 @@
   "id": "xcode-clean",
   "displayName": "Xcode 清理",
   "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "Xcode 清理",
+      "summary": "分类清理 Xcode DerivedData、设备支持、归档与缓存"
+    },
+    "en": {
+      "displayName": "Xcode Cleanup",
+      "summary": "Clean Xcode DerivedData, device support files, archives, and caches by category."
+    }
+  },
   "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

@@ -45,27 +45,9 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         static let fingerCount = "finger-count"
     }
 
-    // 支持的手指数量
-    private enum FingerCountOption: Int, CaseIterable {
-        case three = 3
-        case four = 4
-        case five = 5
-
-        var label: String {
-            "\(self.rawValue) 指"
-        }
-    }
-
     // MARK: - Plugin Metadata
 
-    let metadata = PluginMetadata(
-        id: "middle-click",
-        title: "模拟鼠标中键",
-        iconName: "hand.tap",
-        iconTint: Color(nsColor: .systemIndigo),
-        order: 55,
-        defaultDescription: "触控板轻点 → 模拟鼠标中键"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -81,6 +63,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
     // MARK: - State
 
     private let storage: PluginStorage
+    private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MiddleClickPlugin")
     private var isAccessibilityGranted: Bool
     private var session: MiddleClickSession?
@@ -93,9 +76,22 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "middle-click"),
         userDefaults: UserDefaults? = nil
     ) {
+        let localization = PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
         self.storage = userDefaults.map {
             UserDefaultsPluginStorage(pluginID: context.pluginID, userDefaults: $0)
         } ?? context.storage
+        self.metadata = PluginMetadata(
+            id: "middle-click",
+            title: localization.string("metadata.title", defaultValue: "模拟鼠标中键"),
+            iconName: "hand.tap",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 55,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "触控板轻点 → 模拟鼠标中键"
+            )
+        )
         self.isAccessibilityGranted = AccessibilityCheck.isTrusted()
         storage.migrateValueIfNeeded(fromLegacyKey: StorageKey.isEnabled, to: StorageKey.isEnabled)
         storage.migrateValueIfNeeded(
@@ -126,7 +122,11 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     var primaryPanelState: PluginPanelState {
         let subtitle = session != nil 
-            ? "触控板\(self.requiredFingerCount)指轻点 → 鼠标中键"
+            ? localization.format(
+                "panel.subtitle.enabledFingerCountFormat",
+                defaultValue: "触控板%d指轻点 → 鼠标中键",
+                self.requiredFingerCount
+            )
             : panelSubtitle
         
         return PluginPanelState(
@@ -148,6 +148,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
             return AnyView(
                 MiddleClickSettingsView(
                     selectedCount: displayCount,
+                    localization: self.localization,
                     onCountChange: { newCount in
                         self.setFingerCount(newCount)
                     }
@@ -161,8 +162,11 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
             PluginPermissionRequirement(
                 id: PermissionID.accessibility,
                 kind: .accessibility,
-                title: "辅助功能授权",
-                description: "模拟鼠标中键需要辅助功能权限才能正常工作。"
+                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能授权"),
+                description: localization.string(
+                    "permission.accessibility.description",
+                    defaultValue: "模拟鼠标中键需要辅助功能权限才能正常工作。"
+                )
             )
         ]
     }
@@ -184,7 +188,12 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         case PermissionID.accessibility:
             return PluginPermissionState(
                 isGranted: isAccessibilityGranted,
-                footnote: isAccessibilityGranted ? nil : "前往系统设置 → 隐私与安全性 → 辅助功能，授权 MacTools。"
+                footnote: isAccessibilityGranted
+                    ? nil
+                    : localization.string(
+                        "permission.accessibility.footnote",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 辅助功能，授权 MacTools。"
+                    )
             )
         default:
             return PluginPermissionState(isGranted: true, footnote: nil)
@@ -199,7 +208,10 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         } else {
             isAccessibilityGranted = AccessibilityCheck.requestTrust(prompt: true)
             if !isAccessibilityGranted {
-                lastErrorMessage = "模拟鼠标中键需要辅助功能权限，请先前往设置完成授权。"
+                lastErrorMessage = localization.string(
+                    "error.accessibilityRequired",
+                    defaultValue: "模拟鼠标中键需要辅助功能权限，请先前往设置完成授权。"
+                )
             } else {
                 lastErrorMessage = nil
             }
@@ -226,14 +238,14 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
 
     private var panelSubtitle: String {
         if session != nil {
-            return "触控板三指轻点 → 鼠标中键"
+            return localization.string("panel.subtitle.enabledDefault", defaultValue: "触控板三指轻点 → 鼠标中键")
         }
 
         if isAccessibilityGranted {
             return metadata.defaultDescription
         }
 
-        return "启用前需要辅助功能授权"
+        return localization.string("panel.subtitle.needsAccessibility", defaultValue: "启用前需要辅助功能授权")
     }
 
     private func setEnabled(_ enabled: Bool) {
@@ -247,7 +259,10 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
             }
 
             guard isAccessibilityGranted else {
-                lastErrorMessage = "模拟鼠标中键需要辅助功能权限，请先前往设置完成授权。"
+                lastErrorMessage = localization.string(
+                    "error.accessibilityRequired",
+                    defaultValue: "模拟鼠标中键需要辅助功能权限，请先前往设置完成授权。"
+                )
                 requestPermissionGuidance?(PermissionID.accessibility)
                 onStateChange?()
                 return
@@ -268,13 +283,13 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         newSession.requiredFingerCount = requiredFingerCount
         newSession.activate()
         session = newSession
-        logger.info("\(self.requiredFingerCount)指中键已启用")
+        logger.info("middle click enabled requiredFingerCount=\(self.requiredFingerCount, privacy: .public)")
     }
 
     private func stopSession() {
         session?.deactivate()
         session = nil
-        logger.info("三指中键已停用")
+        logger.info("middle click disabled")
     }
 
     // MARK: - AccessibilityPermissionRefreshing

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import IOKit.pwr_mgt
 import OSLog
+import MacToolsPluginKit
 
 @MainActor
 final class KeepAwakeSession {
@@ -11,20 +12,28 @@ final class KeepAwakeSession {
     }
 
     private enum SessionError: LocalizedError {
-        case invalidEndDate
-        case assertionCreationFailed(IOReturn)
+        case invalidEndDate(PluginLocalization)
+        case assertionCreationFailed(IOReturn, PluginLocalization)
 
         var errorDescription: String? {
             switch self {
-            case .invalidEndDate:
-                return "自动停止时间必须晚于当前时间。"
-            case let .assertionCreationFailed(result):
-                return "无法启用阻止休眠，系统返回错误 \(result)。"
+            case let .invalidEndDate(localization):
+                return localization.string(
+                    "error.invalidEndDate",
+                    defaultValue: "自动停止时间必须晚于当前时间。"
+                )
+            case let .assertionCreationFailed(result, localization):
+                return localization.format(
+                    "error.assertionCreationFailedFormat",
+                    defaultValue: "无法启用阻止休眠，系统返回错误 %d。",
+                    result
+                )
             }
         }
     }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "KeepAwakeSession")
+    private let localization: PluginLocalization
     private let onEnd: (EndReason) -> Void
 
     private var assertionID = IOPMAssertionID(0)
@@ -32,7 +41,11 @@ final class KeepAwakeSession {
     private var isStopping = false
     private var isObservingTermination = false
 
-    init(onEnd: @escaping (EndReason) -> Void) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        onEnd: @escaping (EndReason) -> Void
+    ) {
+        self.localization = localization
         self.onEnd = onEnd
     }
 
@@ -90,7 +103,7 @@ final class KeepAwakeSession {
 
         guard result == kIOReturnSuccess else {
             logger.error("failed to create keep-awake assertion result=\(result, privacy: .public)")
-            throw SessionError.assertionCreationFailed(result)
+            throw SessionError.assertionCreationFailed(result, localization)
         }
 
         assertionID = newAssertionID
@@ -107,7 +120,7 @@ final class KeepAwakeSession {
         let remainingDuration = endDate.timeIntervalSinceNow
 
         guard remainingDuration > 0 else {
-            throw SessionError.invalidEndDate
+            throw SessionError.invalidEndDate(localization)
         }
 
         autoStopTask = Task { [weak self] in

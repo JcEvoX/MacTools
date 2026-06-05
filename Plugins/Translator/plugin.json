@@ -2,6 +2,16 @@
   "id": "translator",
   "displayName": "翻译",
   "summary": "划词快捷键翻译",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "翻译",
+      "summary": "划词快捷键翻译"
+    },
+    "en": {
+      "displayName": "Translator",
+      "summary": "Translate selected text with a shortcut."
+    }
+  },
   "version": "0.1.0",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

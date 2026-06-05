@@ -2,6 +2,16 @@
   "id": "quit-apps",
   "displayName": "退出应用",
   "summary": "选择并退出正在运行的应用，或一键退出全部",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "退出应用",
+      "summary": "选择并退出正在运行的应用，或一键退出全部"
+    },
+    "en": {
+      "displayName": "Quit Apps",
+      "summary": "Choose running apps to quit, or quit them all at once."
+    }
+  },
   "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

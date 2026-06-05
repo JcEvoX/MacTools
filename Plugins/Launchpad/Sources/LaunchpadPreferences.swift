@@ -10,7 +10,15 @@ final class LaunchpadPreferences: ObservableObject {
         case compact
 
         var id: String { rawValue }
-        var label: String { self == .fullscreen ? "全屏" : "紧凑窗口" }
+
+        func label(localization: PluginLocalization) -> String {
+            switch self {
+            case .fullscreen:
+                localization.string("windowMode.fullscreen", defaultValue: "全屏")
+            case .compact:
+                localization.string("windowMode.compact", defaultValue: "紧凑窗口")
+            }
+        }
     }
 
     /// Screen corner that summons the launcher when the cursor dwells there. `off` = none.
@@ -22,13 +30,19 @@ final class LaunchpadPreferences: ObservableObject {
         case bottomRight
 
         var id: String { rawValue }
-        var label: String {
+
+        func label(localization: PluginLocalization) -> String {
             switch self {
-            case .off: return "关闭"
-            case .topLeft: return "左上"
-            case .topRight: return "右上"
-            case .bottomLeft: return "左下"
-            case .bottomRight: return "右下"
+            case .off:
+                localization.string("hotCorner.off", defaultValue: "关闭")
+            case .topLeft:
+                localization.string("hotCorner.topLeft", defaultValue: "左上")
+            case .topRight:
+                localization.string("hotCorner.topRight", defaultValue: "右上")
+            case .bottomLeft:
+                localization.string("hotCorner.bottomLeft", defaultValue: "左下")
+            case .bottomRight:
+                localization.string("hotCorner.bottomRight", defaultValue: "右下")
             }
         }
     }

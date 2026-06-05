@@ -1,4 +1,5 @@
 import SwiftUI
+import MacToolsPluginKit
 
 @MainActor
 final class TranslatorPanelModel: ObservableObject {
@@ -9,16 +10,28 @@ final class TranslatorPanelModel: ObservableObject {
 /// 避免每次快照都重建 NSHostingView 而丢失滚动位置与文本选择。
 struct TranslatorPanelHostView: View {
     @ObservedObject var model: TranslatorPanelModel
+    let localization: PluginLocalization
     let onAction: (TranslatorPanelAction) -> Void
 
     var body: some View {
-        TranslatorPanelView(snapshot: model.snapshot, onAction: onAction)
+        TranslatorPanelView(snapshot: model.snapshot, localization: localization, onAction: onAction)
     }
 }
 
 struct TranslatorPanelView: View {
     let snapshot: TranslatorPanelSnapshot
+    let localization: PluginLocalization
     let onAction: (TranslatorPanelAction) -> Void
+
+    init(
+        snapshot: TranslatorPanelSnapshot,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        onAction: @escaping (TranslatorPanelAction) -> Void
+    ) {
+        self.snapshot = snapshot
+        self.localization = localization
+        self.onAction = onAction
+    }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -33,14 +46,22 @@ struct TranslatorPanelView: View {
     private var sourceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Text("原文")
+                Text(localization.string("panel.source.title", defaultValue: "原文"))
                     .font(.headline)
                 Spacer()
-                iconButton("speaker.wave.2", help: "朗读原文", action: .speakSource)
+                iconButton(
+                    "speaker.wave.2",
+                    help: localization.string("panel.source.speakHelp", defaultValue: "朗读原文"),
+                    action: .speakSource
+                )
                     .disabled(sourceTextForDisplay.isEmpty)
-                iconButton("doc.on.doc", help: "复制原文", action: .copySource)
+                iconButton(
+                    "doc.on.doc",
+                    help: localization.string("panel.source.copyHelp", defaultValue: "复制原文"),
+                    action: .copySource
+                )
                     .disabled(sourceTextForDisplay.isEmpty)
-                iconButton("xmark", help: "关闭", action: .close)
+                iconButton("xmark", help: localization.string("panel.closeHelp", defaultValue: "关闭"), action: .close)
             }
 
             ScrollView {
@@ -60,7 +81,8 @@ struct TranslatorPanelView: View {
         HStack(spacing: 12) {
             languagePill(
                 flag: snapshot.languageSelection?.source?.flag ?? "🌐",
-                title: snapshot.languageSelection?.source?.displayName ?? "自动检测"
+                title: snapshot.languageSelection?.source?.displayName(localization: localization)
+                    ?? localization.string("language.automatic", defaultValue: "自动检测")
             )
 
             Image(systemName: "arrow.left.arrow.right")
@@ -70,7 +92,8 @@ struct TranslatorPanelView: View {
 
             languagePill(
                 flag: snapshot.languageSelection?.target.flag ?? "🇨🇳",
-                title: snapshot.languageSelection?.target.displayName ?? "简体中文"
+                title: snapshot.languageSelection?.target.displayName(localization: localization)
+                    ?? TranslatorLanguage.simplifiedChinese.displayName(localization: localization)
             )
         }
     }
@@ -78,19 +101,27 @@ struct TranslatorPanelView: View {
     private var resultCards: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("译文")
+                Text(localization.string("panel.result.title", defaultValue: "译文"))
                     .font(.headline)
                 if case .translating = snapshot.phase {
                     ProgressView()
                         .controlSize(.small)
                 }
                 Spacer()
-                iconButton("speaker.wave.2", help: "朗读译文", action: .speakTranslation)
+                iconButton(
+                    "speaker.wave.2",
+                    help: localization.string("panel.result.speakHelp", defaultValue: "朗读译文"),
+                    action: .speakTranslation
+                )
                     .disabled(resultTextForDisplay.isEmpty)
-                iconButton("doc.on.doc", help: "复制首个译文", action: .copyTranslation)
+                iconButton(
+                    "doc.on.doc",
+                    help: localization.string("panel.result.copyHelp", defaultValue: "复制首个译文"),
+                    action: .copyTranslation
+                )
                     .disabled(resultTextForDisplay.isEmpty)
-                iconButton("arrow.clockwise", help: "重试", action: .retry)
-                iconButton("gearshape", help: "设置", action: .openSettings)
+                iconButton("arrow.clockwise", help: localization.string("panel.retryHelp", defaultValue: "重试"), action: .retry)
+                iconButton("gearshape", help: localization.string("panel.settingsHelp", defaultValue: "设置"), action: .openSettings)
             }
 
             ScrollView {
@@ -121,7 +152,11 @@ struct TranslatorPanelView: View {
                 Spacer()
                 iconButton(
                     "doc.on.doc",
-                    help: "复制\(result.providerTitle)译文",
+                    help: localization.format(
+                        "panel.result.copyProviderHelpFormat",
+                        defaultValue: "复制%@译文",
+                        result.providerTitle
+                    ),
                     action: .copyProviderTranslation(result.id)
                 )
                 .disabled((result.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -184,7 +219,8 @@ struct TranslatorPanelView: View {
         return [
             TranslatorProviderResult(
                 id: "placeholder",
-                providerTitle: snapshot.translation?.providerTitle ?? "OpenAI 翻译",
+                providerTitle: snapshot.translation?.providerTitle
+                    ?? localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
                 phase: placeholderProviderPhase,
                 translation: snapshot.translation,
                 errorMessage: snapshot.errorMessage
@@ -208,13 +244,13 @@ struct TranslatorPanelView: View {
     private var sourcePlaceholder: String {
         switch snapshot.phase {
         case .capturing:
-            return "正在读取选中文本..."
+            return localization.string("panel.sourcePlaceholder.capturing", defaultValue: "正在读取选中文本...")
         case .error(.missingSelection):
-            return "未找到选中文本"
+            return localization.string("panelError.missingSelection", defaultValue: "未找到选中文本")
         case .error(.permissionRequired):
-            return "需要辅助功能授权"
+            return localization.string("panelError.permissionRequired", defaultValue: "需要辅助功能授权")
         default:
-            return "等待选中文本"
+            return localization.string("panel.sourcePlaceholder.idle", defaultValue: "等待选中文本")
         }
     }
 
@@ -226,13 +262,14 @@ struct TranslatorPanelView: View {
 
         switch result.phase {
         case .translating:
-            return "正在翻译..."
+            return localization.string("panel.resultPlaceholder.translating", defaultValue: "正在翻译...")
         case .error:
-            return result.errorMessage ?? "请求失败，请稍后重试"
+            return result.errorMessage
+                ?? localization.string("openAIClient.error.requestFailed", defaultValue: "请求失败，请稍后重试")
         case .waiting:
-            return "等待翻译"
+            return localization.string("panel.resultPlaceholder.idle", defaultValue: "等待翻译")
         case .success:
-            return "响应为空"
+            return localization.string("panel.resultPlaceholder.emptyResponse", defaultValue: "响应为空")
         }
     }
 

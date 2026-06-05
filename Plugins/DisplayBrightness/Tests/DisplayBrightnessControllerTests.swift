@@ -52,7 +52,7 @@ final class DisplayBrightnessControllerTests: XCTestCase {
         XCTAssertEqual(optimisticSnapshot.displays.first?.brightness, 0.8)
         XCTAssertEqual(optimisticSnapshot.displays.first?.isPendingWrite, true)
 
-        await waitUntil {
+        await waitUntil(timeout: 3) {
             controller.snapshot().displays.first?.isPendingWrite == false
         }
 

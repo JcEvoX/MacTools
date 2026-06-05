@@ -14,7 +14,7 @@ private struct DeviceBatteryPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [DeviceBatteryPlugin(context: context)]
+        [DeviceBatteryPlugin(context: context, localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
@@ -34,14 +34,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         static let inputMonitoring = "input-monitoring"
     }
 
-    let metadata = PluginMetadata(
-        id: "device-battery",
-        title: "设备电量",
-        iconName: "battery.75percent",
-        iconTint: Color(nsColor: .systemGreen),
-        order: 20,
-        defaultDescription: "查看 Mac、蓝牙外设和雷柏鼠标电量"
-    )
+    let metadata: PluginMetadata
 
     var descriptor: PluginComponentDescriptor {
         PluginComponentDescriptor(span: componentSpan)
@@ -49,6 +42,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
 
     private let viewModel: DeviceBatteryViewModel
     private let store: DeviceBatteryStore
+    private let localization: PluginLocalization
     private let inputMonitoringAuthorizationStatus: () -> DeviceBatteryInputMonitoringAuthorizationStatus
 
     private var componentSpan: PluginComponentSpan {
@@ -62,17 +56,30 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         )!
     }
 
-    convenience init(context: PluginRuntimeContext) {
-        self.init(context: context, viewModel: DeviceBatteryViewModel())
+    convenience init(
+        context: PluginRuntimeContext,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.init(
+            context: context,
+            viewModel: DeviceBatteryViewModel(
+                sampler: DeviceBatterySampler(localization: localization),
+                rapooMonitor: RapooHIDBatteryMonitor(localization: localization),
+                localization: localization
+            ),
+            localization: localization
+        )
     }
 
     convenience init(
         context: PluginRuntimeContext,
-        viewModel: DeviceBatteryViewModel
+        viewModel: DeviceBatteryViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.init(
             context: context,
             viewModel: viewModel,
+            localization: localization,
             inputMonitoringAuthorizationStatus: Self.currentInputMonitoringAuthorizationStatus
         )
     }
@@ -80,11 +87,24 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     init(
         context: PluginRuntimeContext,
         viewModel: DeviceBatteryViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         inputMonitoringAuthorizationStatus: @escaping () -> DeviceBatteryInputMonitoringAuthorizationStatus
     ) {
         self.viewModel = viewModel
         self.store = DeviceBatteryStore(storage: context.storage)
+        self.localization = localization
         self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
+        self.metadata = PluginMetadata(
+            id: "device-battery",
+            title: localization.string("metadata.title", defaultValue: "设备电量"),
+            iconName: "battery.75percent",
+            iconTint: Color(nsColor: .systemGreen),
+            order: 20,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "查看 Mac、蓝牙外设和雷柏鼠标电量"
+            )
+        )
     }
 
     var onStateChange: (() -> Void)? {
@@ -97,11 +117,11 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
 
     var componentPanelState: PluginComponentState {
         PluginComponentState(
-            subtitle: viewModel.snapshot.subtitle,
+            subtitle: viewModel.snapshot.subtitle(localization: localization),
             isActive: !viewModel.snapshot.visibleItems.isEmpty,
             isEnabled: true,
             isVisible: true,
-            errorMessage: viewModel.snapshot.errorMessage
+            errorMessage: viewModel.snapshot.errorMessage(localization: localization)
         )
     }
 
@@ -110,8 +130,11 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
             PluginPermissionRequirement(
                 id: PermissionID.inputMonitoring,
                 kind: .inputMonitoring,
-                title: "输入监控授权",
-                description: "用于读取已适配厂商 HID 鼠标的电量、充电状态、设备型号和名称。"
+                title: localization.string("permission.inputMonitoring.title", defaultValue: "输入监控授权"),
+                description: localization.string(
+                    "permission.inputMonitoring.description",
+                    defaultValue: "用于读取已适配厂商 HID 鼠标的电量、充电状态、设备型号和名称。"
+                )
             )
         ]
     }
@@ -119,9 +142,15 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     var settingsSections: [PluginSettingsSection] { [] }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: "选择组件面板布局和显示内容。") { [store, viewModel] _ in
+        PluginConfiguration(
+            description: localization.string(
+                "configuration.description",
+                defaultValue: "选择组件面板布局和显示内容。"
+            )
+        ) { [store, viewModel, localization] _ in
             DeviceBatterySettingsView(
                 store: store,
+                localization: localization,
                 onChange: {
                     viewModel.refresh(
                         includeInternalBattery: store.showInternalBattery,
@@ -161,6 +190,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
             DeviceBatteryComponentView(
                 viewModel: viewModel,
                 store: store,
+                localization: localization,
                 isPanelVisible: context.isPanelVisible,
                 openSettings: openInputMonitoringSettings
             )
@@ -198,7 +228,10 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
            authorizationStatus != .granted {
             return PluginPermissionState(
                 isGranted: false,
-                footnote: "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
+                footnote: localization.string(
+                    "permission.inputMonitoring.openSettingsFootnote",
+                    defaultValue: "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
+                )
             )
         }
 
@@ -219,22 +252,42 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     private var inputMonitoringGrantedFootnote: String {
         switch viewModel.snapshot.rapooState {
         case .connected:
-            return "已允许 MacTools 使用输入监控，并已读取到厂商 HID 鼠标信息。"
+            return localization.string(
+                "permission.inputMonitoring.granted.connected",
+                defaultValue: "已允许 MacTools 使用输入监控，并已读取到厂商 HID 鼠标信息。"
+            )
         case .failed(let message):
-            return "已允许 MacTools 使用输入监控。最近读取厂商 HID 鼠标失败：\(message)"
+            return localization.format(
+                "permission.inputMonitoring.granted.failed",
+                defaultValue: "已允许 MacTools 使用输入监控。最近读取厂商 HID 鼠标失败：%@",
+                message
+            )
         case .idle, .scanning, .waitingForReport, .noDevice, .permissionDenied:
-            return "已允许 MacTools 使用输入监控，可读取已适配厂商 HID 鼠标信息。"
+            return localization.string(
+                "permission.inputMonitoring.granted.default",
+                defaultValue: "已允许 MacTools 使用输入监控，可读取已适配厂商 HID 鼠标信息。"
+            )
         }
     }
 
     private var inputMonitoringUnauthorizedFootnote: String {
         switch viewModel.snapshot.rapooState {
         case .permissionDenied:
-            return "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
+            return localization.string(
+                "permission.inputMonitoring.openSettingsFootnote",
+                defaultValue: "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
+            )
         case .failed(let message):
-            return "授权后可读取厂商 HID 鼠标信息。最近读取失败：\(message)"
+            return localization.format(
+                "permission.inputMonitoring.unauthorized.failed",
+                defaultValue: "授权后可读取厂商 HID 鼠标信息。最近读取失败：%@",
+                message
+            )
         case .idle, .scanning, .waitingForReport, .connected, .noDevice:
-            return "授权后可读取厂商 HID 鼠标信息；未授权不影响 Mac 内置电池、系统蓝牙设备和 Apple 外设电量。"
+            return localization.string(
+                "permission.inputMonitoring.unauthorized.default",
+                defaultValue: "授权后可读取厂商 HID 鼠标信息；未授权不影响 Mac 内置电池、系统蓝牙设备和 Apple 外设电量。"
+            )
         }
     }
 

@@ -2,6 +2,16 @@
   "id": "appearance",
   "displayName": "深色模式",
   "summary": "切换系统亮色与深色外观",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "深色模式",
+      "summary": "切换系统亮色与深色外观"
+    },
+    "en": {
+      "displayName": "Dark Mode",
+      "summary": "Switch the system between light and dark appearance."
+    }
+  },
   "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

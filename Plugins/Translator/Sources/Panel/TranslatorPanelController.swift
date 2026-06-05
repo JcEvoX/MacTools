@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 @MainActor
@@ -9,8 +10,13 @@ final class TranslatorPanelController: TranslatorPanelControlling {
     private var panelWindow: TranslatorPanelWindow?
     private var lastFrame: NSRect?
     private let model = TranslatorPanelModel()
+    private let localization: PluginLocalization
 
     var onAction: ((TranslatorPanelAction) -> Void)?
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     func show(snapshot: TranslatorPanelSnapshot) {
         model.snapshot = snapshot
@@ -53,7 +59,7 @@ final class TranslatorPanelController: TranslatorPanelControlling {
         effectView.state = .active
         effectView.maskImage = Self.roundedMaskImage(size: Self.panelSize, cornerRadius: 18)
 
-        let rootView = TranslatorPanelHostView(model: model) { [weak self] action in
+        let rootView = TranslatorPanelHostView(model: model, localization: localization) { [weak self] action in
             self?.onAction?(action)
         }
         let hostingView = NSHostingView(rootView: rootView)

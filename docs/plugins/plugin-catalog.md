@@ -20,6 +20,16 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
       "id": "com.ggbond.mactools.demo",
       "displayName": "Demo",
       "summary": "示例插件",
+      "localizedMetadata": {
+        "zh-Hans": {
+          "displayName": "示例",
+          "summary": "示例插件"
+        },
+        "en": {
+          "displayName": "Demo",
+          "summary": "Demo plugin"
+        }
+      },
       "version": "1.0.0",
       "minimumHostVersion": "0.15.2",
       "pluginKitVersion": 2,
@@ -46,6 +56,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   }
 }
 ```
+
+`localizedMetadata` is copied from each plugin manifest and is used by the marketplace before the plugin bundle is loaded. `displayName` and `summary` remain required fallbacks for older hosts and incomplete translations.
 
 Release catalogs must include an Ed25519 signature. Debug local catalogs may omit `signature`, but they still go through package checksum, manifest, staging, and same-team code signature validation.
 

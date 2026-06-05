@@ -45,13 +45,13 @@ struct PluginAutomaticUpdateStatus: Equatable {
         case .idle:
             return ""
         case .checking:
-            return "正在检查插件更新"
+            return AppL10n.plugins("plugin.autoUpdate.title.checking", defaultValue: "正在检查插件更新")
         case .updating:
-            return "正在更新插件"
+            return AppL10n.plugins("plugin.autoUpdate.title.updating", defaultValue: "正在更新插件")
         case .completed:
-            return "插件已更新"
+            return AppL10n.plugins("plugin.autoUpdate.title.completed", defaultValue: "插件已更新")
         case .failed:
-            return "插件自动更新失败"
+            return AppL10n.plugins("plugin.autoUpdate.title.failed", defaultValue: "插件自动更新失败")
         }
     }
 
@@ -64,13 +64,19 @@ struct PluginAutomaticUpdateStatus: Equatable {
         case .idle:
             return ""
         case .checking:
-            return "新版首次启动时会先检查已安装插件。"
+            return AppL10n.plugins("plugin.autoUpdate.detail.checking", defaultValue: "新版首次启动时会先检查已安装插件。")
         case .updating:
-            return "正在更新 \(pluginIDs.count) 个已安装插件，完成后会继续加载。"
+            return AppL10n.pluginsFormat(
+                "plugin.autoUpdate.detail.updatingFormat",
+                defaultValue: "正在更新 %d 个已安装插件，完成后会继续加载。",
+                pluginIDs.count
+            )
         case .completed:
-            return pluginIDs.isEmpty ? "已是最新版本。" : "已更新 \(pluginIDs.count) 个插件。"
+            return pluginIDs.isEmpty
+                ? AppL10n.plugins("plugin.autoUpdate.detail.noUpdates", defaultValue: "已是最新版本。")
+                : AppL10n.pluginsFormat("plugin.autoUpdate.detail.completedFormat", defaultValue: "已更新 %d 个插件。", pluginIDs.count)
         case .failed:
-            return "稍后可在此页面重试。"
+            return AppL10n.plugins("plugin.autoUpdate.detail.failed", defaultValue: "稍后可在此页面重试。")
         }
     }
 }
@@ -450,7 +456,7 @@ final class PluginHost: ObservableObject {
 
     func setShortcutBindingAndReturnError(_ binding: ShortcutBinding, for shortcutID: String) -> String? {
         guard let descriptor = shortcutDescriptor(for: shortcutID) else {
-            return "快捷键不可用。"
+            return AppL10n.plugins("plugin.shortcut.unavailable", defaultValue: "快捷键不可用。")
         }
 
         return applyShortcutCustomization(.custom(binding), for: descriptor)
@@ -771,7 +777,7 @@ final class PluginHost: ObservableObject {
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                 phase: .completed,
                 pluginIDs: [],
-                message: "已安装插件都是最新版本。"
+                message: AppL10n.plugins("plugin.autoUpdate.message.noInstalledUpdates", defaultValue: "已安装插件都是最新版本。")
             )
             loadDynamicPluginsIfNeeded()
             return
@@ -781,7 +787,11 @@ final class PluginHost: ObservableObject {
         automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
             phase: .updating,
             pluginIDs: updatePlan.updateableInstalledPluginIDs,
-            message: "正在更新 \(updatePlan.updateableInstalledPluginIDs.count) 个已安装插件。"
+            message: AppL10n.pluginsFormat(
+                "plugin.autoUpdate.message.updatingInstalledFormat",
+                defaultValue: "正在更新 %d 个已安装插件。",
+                updatePlan.updateableInstalledPluginIDs.count
+            )
         )
         syncPluginManagementState()
 
@@ -791,7 +801,11 @@ final class PluginHost: ObservableObject {
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                 phase: .completed,
                 pluginIDs: updatePlan.updateableInstalledPluginIDs,
-                message: "已更新 \(updatePlan.updateableInstalledPluginIDs.count) 个插件。"
+                message: AppL10n.pluginsFormat(
+                    "plugin.autoUpdate.message.updatedInstalledFormat",
+                    defaultValue: "已更新 %d 个插件。",
+                    updatePlan.updateableInstalledPluginIDs.count
+                )
             )
         } catch {
             syncPluginManagementState()
@@ -1160,7 +1174,9 @@ final class PluginHost: ObservableObject {
                     title: requirement.title,
                     description: requirement.description,
                     iconSystemImage: permissionIconName(for: requirement.kind),
-                    statusText: state.statusText ?? (state.isGranted ? "已授权" : "未授权"),
+                    statusText: state.statusText ?? (state.isGranted
+                        ? AppL10n.plugins("plugin.permission.granted", defaultValue: "已授权")
+                        : AppL10n.plugins("plugin.permission.notGranted", defaultValue: "未授权")),
                     statusSystemImage: state.statusSystemImage ?? (state.isGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"),
                     statusTone: state.statusTone ?? (state.isGranted ? .positive : .caution),
                     footnote: state.footnote,
@@ -1731,15 +1747,23 @@ final class PluginHost: ObservableObject {
     ) -> String {
         switch kind {
         case .accessibility:
-            return isGranted ? "检查授权状态" : "前往授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
         case .inputMonitoring:
-            return isGranted ? "检查授权状态" : "前往授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
         case .calendarFullAccess:
-            return isGranted ? "检查授权状态" : "请求授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.requestAuthorization", defaultValue: "请求授权")
         case .automation:
-            return "打开设置"
+            return AppL10n.plugins("plugin.permission.openSettings", defaultValue: "打开设置")
         case .screenRecording:
-            return isGranted ? "检查授权状态" : "前往授权"
+            return isGranted
+                ? AppL10n.plugins("plugin.permission.checkStatus", defaultValue: "检查授权状态")
+                : AppL10n.plugins("plugin.permission.openAuthorization", defaultValue: "前往授权")
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct TranslatorLanguageSelection: Equatable, Sendable {
     var source: TranslatorLanguage?
@@ -9,7 +10,12 @@ struct TranslatorLanguageSelection: Equatable, Sendable {
     }
 
     var sourceDisplayName: String {
-        source?.displayName ?? "自动检测"
+        sourceDisplayName()
+    }
+
+    func sourceDisplayName(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
+        source?.displayName(localization: localization)
+            ?? localization.string("language.automatic", defaultValue: "自动检测")
     }
 }
 

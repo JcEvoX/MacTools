@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import MacToolsPluginKit
 import Security
 
 protocol TranslatorSecretStoring: Sendable {
@@ -193,11 +194,15 @@ enum OpenAICompatibleSecretStoreError: Error, Equatable, Sendable {
 
 extension OpenAICompatibleSecretStoreError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .unexpectedItemData:
-            return "API Key 数据无效。"
+            return localization.string("secretStore.error.unexpectedItemData", defaultValue: "API Key 数据无效。")
         case .security:
-            return "无法访问钥匙串。"
+            return localization.string("secretStore.error.security", defaultValue: "无法访问钥匙串。")
         }
     }
 }

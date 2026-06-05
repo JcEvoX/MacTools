@@ -13,6 +13,7 @@ private struct CalendarPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
+        let localization = PluginLocalization(bundle: context.resourceBundle)
         let resourceContext = PluginRuntimeContext(
             pluginID: context.pluginID,
             resourceBundle: context.resourceBundle,
@@ -22,7 +23,7 @@ private struct CalendarPluginProvider: PluginProvider {
             cacheDirectory: context.cacheDirectory,
             temporaryDirectory: context.temporaryDirectory
         )
-        return [CalendarPlugin(context: resourceContext)]
+        return [CalendarPlugin(context: resourceContext, localization: localization)]
     }
 }
 
@@ -33,14 +34,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         static let calendarAutomation = "calendar-automation"
     }
 
-    let metadata = PluginMetadata(
-        id: "calendar",
-        title: "日历",
-        iconName: "calendar",
-        iconTint: Color(nsColor: .systemIndigo),
-        order: 15,
-        defaultDescription: "查看日期、节假日和系统日程"
-    )
+    let metadata: PluginMetadata
 
     let descriptor = PluginComponentDescriptor(
         span: PluginComponentSpan(
@@ -51,16 +45,30 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
 
     private let context: PluginRuntimeContext
     private let eventService: CalendarEventServicing
+    private let localization: PluginLocalization
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(
             pluginID: "calendar",
             resourceSubdirectory: "CalendarPluginResources"
         ),
-        eventService: CalendarEventServicing = CalendarEventService()
+        eventService: CalendarEventServicing? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.context = context
-        self.eventService = eventService
+        self.localization = localization
+        self.eventService = eventService ?? CalendarEventService(localization: localization)
+        self.metadata = PluginMetadata(
+            id: "calendar",
+            title: localization.string("metadata.title", defaultValue: "日历"),
+            iconName: "calendar",
+            iconTint: Color(nsColor: .systemIndigo),
+            order: 15,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "查看日期、节假日和系统日程"
+            )
+        )
     }
 
     var onStateChange: (() -> Void)?
@@ -82,14 +90,20 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
             PluginPermissionRequirement(
                 id: PermissionID.calendarEvents,
                 kind: .calendarFullAccess,
-                title: "系统日历事件",
-                description: "读取系统日历事件，用于在日历组件中显示当天日程。"
+                title: localization.string("permission.events.title", defaultValue: "系统日历事件"),
+                description: localization.string(
+                    "permission.events.description",
+                    defaultValue: "读取系统日历事件，用于在日历组件中显示当天日程。"
+                )
             ),
             PluginPermissionRequirement(
                 id: PermissionID.calendarAutomation,
                 kind: .automation,
-                title: "定位系统日历",
-                description: "点击日期时需要控制系统日历应用，打开并定位到对应日期。"
+                title: localization.string("permission.automation.title", defaultValue: "定位系统日历"),
+                description: localization.string(
+                    "permission.automation.description",
+                    defaultValue: "点击日期时需要控制系统日历应用，打开并定位到对应日期。"
+                )
             )
         ]
     }
@@ -102,8 +116,10 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
                 context: context,
                 viewModel: CalendarComponentViewModel(
                     eventService: eventService,
-                    holidayProvider: .bundled(context: self.context)
-                )
+                    holidayProvider: .bundled(context: self.context),
+                    localization: localization
+                ),
+                localization: localization
             )
         )
     }
@@ -117,8 +133,11 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         case PermissionID.calendarAutomation:
             return PluginPermissionState(
                 isGranted: false,
-                footnote: "首次定位系统日历时 macOS 会请求控制“日历”的权限；若曾拒绝，请在系统设置的自动化中允许。",
-                statusText: "按需确认",
+                footnote: localization.string(
+                    "permission.automation.footnote",
+                    defaultValue: "首次定位系统日历时 macOS 会请求控制“日历”的权限；若曾拒绝，请在系统设置的自动化中允许。"
+                ),
+                statusText: localization.string("permission.automation.status", defaultValue: "按需确认"),
                 statusSystemImage: "cursorarrow.click.2",
                 statusTone: .neutral
             )
@@ -147,12 +166,19 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         case .notDetermined:
             return PluginPermissionState(
                 isGranted: false,
-                footnote: "点击请求授权后，系统会询问是否允许读取日历事件。"
+                footnote: localization.string(
+                    "permission.events.notDetermined",
+                    defaultValue: "点击请求授权后，系统会询问是否允许读取日历事件。"
+                )
             )
         case let .denied(message):
             return PluginPermissionState(
                 isGranted: false,
-                footnote: "\(message)。可在系统设置的日历隐私项中重新允许。"
+                footnote: localization.format(
+                    "permission.events.denied",
+                    defaultValue: "%@。可在系统设置的日历隐私项中重新允许。",
+                    message
+                )
             )
         }
     }

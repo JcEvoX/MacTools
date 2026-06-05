@@ -28,11 +28,14 @@ struct TranslatorProviderProfile: Codable, Equatable, Identifiable, Sendable {
         self.promptTemplate = promptTemplate
     }
 
-    static func defaultProfile() -> TranslatorProviderProfile {
+    static func defaultProfile(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> TranslatorProviderProfile {
         TranslatorProviderProfile(
             id: defaultID,
             name: defaultName,
-            isEnabled: true
+            isEnabled: true,
+            promptTemplate: OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
         )
     }
 
@@ -76,11 +79,15 @@ enum TranslatorProviderProfileValidationError: Error, Equatable, Sendable {
 
 extension TranslatorProviderProfileValidationError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .blankName:
-            return "服务名称不能为空。"
+            return localization.string("providerProfile.error.blankName", defaultValue: "服务名称不能为空。")
         case let .configuration(error):
-            return error.localizedDescription
+            return error.errorDescription(localization: localization)
         }
     }
 }
@@ -88,9 +95,14 @@ extension TranslatorProviderProfileValidationError: LocalizedError {
 @MainActor
 struct TranslatorProviderProfileStore {
     let storage: PluginStorage
+    let localization: PluginLocalization
 
-    init(storage: PluginStorage) {
+    init(
+        storage: PluginStorage,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.storage = storage
+        self.localization = localization
     }
 
     func loadProfiles() -> [TranslatorProviderProfile] {
@@ -119,7 +131,11 @@ struct TranslatorProviderProfileStore {
             name = "OpenAI \(index)"
         }
 
-        return TranslatorProviderProfile(name: name, isEnabled: false)
+        return TranslatorProviderProfile(
+            name: name,
+            isEnabled: false,
+            promptTemplate: OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
+        )
     }
 
     private func legacyProfile() -> TranslatorProviderProfile {
@@ -132,7 +148,7 @@ struct TranslatorProviderProfileStore {
             model: storage.string(forKey: TranslatorConstants.StorageKey.openAIModel)
                 ?? OpenAICompatibleConfiguration.defaultModel,
             promptTemplate: storage.string(forKey: TranslatorConstants.StorageKey.openAIPromptTemplate)
-                ?? OpenAICompatibleConfiguration.defaultPromptTemplate
+                ?? OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
         )
     }
 }

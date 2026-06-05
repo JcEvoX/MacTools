@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum TranslatorPanelPhase: Equatable, Sendable {
     case idle
@@ -15,13 +16,17 @@ enum TranslatorPanelError: Equatable, Sendable {
     case requestFailed(String)
 
     var message: String {
+        message()
+    }
+
+    func message(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .missingSelection:
-            return "未找到选中文本"
+            return localization.string("panelError.missingSelection", defaultValue: "未找到选中文本")
         case .missingConfiguration:
-            return "请先配置 OpenAI"
+            return localization.string("panelError.missingConfiguration", defaultValue: "请先配置 OpenAI")
         case .permissionRequired:
-            return "需要辅助功能授权"
+            return localization.string("panelError.permissionRequired", defaultValue: "需要辅助功能授权")
         case let .requestFailed(message):
             return message
         }
@@ -111,12 +116,18 @@ enum TranslatorProviderBuildResult {
     case missing(message: String)
 
     var resolvedProviders: [ResolvedTranslationProvider]? {
+        resolvedProviders()
+    }
+
+    func resolvedProviders(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> [ResolvedTranslationProvider]? {
         switch self {
         case let .provider(provider):
             return [
                 ResolvedTranslationProvider(
                     id: "default",
-                    title: "OpenAI 翻译",
+                    title: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
                     provider: provider
                 ),
             ]
@@ -128,12 +139,18 @@ enum TranslatorProviderBuildResult {
     }
 
     var waitingProviderResults: [TranslatorProviderResult] {
+        waitingProviderResults()
+    }
+
+    func waitingProviderResults(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> [TranslatorProviderResult] {
         switch self {
         case .provider:
             return [
                 TranslatorProviderResult(
                     id: "default",
-                    providerTitle: "OpenAI 翻译",
+                    providerTitle: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
                     phase: .waiting,
                     translation: nil,
                     errorMessage: nil

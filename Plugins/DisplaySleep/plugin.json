@@ -2,6 +2,16 @@
   "id": "display-sleep",
   "displayName": "显示器休眠",
   "summary": "一键让所有显示器立即进入休眠",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "显示器休眠",
+      "summary": "一键让所有显示器立即进入休眠"
+    },
+    "en": {
+      "displayName": "Display Sleep",
+      "summary": "Put all displays to sleep immediately."
+    }
+  },
   "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,

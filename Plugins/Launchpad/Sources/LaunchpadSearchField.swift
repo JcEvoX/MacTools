@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 /// A real `NSSearchField` bridged into SwiftUI.
@@ -11,6 +12,7 @@ import SwiftUI
 /// characters flow into the field naturally.
 struct LaunchpadSearchField: NSViewRepresentable {
     @Binding var text: String
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
     var onMove: (MoveDirection) -> Void
     var onLaunch: () -> Void
     var onCancel: () -> Void
@@ -22,7 +24,7 @@ struct LaunchpadSearchField: NSViewRepresentable {
         field.delegate = context.coordinator
         field.focusRingType = .none
         field.bezelStyle = .roundedBezel
-        field.placeholderString = "搜索应用"
+        field.placeholderString = localization.string("search.placeholder", defaultValue: "搜索应用")
         field.sendsSearchStringImmediately = true
         field.sendsWholeSearchString = false
         // Focus so typing/IME works immediately while the grid stays visible.
@@ -32,6 +34,7 @@ struct LaunchpadSearchField: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSSearchField, context: Context) {
         context.coordinator.parent = self
+        nsView.placeholderString = localization.string("search.placeholder", defaultValue: "搜索应用")
         if nsView.stringValue != text {
             nsView.stringValue = text
         }

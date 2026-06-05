@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum TranslatorLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
     case simplifiedChinese = "zh-Hans"
@@ -16,29 +17,33 @@ enum TranslatorLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
     var id: String { rawValue }
 
     var displayName: String {
+        displayName()
+    }
+
+    func displayName(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .simplifiedChinese:
-            return "简体中文"
+            return localization.string("language.simplifiedChinese", defaultValue: "简体中文")
         case .traditionalChinese:
-            return "繁體中文"
+            return localization.string("language.traditionalChinese", defaultValue: "繁體中文")
         case .english:
-            return "英语"
+            return localization.string("language.english", defaultValue: "英语")
         case .japanese:
-            return "日语"
+            return localization.string("language.japanese", defaultValue: "日语")
         case .korean:
-            return "韩语"
+            return localization.string("language.korean", defaultValue: "韩语")
         case .french:
-            return "法语"
+            return localization.string("language.french", defaultValue: "法语")
         case .german:
-            return "德语"
+            return localization.string("language.german", defaultValue: "德语")
         case .spanish:
-            return "西班牙语"
+            return localization.string("language.spanish", defaultValue: "西班牙语")
         case .portuguese:
-            return "葡萄牙语"
+            return localization.string("language.portuguese", defaultValue: "葡萄牙语")
         case .italian:
-            return "意大利语"
+            return localization.string("language.italian", defaultValue: "意大利语")
         case .russian:
-            return "俄语"
+            return localization.string("language.russian", defaultValue: "俄语")
         }
     }
 

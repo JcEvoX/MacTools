@@ -1,15 +1,19 @@
 import Foundation
+import MacToolsPluginKit
 
 struct OpenAICompatibleClient: Sendable {
     private let httpClient: any TranslatorHTTPClient
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         httpClient: any TranslatorHTTPClient = URLSession.shared,
-        timeout: TimeInterval = 30
+        timeout: TimeInterval = 30,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.httpClient = httpClient
         self.timeout = timeout
+        self.localization = localization
     }
 
     func translate(
@@ -71,7 +75,7 @@ struct OpenAICompatibleClient: Sendable {
         let content = try decodeContent(from: data)
 
         return TranslationResult(
-            providerTitle: "OpenAI 翻译",
+            providerTitle: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
             text: content,
             sourceText: text,
             languageSelection: languageSelection
@@ -110,15 +114,19 @@ enum OpenAICompatibleClientError: Error, Equatable, Sendable {
 
 extension OpenAICompatibleClientError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .invalidResponse, .requestFailed:
-            return "请求失败，请稍后重试"
+            return localization.string("openAIClient.error.requestFailed", defaultValue: "请求失败，请稍后重试")
         case .unauthorized:
-            return "API Key 无效或无权限"
+            return localization.string("openAIClient.error.unauthorized", defaultValue: "API Key 无效或无权限")
         case .emptyResponse:
-            return "响应为空"
+            return localization.string("openAIClient.error.emptyResponse", defaultValue: "响应为空")
         case .parseFailed:
-            return "无法解析翻译结果"
+            return localization.string("openAIClient.error.parseFailed", defaultValue: "无法解析翻译结果")
         }
     }
 }

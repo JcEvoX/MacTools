@@ -2,6 +2,16 @@
   "id": "night-shift",
   "displayName": "夜览",
   "summary": "降低蓝光，使屏幕颜色更暖",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "夜览",
+      "summary": "降低蓝光，使屏幕颜色更暖"
+    },
+    "en": {
+      "displayName": "Night Shift",
+      "summary": "Reduce blue light with warmer screen colors."
+    }
+  },
   "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
