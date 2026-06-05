@@ -1,0 +1,122 @@
+import Combine
+import Foundation
+import OSLog
+import MacToolsPluginKit
+
+/// Owns the persisted custom layout and republishes it so the (otherwise non-reactive)
+/// overlay grid re-renders on change.
+///
+/// `ObservableObject` is load-bearing: the overlay grid's only other reactive source is the
+/// catalog, and it does NOT observe `onStateChange`, so the grid must inject this store as
+/// `@ObservedObject` to ever see a reorder (design §5.5 / risk R1). Persistence mirrors
+/// `AppHotkeyStore`'s `JSONEncoder` + `data(forKey:)` write-through; decode failures fall
+/// back to alphabetical (`nil`) and never crash.
+@MainActor
+final class LaunchpadLayoutStore: ObservableObject {
+    private enum Keys {
+        static let customLayout = "customLayout"
+    }
+
+    /// `nil` == no custom layout == alphabetical order. Non-nil == custom-sort mode.
+    @Published private(set) var layout: LaunchpadLayout?
+
+    private let storage: PluginStorage
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "LaunchpadLayoutStore"
+    )
+
+    init(storage: PluginStorage) {
+        self.storage = storage
+        self.layout = Self.loadLayout(from: storage, decoder: decoder, logger: logger)
+    }
+
+    /// On the first user reorder, freeze the current alphabetical sequence into an all-`.app`
+    /// layout so subsequent moves are relative to a stable snapshot. No-op once a layout
+    /// exists (design §5.3). The caller must pass the frozen drag-session snapshot, NOT a live
+    /// `filtered` read, to avoid racing an async catalog reload.
+    func materializeIfNeeded(from apps: [LaunchpadAppItem]) {
+        guard layout == nil else { return }
+        let nodes = apps.map { LaunchpadLayoutNode.app(LaunchpadAppRef(id: $0.id, name: $0.name)) }
+        setLayout(LaunchpadLayout(nodes: nodes))
+    }
+
+    /// Move `id` to immediately before `targetID` in the root node order.
+    func move(id: String, before targetID: String) {
+        reorder(id: id, relativeTo: targetID, placeAfter: false)
+    }
+
+    /// Move `id` to immediately after `targetID` in the root node order.
+    func move(id: String, after targetID: String) {
+        reorder(id: id, relativeTo: targetID, placeAfter: true)
+    }
+
+    /// Drop the custom layout entirely → back to alphabetical (design §5.4). No-op (and no
+    /// write) when already alphabetical.
+    func resetToAlphabetical() {
+        guard layout != nil else { return }
+        layout = nil
+        storage.removeObject(forKey: Keys.customLayout)
+    }
+
+    // MARK: - Loading
+
+    /// Decode the stored layout, tolerating absence and corruption.
+    /// Missing key → `nil` (alphabetical — the zero-migration default for upgrading users).
+    /// Decode failure or `version < currentVersion` → `nil` + a warning, never a crash.
+    private static func loadLayout(
+        from storage: PluginStorage,
+        decoder: JSONDecoder,
+        logger: Logger
+    ) -> LaunchpadLayout? {
+        guard let data = storage.data(forKey: Keys.customLayout) else { return nil }
+        guard let decoded = try? decoder.decode(LaunchpadLayout.self, from: data) else {
+            logger.warning("Failed to decode custom layout; falling back to alphabetical order.")
+            return nil
+        }
+        guard decoded.version >= LaunchpadLayout.currentVersion else {
+            logger.warning(
+                "Custom layout version \(decoded.version, privacy: .public) below \(LaunchpadLayout.currentVersion, privacy: .public); falling back to alphabetical order."
+            )
+            return nil
+        }
+        return decoded
+    }
+
+    // MARK: - Mutation
+
+    private func reorder(id: String, relativeTo targetID: String, placeAfter: Bool) {
+        guard let current = layout,
+              id != targetID,
+              let sourceIndex = current.nodes.firstIndex(where: { $0.rootID == id })
+        else { return }
+
+        var nodes = current.nodes
+        let moved = nodes.remove(at: sourceIndex)
+        if let targetIndex = nodes.firstIndex(where: { $0.rootID == targetID }) {
+            nodes.insert(moved, at: placeAfter ? targetIndex + 1 : targetIndex)
+        } else {
+            // Target not in the layout yet (e.g. a freshly-installed app rendered at the tail
+            // but not yet persisted) → fall back to appending at the end.
+            nodes.append(moved)
+        }
+
+        guard nodes != current.nodes else { return }   // dropping in place writes nothing (R8)
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    private func setLayout(_ newLayout: LaunchpadLayout) {
+        layout = newLayout
+        persist(newLayout)
+    }
+
+    private func persist(_ layout: LaunchpadLayout) {
+        guard let data = try? encoder.encode(layout) else {
+            logger.error("Failed to encode custom layout; skipping persist.")
+            return
+        }
+        storage.set(data, forKey: Keys.customLayout)
+    }
+}
