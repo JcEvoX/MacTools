@@ -39,6 +39,15 @@ enum LaunchpadLayoutNode: Codable, Hashable {
         }
     }
 
+    /// Every app id this node references (the app id, or a folder's children ids). Used to
+    /// tell which visible apps are already captured in the layout.
+    var appIDs: [String] {
+        switch self {
+        case .app(let ref): return [ref.id]
+        case .folder(_, _, let children): return children.map(\.id)
+        }
+    }
+
     // Hand-written, kind-discriminated coding (not Swift's automatic enum encoding) so new
     // fields or kinds can be added compatibly later.
     private enum Kind: String, Codable {

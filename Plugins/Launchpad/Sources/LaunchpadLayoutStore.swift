@@ -39,8 +39,25 @@ final class LaunchpadLayoutStore: ObservableObject {
     /// `filtered` read, to avoid racing an async catalog reload.
     func materializeIfNeeded(from apps: [LaunchpadAppItem]) {
         guard layout == nil else { return }
-        let nodes = apps.map { LaunchpadLayoutNode.app(LaunchpadAppRef(id: $0.id, name: $0.name)) }
-        setLayout(LaunchpadLayout(nodes: nodes))
+        setLayout(LaunchpadLayout(nodes: apps.map(Self.node(for:))))
+    }
+
+    /// Ensure the layout exists and references every currently-visible app, so a following
+    /// `move` can target any of them — including reconcile-appended new installs that aren't
+    /// yet in the layout (Codex P2). Materializes the full snapshot when none exists;
+    /// otherwise appends the missing visible apps at the tail, preserving existing order and
+    /// any offscreen/orphan entries (the tolerance window).
+    func captureVisibleOrder(_ apps: [LaunchpadAppItem]) {
+        materializeIfNeeded(from: apps)
+        guard let current = layout else { return }
+        let present = Set(current.nodes.flatMap(\.appIDs))
+        let missing = apps.filter { !present.contains($0.id) }
+        guard !missing.isEmpty else { return }
+        setLayout(LaunchpadLayout(version: current.version, nodes: current.nodes + missing.map(Self.node(for:))))
+    }
+
+    private static func node(for app: LaunchpadAppItem) -> LaunchpadLayoutNode {
+        .app(LaunchpadAppRef(id: app.id, name: app.name))
     }
 
     /// Move `id` to immediately before `targetID` in the root node order.

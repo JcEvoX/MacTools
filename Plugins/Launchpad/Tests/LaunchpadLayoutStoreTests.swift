@@ -65,6 +65,39 @@ final class LaunchpadLayoutStoreTests: XCTestCase {
         XCTAssertEqual(ids(store.layout), [a, b, c], "已有 layout 时 materialize 不再覆盖")
     }
 
+    // MARK: - captureVisibleOrder（Codex P2：新装 app 在旧布局下可被重排）
+
+    func testCaptureVisibleOrderMaterializesWhenNil() {
+        let store = LaunchpadLayoutStore(storage: FakePluginStorage())
+        store.captureVisibleOrder(sampleApps())
+        XCTAssertEqual(ids(store.layout), [a, b, c])
+    }
+
+    func testCaptureVisibleOrderAppendsMissingVisibleApps() {
+        let store = LaunchpadLayoutStore(storage: FakePluginStorage())
+        store.materializeIfNeeded(from: [app(a, "Alpha"), app(b, "Bravo")])
+        store.captureVisibleOrder([app(a, "Alpha"), app(b, "Bravo"), app(c, "Charlie")])
+        XCTAssertEqual(ids(store.layout), [a, b, c], "缺失的可见 app 追加到布局末尾")
+    }
+
+    func testCaptureVisibleOrderNoMissingDoesNotWrite() {
+        let storage = FakePluginStorage()
+        let store = LaunchpadLayoutStore(storage: storage)
+        store.materializeIfNeeded(from: sampleApps())
+        let writes = storage.writeCount
+        store.captureVisibleOrder(sampleApps())
+        XCTAssertEqual(storage.writeCount, writes, "无缺失不重复写盘")
+    }
+
+    func testAppendedAppBecomesMovableAfterCapture() {
+        let store = LaunchpadLayoutStore(storage: FakePluginStorage())
+        store.materializeIfNeeded(from: [app(a, "Alpha"), app(b, "Bravo")])
+        // 旧布局里直接 move 新装的 c 会被忽略；capture 后才能重排（Codex P2 修复）
+        store.captureVisibleOrder([app(a, "Alpha"), app(b, "Bravo"), app(c, "Charlie")])
+        store.move(id: c, before: a)
+        XCTAssertEqual(ids(store.layout), [c, a, b])
+    }
+
     // MARK: - Move
 
     func testMoveBefore() {

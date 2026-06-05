@@ -41,10 +41,13 @@ struct LaunchpadGridView: View {
     @State private var sessionHidden: Set<String> = []
     @State private var columnCount = 7
     @State private var rowCount = 5
+    /// Visible order frozen at drag start, so a drop reorders against exactly what the user
+    /// dragged — even if an async catalog reload lands mid-drag (design §5.3 / Codex P2).
+    @State private var dragOrderSnapshot: [LaunchpadAppItem]?
 
+    // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
     private let cellWidth: CGFloat = 116
     private let cellHeight: CGFloat = 124
-    private let iconSide: CGFloat = 72
     private let columnSpacing: CGFloat = 8
     private let rowSpacing: CGFloat = 16
 
@@ -156,16 +159,10 @@ struct LaunchpadGridView: View {
                 }
                 .frame(width: geo.size.width, alignment: .leading)
                 .offset(x: -CGFloat(visiblePage) * geo.size.width)
-                .animation(.easeInOut(duration: 0.22), value: visiblePage)
+                .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visiblePage)
                 .clipped()
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 24)
-                        .onEnded { value in
-                            if value.translation.width < -40 { goToPage(visiblePage + 1) }
-                            else if value.translation.width > 40 { goToPage(visiblePage - 1) }
-                        }
-                )
+                // Page swipe is handled inside the AppKit grid (`onPageSwipe`) so it shares
+                // one event-arbitration tree with per-item drag (design §5.1).
 
                 if pageCount > 1 {
                     pageIndicator(current: visiblePage)
@@ -176,59 +173,104 @@ struct LaunchpadGridView: View {
         }
     }
 
-    /// One page's grid of cells. Items are sliced from `filtered`; the cell's selected
-    /// state and launch action use the *global* index so navigation spans pages.
+    /// One page rendered as an AppKit drag grid (per-item `NSDraggingSource`). Items are
+    /// sliced from `filtered`; selection/activation/reorder use the global `filtered` order
+    /// so navigation and ordering span the whole list.
     private func pageContent(page: Int, columns: Int) -> some View {
         let start = page * perPage
         let end = min(start + perPage, filtered.count)
         let items = start < end ? Array(filtered[start..<end]) : []
-        return LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: columnSpacing), count: max(1, columns)),
-            spacing: rowSpacing
-        ) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { offset, app in
-                let globalIndex = start + offset
-                cell(for: app, isSelected: globalIndex == selectedIndex)
-                    .onTapGesture {
-                        selectedIndex = globalIndex
-                        onActivate(app)
-                    }
-                    // `.onTapGesture` only handles a mouse click; without an explicit
-                    // accessibility action a VoiceOver user (or any AX press) activates
-                    // the `.isButton`-trait cell to no effect. Wire the same launch.
-                    .accessibilityAction {
-                        selectedIndex = globalIndex
-                        onActivate(app)
-                    }
-                    .contextMenu { cellMenu(for: app) }
-            }
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
+        return LaunchpadDragGrid(
+            items: items,
+            columns: columns,
+            selectedID: selectedID,
+            isCompact: isCompact,
+            iconProvider: { catalog.icon(for: $0) },
+            onActivate: activateApp,
+            onReveal: onReveal,
+            onCopyPath: copyPath,
+            onHide: hideApp,
+            onMoveToFront: moveAppToFront,
+            onMoveToEnd: moveAppToEnd,
+            onSelect: selectApp,
+            onReorder: handleReorder,
+            onDragBegan: { dragOrderSnapshot = filtered },
+            onPageSwipe: { direction in goToPage(min(currentPage, pageCount - 1) + direction) },
+            onDismiss: onDismiss
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    @ViewBuilder
-    private func cellMenu(for app: LaunchpadAppItem) -> some View {
-        Button {
-            onReveal(app)
-        } label: {
-            Label("在 Finder 中显示", systemImage: "folder")
+    /// Selected app id for the AppKit cell highlight, derived from the global `selectedIndex`.
+    private var selectedID: String? {
+        filtered.indices.contains(selectedIndex) ? filtered[selectedIndex].id : nil
+    }
+
+    private func activateApp(_ app: LaunchpadAppItem) {
+        if let index = filtered.firstIndex(where: { $0.id == app.id }) { selectedIndex = index }
+        onActivate(app)
+    }
+
+    private func selectApp(_ app: LaunchpadAppItem) {
+        if let index = filtered.firstIndex(where: { $0.id == app.id }) { selectedIndex = index }
+    }
+
+    private func copyPath(_ app: LaunchpadAppItem) {
+        // Lightweight clipboard action — no lifecycle effect, so keep the launcher open.
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(app.url.path, forType: .string)
+    }
+
+    private func hideApp(_ app: LaunchpadAppItem) {
+        sessionHidden.insert(app.id)        // drop from this grid immediately
+        selectedIndex = 0
+        currentPage = 0
+        onHide(app)                         // persist (settings page can restore)
+    }
+
+    /// First successful drop materialises the alphabetical snapshot into a layout, then
+    /// applies the relative move; selection follows the dragged app by id to its new global
+    /// index (design §5.3 / §5.5). Never writes while searching (search is read-only).
+    private func handleReorder(_ draggedID: String, _ target: LaunchpadDropTarget) {
+        // Reorder against the order frozen at drag start, not a list a mid-drag reload may
+        // have changed (design §5.3 / Codex P2).
+        let order = dragOrderSnapshot ?? filtered
+        dragOrderSnapshot = nil
+        // A drop that changes nothing visible must not flip alphabetical → custom mode (Codex P2).
+        guard isLayoutEditable, !target.isNoOp(dragged: draggedID, in: order.map(\.id)) else { return }
+        layoutStore.captureVisibleOrder(order)
+        switch target {
+        case .before(let id): layoutStore.move(id: draggedID, before: id)
+        case .after(let id):  layoutStore.move(id: draggedID, after: id)
         }
-        Button {
-            // Lightweight clipboard action — no lifecycle effect, so keep the launcher open.
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(app.url.path, forType: .string)
-        } label: {
-            Label("拷贝路径", systemImage: "doc.on.doc")
-        }
-        Divider()
-        Button {
-            sessionHidden.insert(app.id)        // drop from this grid immediately
-            selectedIndex = 0
-            currentPage = 0
-            onHide(app)                         // persist (settings page can restore)
-        } label: {
-            Label("隐藏", systemImage: "eye.slash")
-        }
+        relocateSelection(to: draggedID)
+    }
+
+    private func moveAppToFront(_ app: LaunchpadAppItem) {
+        guard isLayoutEditable, let first = filtered.first, first.id != app.id else { return }
+        layoutStore.captureVisibleOrder(filtered)
+        layoutStore.move(id: app.id, before: first.id)
+        relocateSelection(to: app.id)
+    }
+
+    private func moveAppToEnd(_ app: LaunchpadAppItem) {
+        guard isLayoutEditable, let last = filtered.last, last.id != app.id else { return }
+        layoutStore.captureVisibleOrder(filtered)
+        layoutStore.move(id: app.id, after: last.id)
+        relocateSelection(to: app.id)
+    }
+
+    /// After a reorder, keep the selection on the moved app by id (not position) and bring its
+    /// page on screen (design §5.5: selection is identity-, not index-, anchored).
+    private func relocateSelection(to id: String) {
+        guard let index = filtered.firstIndex(where: { $0.id == id }) else { return }
+        selectedIndex = index
+        currentPage = perPage > 0 ? index / perPage : 0
+    }
+
+    /// Reorders only apply in the layout state; search is a read-only flat projection.
+    private var isLayoutEditable: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func pageIndicator(current: Int) -> some View {
@@ -246,30 +288,6 @@ struct LaunchpadGridView: View {
             }
         }
         .padding(.top, 2)
-    }
-
-    private func cell(for app: LaunchpadAppItem, isSelected: Bool) -> some View {
-        VStack(spacing: 8) {
-            Image(nsImage: catalog.icon(for: app))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: iconSide, height: iconSide)
-            Text(app.name)
-                .font(.system(size: 12))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(height: 30, alignment: .top)
-        }
-        .frame(width: cellWidth)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isSelected ? Color.primary.opacity(0.14) : .clear)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(app.name)
-        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Layout + navigation
@@ -291,17 +309,38 @@ struct LaunchpadGridView: View {
         currentPage = filtered.isEmpty ? 0 : selectedIndex / perPage
     }
 
+    /// Book-style paged navigation: arrows move within the current page; pressing past an
+    /// edge turns the page keeping the cross-axis position (→ at the rightmost column jumps
+    /// to the next page's same row, etc.).
     private func handleMove(_ direction: LaunchpadSearchField.MoveDirection) {
         guard !filtered.isEmpty else { return }
-        var index = selectedIndex
+        let cols = max(1, columnCount)
+        let rows = max(1, rowCount)
+        let per = perPage
+        let page = selectedIndex / per
+        let local = selectedIndex % per
+        let col = local % cols
+        let row = local / cols
+        let lastPage = max(0, (filtered.count - 1) / per)
+
+        var target = selectedIndex
         switch direction {
-        case .left:  index -= 1
-        case .right: index += 1
-        case .up:    index -= columnCount
-        case .down:  index += columnCount
+        case .right:
+            if col < cols - 1, selectedIndex + 1 < filtered.count { target = selectedIndex + 1 }
+            else if page < lastPage { target = (page + 1) * per + row * cols }          // next page, same row
+        case .left:
+            if col > 0 { target = selectedIndex - 1 }
+            else if page > 0 { target = (page - 1) * per + row * cols + (cols - 1) }     // prev page, same row, last col
+        case .up:
+            if row > 0 { target = selectedIndex - cols }
+            else if page > 0 { target = (page - 1) * per + (rows - 1) * cols + col }     // prev page, bottom row, same col
+        case .down:
+            if row < rows - 1, selectedIndex + cols < filtered.count { target = selectedIndex + cols }
+            else if page < lastPage { target = (page + 1) * per + col }                 // next page, top row, same col
         }
-        selectedIndex = min(max(index, 0), filtered.count - 1)
-        currentPage = selectedIndex / perPage      // follow selection onto its page
+
+        selectedIndex = min(max(target, 0), filtered.count - 1)
+        currentPage = selectedIndex / per      // bring the selection's page on screen
     }
 
     private func goToPage(_ page: Int) {
