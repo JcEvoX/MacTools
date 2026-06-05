@@ -116,14 +116,26 @@ final class DeviceBatteryPluginTests: XCTestCase {
         )
 
         let item = host.pluginConfigurationItems.first { $0.id == "device-battery" }
-        XCTAssertEqual(item?.description, "选择组件面板布局和显示内容。")
+        XCTAssertEqual(
+            item?.description,
+            pluginL10n.string("configuration.description", defaultValue: "选择组件面板布局和显示内容。")
+        )
         XCTAssertEqual(item?.settingsCards.map(\.id), [])
-        XCTAssertEqual(item?.permissionCards.map(\.title), ["输入监控授权"])
+        XCTAssertEqual(
+            item?.permissionCards.map(\.title),
+            [pluginL10n.string("permission.inputMonitoring.title", defaultValue: "输入监控授权")]
+        )
         XCTAssertEqual(
             item?.permissionCards.first?.description,
-            "用于读取已适配厂商 HID 鼠标的电量、充电状态、设备型号和名称。"
+            pluginL10n.string(
+                "permission.inputMonitoring.description",
+                defaultValue: "用于读取已适配厂商 HID 鼠标的电量、充电状态、设备型号和名称。"
+            )
         )
-        XCTAssertEqual(item?.permissionCards.first?.statusText, "未授权")
+        XCTAssertEqual(
+            item?.permissionCards.first?.statusText,
+            AppL10n.plugins("plugin.permission.notGranted", defaultValue: "未授权")
+        )
     }
 
     func testInputMonitoringPermissionCardShowsAuthorizedWhenGranted() {
@@ -152,7 +164,10 @@ final class DeviceBatteryPluginTests: XCTestCase {
         )
 
         let item = host.pluginConfigurationItems.first { $0.id == "device-battery" }
-        XCTAssertEqual(item?.permissionCards.first?.statusText, "已授权")
+        XCTAssertEqual(
+            item?.permissionCards.first?.statusText,
+            AppL10n.plugins("plugin.permission.granted", defaultValue: "已授权")
+        )
     }
 
     func testInputMonitoringPermissionCardShowsUnauthorizedWhenDenied() {
@@ -163,7 +178,10 @@ final class DeviceBatteryPluginTests: XCTestCase {
         )
 
         let item = host.pluginConfigurationItems.first { $0.id == "device-battery" }
-        XCTAssertEqual(item?.permissionCards.first?.statusText, "未授权")
+        XCTAssertEqual(
+            item?.permissionCards.first?.statusText,
+            AppL10n.plugins("plugin.permission.notGranted", defaultValue: "未授权")
+        )
     }
 
     func testStorePersistsLayoutAndSources() {
@@ -636,6 +654,10 @@ final class DeviceBatteryPluginTests: XCTestCase {
             ),
             inputMonitoringAuthorizationStatus: { inputMonitoringAuthorizationStatus }
         )
+    }
+
+    private var pluginL10n: PluginLocalization {
+        PluginLocalization(bundle: .main)
     }
 
     private func makeContext() -> PluginRuntimeContext {
