@@ -12,7 +12,7 @@
       "summary": "Automatically adjust display colors to match ambient light."
     }
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayTrueColor.bundle",

@@ -12,7 +12,7 @@
       "summary": "Quickly mute or restore the default microphone input."
     }
   },
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MicrophoneMute.bundle",

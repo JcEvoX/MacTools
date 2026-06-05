@@ -12,7 +12,7 @@
       "summary": "Turn on Stage Manager to focus the current window and keep others on the side."
     }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "StageManager.bundle",

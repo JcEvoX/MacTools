@@ -12,7 +12,7 @@
       "summary": "Manage fan speed presets with automatic, full-speed, and custom strategies."
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FanControl.bundle",

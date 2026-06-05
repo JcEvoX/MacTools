@@ -12,7 +12,7 @@
       "summary": "Set a battery charge limit and stop charging when it is reached; charging resumes only when you choose."
     }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "BatteryChargeLimit.bundle",

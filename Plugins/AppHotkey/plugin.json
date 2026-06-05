@@ -12,7 +12,7 @@
       "summary": "Bind global shortcuts to common apps for quick launch or switching."
     }
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AppHotkey.bundle",

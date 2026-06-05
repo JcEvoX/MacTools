@@ -12,7 +12,7 @@
       "summary": "Edit ~/.zshrc and other zsh config files quickly, with inline editing and common snippets."
     }
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ZshConfig.bundle",

@@ -12,7 +12,7 @@
       "summary": "Track input, foreground app usage time, and AI coding activity."
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ActivityBar.bundle",

@@ -12,7 +12,7 @@
       "summary": "Switch the system between light and dark appearance."
     }
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Appearance.bundle",

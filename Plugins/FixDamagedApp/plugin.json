@@ -12,7 +12,7 @@
       "summary": "Remove quarantine attributes to resolve damaged or untrusted app warnings."
     }
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FixDamagedApp.bundle",

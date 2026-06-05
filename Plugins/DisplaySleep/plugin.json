@@ -12,7 +12,7 @@
       "summary": "Put all displays to sleep immediately."
     }
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplaySleep.bundle",

@@ -12,7 +12,7 @@
       "summary": "Clean Xcode DerivedData, device support files, archives, and caches by category."
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "XcodeClean.bundle",

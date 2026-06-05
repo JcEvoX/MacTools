@@ -12,7 +12,7 @@
       "summary": "Automatically cover the top notch area on notched displays."
     }
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "HideNotch.bundle",

@@ -12,7 +12,7 @@
       "summary": "Lock the screen immediately and require password unlock."
     }
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",

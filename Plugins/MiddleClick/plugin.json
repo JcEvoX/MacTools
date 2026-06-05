@@ -12,7 +12,7 @@
       "summary": "Turn trackpad taps into middle-clicks."
     }
   },
-  "version": "1.0.8",
+  "version": "1.0.9",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MiddleClick.bundle",

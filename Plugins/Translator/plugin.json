@@ -12,7 +12,7 @@
       "summary": "Translate selected text with a shortcut."
     }
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Translator.bundle",

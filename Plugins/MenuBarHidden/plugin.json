@@ -12,7 +12,7 @@
       "summary": "Hide menu bar icons, arrange them by dragging, and open hidden icons from a panel."
     }
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MenuBarHidden.bundle",

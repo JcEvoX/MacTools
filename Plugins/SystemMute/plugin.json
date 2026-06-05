@@ -12,7 +12,7 @@
       "summary": "Quickly mute or restore system audio output."
     }
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "SystemMute.bundle",
