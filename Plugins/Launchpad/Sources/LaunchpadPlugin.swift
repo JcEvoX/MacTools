@@ -77,8 +77,8 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [preferences] _ in
-            LaunchpadSettingsView(preferences: preferences)
+        PluginConfiguration(description: metadata.defaultDescription) { [preferences, layoutStore] _ in
+            LaunchpadSettingsView(preferences: preferences, layoutStore: layoutStore)
         }
     }
 

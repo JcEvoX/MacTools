@@ -6,6 +6,8 @@ import MacToolsPluginKit
 /// `LaunchpadPreferences`.
 struct LaunchpadSettingsView: View {
     @ObservedObject var preferences: LaunchpadPreferences
+    /// Observed so the "排序" group appears / disappears as the custom layout is created or reset.
+    @ObservedObject var layoutStore: LaunchpadLayoutStore
 
     private var isAutoColumns: Binding<Bool> {
         Binding(
@@ -18,7 +20,22 @@ struct LaunchpadSettingsView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             windowSection
             gridSection
+            sortSection
             hiddenSection
+        }
+    }
+
+    /// Only shown once the user has dragged into a custom order (`layout != nil`); resetting
+    /// removes the layout key → back to alphabetical, and the group disappears.
+    @ViewBuilder
+    private var sortSection: some View {
+        if layoutStore.layout != nil {
+            section(title: "排序", icon: "arrow.up.arrow.down") {
+                row(title: "自定义排序", description: "已手动调整过应用顺序") {
+                    Button("恢复字母序") { layoutStore.resetToAlphabetical() }
+                        .controlSize(.small)
+                }
+            }
         }
     }
 
