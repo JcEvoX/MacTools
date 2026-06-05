@@ -60,6 +60,7 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var onReorder: (String, LaunchpadDropTarget) -> Void
     var onDragBegan: () -> Void
     var onPageSwipe: (Int) -> Void
+    var onPageDrag: (CGFloat, CGFloat, Bool) -> Void   // translationX, pageWidth, ended
     var onDismiss: () -> Void
 
     func makeNSView(context _: Context) -> LaunchpadGridContainerView {
@@ -87,18 +88,22 @@ final class LaunchpadGridContainerView: NSView {
     private var isDragging = false
     private var pendingGrid: LaunchpadDragGrid?
 
-    /// Insertion indicator geometry while a drop is hovering.
-    private var insertion: (x: CGFloat, yTop: CGFloat, yBottom: CGFloat)?
+    /// Live visual order while a reorder drag hovers — cells animate aside so a gap opens at
+    /// the slot under the cursor (Apple-style live reorder). `nil` when not dragging.
+    private var dragOrder: [LaunchpadGridCellView]?
+    private weak var draggedCell: LaunchpadGridCellView?
 
-    // Empty-space drag (paging) + click (dismiss) tracking, plus scroll paging.
+    // Empty-space drag (follow-cursor paging) + click (dismiss) tracking, plus scroll paging.
     private var gapDownPoint: NSPoint?
     private var gapMoved = false
-    private var gapSwiped = false
+    private var pageDragActive = false
     private var scrollAccum: CGFloat = 0
-    private var scrollFired = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        // NOT layer-backed: SwiftUI's `.offset` moving a layer-backed AppKit subtree during
+        // follow-cursor paging leaves CA presentation-layer ghost trails. The reorder shuffle
+        // still animates via the NSView animator proxy (no layer needed).
         registerForDraggedTypes([.launchpadAppItem])
     }
 
@@ -111,11 +116,20 @@ final class LaunchpadGridContainerView: NSView {
 
     func apply(grid: LaunchpadDragGrid) {
         guard !isDragging else { pendingGrid = grid; return }
+        let sameItems = cells.map(\.app.id) == grid.items.map(\.id)
+        let sameColumns = columns == max(1, grid.columns)
         self.grid = grid
         self.columns = max(1, grid.columns)
         self.metrics = grid.metrics
-        rebuildCells(items: grid.items, selectedID: grid.selectedID)
-        needsLayout = true
+        // Fast path: when only the page offset / selection changed (the common case during
+        // follow-the-cursor paging), skip the full rebuild + relayout so paging stays smooth.
+        if sameItems {
+            for cell in cells { cell.isSelected = (cell.app.id == grid.selectedID) }
+            if !sameColumns { needsLayout = true }
+        } else {
+            rebuildCells(items: grid.items, selectedID: grid.selectedID)
+            needsLayout = true
+        }
     }
 
     private func rebuildCells(items: [LaunchpadAppItem], selectedID: String?) {
@@ -137,15 +151,34 @@ final class LaunchpadGridContainerView: NSView {
 
     override func layout() {
         super.layout()
-        guard !cells.isEmpty else { return }
+        layoutCells(order: dragOrder ?? cells, animated: false)
+    }
+
+    /// Position cells by their index in `order` — the live `dragOrder` while reordering (so
+    /// the gap opens at the hover slot), otherwise the committed `cells`.
+    private func layoutCells(order: [LaunchpadGridCellView], animated: Bool) {
+        guard !order.isEmpty else { return }
         let gridWidth = CGFloat(columns) * metrics.cellWidth + CGFloat(max(0, columns - 1)) * metrics.columnSpacing
         let leftInset = max(0, (bounds.width - gridWidth) / 2).rounded(.down)
-        for (index, cell) in cells.enumerated() {
-            let col = index % columns
-            let row = index / columns
-            let x = leftInset + CGFloat(col) * (metrics.cellWidth + metrics.columnSpacing)
-            let y = CGFloat(row) * (metrics.cellHeight + metrics.rowSpacing)
-            cell.frame = CGRect(x: x, y: y, width: metrics.cellWidth, height: metrics.cellHeight)
+        func frame(forSlot index: Int) -> CGRect {
+            let col = index % columns, row = index / columns
+            return CGRect(
+                x: leftInset + CGFloat(col) * (metrics.cellWidth + metrics.columnSpacing),
+                y: CGFloat(row) * (metrics.cellHeight + metrics.rowSpacing),
+                width: metrics.cellWidth, height: metrics.cellHeight
+            )
+        }
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.13
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                // Skip the lifted (hidden) source cell — it follows the cursor, not the grid.
+                for (index, cell) in order.enumerated() where cell !== draggedCell {
+                    cell.animator().frame = frame(forSlot: index)
+                }
+            }
+        } else {
+            for (index, cell) in order.enumerated() { cell.frame = frame(forSlot: index) }
         }
     }
 
@@ -186,20 +219,23 @@ final class LaunchpadGridContainerView: NSView {
 
     func beginDrag(_ cell: LaunchpadGridCellView) {
         isDragging = true
-        cell.isDragSource = true
-        grid?.onDragBegan()   // let the host freeze the visible order for this drag (design §5.3)
+        draggedCell = cell
+        dragOrder = cells
+        cell.isDragSource = true            // lift off (hidden) so its slot opens up
+        grid?.onDragBegan()                 // host freezes the visible order for this drag (§5.3)
     }
 
     func endDrag(_ cell: LaunchpadGridCellView) {
-        cell.isDragSource = false
+        draggedCell = nil
+        dragOrder = nil
         isDragging = false
-        insertion = nil
-        needsDisplay = true
         if let pending = pendingGrid {
             pendingGrid = nil
-            apply(grid: pending)
+            apply(grid: pending)                       // commit reorder → new cell order
         }
-        refocusSearchField()   // so arrow-key navigation keeps working after a drag
+        layoutCells(order: cells, animated: false)     // settle every cell (incl. the lifted one) to its slot
+        cell.isDragSource = false                      // reveal the source now it's at the right place (no flash)
+        refocusSearchField()                           // so arrow-key navigation keeps working after a drag
     }
 
     /// Return first-responder focus to the search field after a grid interaction, so typing
@@ -218,66 +254,52 @@ final class LaunchpadGridContainerView: NSView {
         return nil
     }
 
-    // MARK: Drop target (NSDraggingDestination)
+    // MARK: Drop target — live reorder shuffle (NSDraggingDestination)
 
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { updateInsertion(sender) }
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { updateInsertion(sender) }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { shuffle(toward: sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { shuffle(toward: sender) }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        insertion = nil
-        needsDisplay = true
+        // Keep the open gap where it is. A drop inside commits it; a drop outside is undone by
+        // endDrag. (Closing the gap on every transient boundary cross caused flicker.)
     }
 
-    private func updateInsertion(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard sender.draggingSource is LaunchpadGridCellView else { return [] }
+    /// Open the gap at the slot under the cursor, animating the other cells aside.
+    private func shuffle(toward sender: NSDraggingInfo) -> NSDragOperation {
+        guard let dragged = draggedCell, var order = dragOrder, sender.draggingSource is LaunchpadGridCellView
+        else { return .move }
         let point = convert(sender.draggingLocation, from: nil)
-        if let resolved = resolveTarget(at: point) {
-            insertion = resolved.indicator
-            needsDisplay = true
-            return .move
-        }
-        insertion = nil
-        needsDisplay = true
+        let target = slotIndex(at: point, count: order.count)
+        guard let current = order.firstIndex(of: dragged), current != target else { return .move }
+        order.remove(at: current)
+        order.insert(dragged, at: min(target, order.count))
+        dragOrder = order
+        layoutCells(order: order, animated: true)
         return .move
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let source = sender.draggingSource as? LaunchpadGridCellView else { return false }
-        let point = convert(sender.draggingLocation, from: nil)
-        guard let resolved = resolveTarget(at: point) else { return false }
-        insertion = nil
-        needsDisplay = true
-        grid?.onReorder(source.app.id, resolved.target)
+        guard let dragged = sender.draggingSource as? LaunchpadGridCellView,
+              let order = dragOrder, let index = order.firstIndex(of: dragged)
+        else { return false }
+        // The dragged app lands at `index` in the new order → after the cell before it,
+        // or before the next cell when dropped at the very front.
+        let target: LaunchpadDropTarget
+        if index > 0 { target = .after(order[index - 1].app.id) }
+        else if order.count > 1 { target = .before(order[index + 1].app.id) }
+        else { return false }
+        grid?.onReorder(dragged.app.id, target)
         return true
     }
 
-    /// Map a drop point to a relative target (before/after the nearest cell) + the indicator
-    /// line geometry. Uses the fixed cell frames, never the in-flight drag offset.
-    private func resolveTarget(at point: NSPoint) -> (target: LaunchpadDropTarget, indicator: (x: CGFloat, yTop: CGFloat, yBottom: CGFloat))? {
-        guard !cells.isEmpty else { return nil }
-        // Prefer cells on the same row as the point; fall back to all cells.
-        let sameRow = cells.filter { point.y >= $0.frame.minY && point.y <= $0.frame.maxY }
-        let candidates = sameRow.isEmpty ? cells : sameRow
-        guard let nearest = candidates.min(by: {
-            hypot($0.frame.midX - point.x, $0.frame.midY - point.y) < hypot($1.frame.midX - point.x, $1.frame.midY - point.y)
-        }) else { return nil }
-
-        let before = point.x < nearest.frame.midX
-        let target: LaunchpadDropTarget = before ? .before(nearest.app.id) : .after(nearest.app.id)
-        let x = before ? nearest.frame.minX - metrics.columnSpacing / 2 : nearest.frame.maxX + metrics.columnSpacing / 2
-        return (target, (x: x, yTop: nearest.frame.minY + 6, yBottom: nearest.frame.maxY - 6))
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let insertion else { return }
-        let line = NSBezierPath()
-        line.move(to: NSPoint(x: insertion.x, y: insertion.yTop))
-        line.line(to: NSPoint(x: insertion.x, y: insertion.yBottom))
-        line.lineWidth = 2
-        line.lineCapStyle = .round
-        NSColor.controlAccentColor.setStroke()
-        line.stroke()
+    /// Grid slot (row-major index) under a point, clamped to the current item range.
+    private func slotIndex(at point: NSPoint, count: Int) -> Int {
+        let gridWidth = CGFloat(columns) * metrics.cellWidth + CGFloat(max(0, columns - 1)) * metrics.columnSpacing
+        let leftInset = max(0, (bounds.width - gridWidth) / 2)
+        let col = min(max(Int((point.x - leftInset) / (metrics.cellWidth + metrics.columnSpacing)), 0), columns - 1)
+        let maxRow = max(0, (count - 1) / columns)
+        let row = min(max(Int(point.y / (metrics.cellHeight + metrics.rowSpacing)), 0), maxRow)
+        return min(max(row * columns + col, 0), max(0, count - 1))
     }
 
     // MARK: Scroll paging + gap click-to-dismiss
@@ -288,17 +310,21 @@ final class LaunchpadGridContainerView: NSView {
     /// swipe over an icon bubbles up to here.
     override func scrollWheel(with event: NSEvent) {
         if event.hasPreciseScrollingDeltas {
-            // Trackpad two-finger swipe: accumulate along the dominant axis, fire once.
+            // Trackpad two-finger swipe: follow-the-finger paging — the SAME live-track + snap
+            // as the empty-space mouse drag, so the two gestures feel identical.
             guard event.momentumPhase == [] else { return }      // ignore the inertial tail
-            let dominant = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY)
-                ? event.scrollingDeltaX : event.scrollingDeltaY
-            if event.phase == .began { scrollAccum = 0; scrollFired = false }
-            scrollAccum += dominant
-            if !scrollFired, abs(scrollAccum) >= 40 {
-                scrollFired = true
-                grid?.onPageSwipe(scrollAccum < 0 ? 1 : -1)      // swipe left / up → next page
+            switch event.phase {
+            case .began:
+                scrollAccum = 0
+            case .changed:
+                scrollAccum += event.scrollingDeltaX
+                grid?.onPageDrag(scrollAccum, bounds.width, false)
+            case .ended, .cancelled:
+                grid?.onPageDrag(scrollAccum, bounds.width, true)
+                scrollAccum = 0
+            default:
+                break
             }
-            if event.phase == .ended || event.phase == .cancelled { scrollAccum = 0; scrollFired = false }
         } else {
             // Mouse wheel (discrete notches): one notch → one page, on whichever axis moved.
             let delta = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY)
@@ -309,29 +335,43 @@ final class LaunchpadGridContainerView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        gapDownPoint = convert(event.locationInWindow, from: nil)
+        gapDownPoint = event.locationInWindow   // window coords — stable while the page offsets
         gapMoved = false
-        gapSwiped = false
+        pageDragActive = false
     }
 
     /// A horizontal drag that starts on *empty space* (margins / gaps / below the grid —
-    /// cells handle their own drags) pages the grid. This is the user's preferred paging
-    /// gesture; it can't grab an app because the press never landed on a cell.
+    /// cells handle their own drags) pages the grid, follow-the-cursor: the page tracks the
+    /// drag live and snaps once past a threshold on release. Can't grab an app because the
+    /// press never landed on a cell.
+    ///
+    /// The delta is measured in WINDOW coordinates: the container itself slides via the SwiftUI
+    /// page offset, so converting the point into its (moving) coordinate space would feed the
+    /// offset back into the delta — an oscillation that shows up as ghosting. Window space is
+    /// stable, so the drag tracks the real cursor displacement.
     override func mouseDragged(with event: NSEvent) {
         guard let start = gapDownPoint else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        let dx = point.x - start.x, dy = point.y - start.y
+        let dx = event.locationInWindow.x - start.x
+        let dy = event.locationInWindow.y - start.y
         if hypot(dx, dy) > 6 { gapMoved = true }
-        guard !gapSwiped, abs(dx) > 36, abs(dx) > abs(dy) else { return }
-        gapSwiped = true
-        grid?.onPageSwipe(dx < 0 ? 1 : -1)          // drag left → next page
+        if !pageDragActive {
+            guard abs(dx) > 8, abs(dx) > abs(dy) else { return }   // commit to a horizontal page drag
+            pageDragActive = true
+        }
+        grid?.onPageDrag(dx, bounds.width, false)                   // live: page follows the cursor
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { gapDownPoint = nil }
-        // A click (neither a swipe nor a drag) on empty space dismisses in fullscreen.
-        guard !gapSwiped, !gapMoved, grid?.isCompact == false else { return }
-        grid?.onDismiss()
+        let start = gapDownPoint
+        gapDownPoint = nil
+        if pageDragActive {
+            let dx = event.locationInWindow.x - (start?.x ?? 0)
+            grid?.onPageDrag(dx, bounds.width, true)                // release: snap or spring back
+            pageDragActive = false
+        } else if !gapMoved, grid?.isCompact == false {
+            // A click (no drag) on empty space dismisses in fullscreen.
+            grid?.onDismiss()
+        }
     }
 }
 
@@ -345,7 +385,9 @@ final class LaunchpadGridCellView: NSView, NSDraggingSource {
     weak var container: LaunchpadGridContainerView?
 
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
-    var isDragSource = false { didSet { alphaValue = isDragSource ? 0.35 : 1 } }
+    /// While dragging, the source cell lifts off (hidden) so its grid slot opens up and the
+    /// drag image carries the icon under the cursor.
+    var isDragSource = false { didSet { isHidden = isDragSource } }
 
     private var mouseDownPoint: NSPoint?
     private var didDrag = false

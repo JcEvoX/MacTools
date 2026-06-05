@@ -44,6 +44,8 @@ struct LaunchpadGridView: View {
     /// Visible order frozen at drag start, so a drop reorders against exactly what the user
     /// dragged — even if an async catalog reload lands mid-drag (design §5.3 / Codex P2).
     @State private var dragOrderSnapshot: [LaunchpadAppItem]?
+    /// Live horizontal offset while an empty-space drag pages the grid (follow-the-cursor).
+    @State private var pageDragTranslation: CGFloat = 0
 
     // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
     private let cellWidth: CGFloat = 116
@@ -158,11 +160,13 @@ struct LaunchpadGridView: View {
                     }
                 }
                 .frame(width: geo.size.width, alignment: .leading)
-                .offset(x: -CGFloat(visiblePage) * geo.size.width)
-                .animation(.spring(response: 0.34, dampingFraction: 0.86), value: visiblePage)
+                .offset(x: -CGFloat(visiblePage) * geo.size.width + pageDragTranslation)
                 .clipped()
-                // Page swipe is handled inside the AppKit grid (`onPageSwipe`) so it shares
-                // one event-arbitration tree with per-item drag (design §5.1).
+                // Paging is handled inside the AppKit grid: `onPageDrag` tracks an empty-space
+                // drag live (follow-the-cursor) and `onPageSwipe` handles scroll; both share one
+                // event-arbitration tree with per-item drag (design §5.1). Page changes animate
+                // via `withAnimation` in the handlers (not a value-keyed modifier) so the live
+                // drag offset and the snap stay one continuous motion.
 
                 if pageCount > 1 {
                     pageIndicator(current: visiblePage)
@@ -196,6 +200,7 @@ struct LaunchpadGridView: View {
             onReorder: handleReorder,
             onDragBegan: { dragOrderSnapshot = filtered },
             onPageSwipe: { direction in goToPage(min(currentPage, pageCount - 1) + direction) },
+            onPageDrag: handlePageDrag,
             onDismiss: onDismiss
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -340,7 +345,7 @@ struct LaunchpadGridView: View {
         }
 
         selectedIndex = min(max(target, 0), filtered.count - 1)
-        currentPage = selectedIndex / per      // bring the selection's page on screen
+        withAnimation(pageSnap) { currentPage = selectedIndex / per }   // bring the selection's page on screen
     }
 
     private func goToPage(_ page: Int) {
@@ -348,9 +353,31 @@ struct LaunchpadGridView: View {
         // list; avoid `filtered.count - 1 == -1` (Codex P2).
         guard !filtered.isEmpty else { selectedIndex = 0; currentPage = 0; return }
         let target = min(max(page, 0), pageCount - 1)
-        currentPage = target
+        withAnimation(pageSnap) { currentPage = target }
         // Move selection onto the page so keyboard nav resumes from what's visible.
         selectedIndex = min(target * perPage, filtered.count - 1)
+    }
+
+    private var pageSnap: Animation { .spring(response: 0.34, dampingFraction: 0.86) }
+
+    /// Follow-cursor paging: while dragging empty space the page tracks the cursor; on release
+    /// it snaps to the adjacent page past a threshold, otherwise springs back.
+    private func handlePageDrag(_ translationX: CGFloat, width: CGFloat, ended: Bool) {
+        let pageW = max(1, width)                       // real page width from the AppKit grid (no @State race)
+        let last = max(0, pageCount - 1)
+        let cur = min(currentPage, last)
+        var t = translationX
+        // Rubber-band so you can't pull past the first / last page.
+        if (cur == 0 && t > 0) || (cur == last && t < 0) { t *= 0.35 }
+        t = min(max(t, -pageW), pageW)
+        guard ended else { pageDragTranslation = t; return }
+        let threshold = max(45, pageW * 0.18)
+        withAnimation(pageSnap) {
+            if t <= -threshold, cur < last { currentPage = cur + 1 }
+            else if t >= threshold, cur > 0 { currentPage = cur - 1 }
+            pageDragTranslation = 0
+        }
+        selectedIndex = min(currentPage * perPage, max(0, filtered.count - 1))
     }
 
     private func activateSelection() {

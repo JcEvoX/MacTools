@@ -17,17 +17,19 @@ private final class DismissHandlerTokens {
     var keyMonitor: Any?
     var screenObserver: NSObjectProtocol?
     var resignObserver: NSObjectProtocol?
+    var resignKeyObserver: NSObjectProtocol?
 
     func removeAll() {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
-        for observer in [screenObserver, resignObserver].compactMap({ $0 }) {
+        for observer in [screenObserver, resignObserver, resignKeyObserver].compactMap({ $0 }) {
             NotificationCenter.default.removeObserver(observer)
         }
         screenObserver = nil
         resignObserver = nil
+        resignKeyObserver = nil
     }
 
     deinit { removeAll() }
@@ -244,6 +246,22 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
                 // back to the previously-frontmost app and fight their intent. Only the
                 // explicit Esc / background-click paths restore focus.
                 self.close(restoringFocus: false)
+            }
+        }
+        // Another window of *this* app took key focus (e.g. the Settings window opened, or the
+        // user clicked it behind a compact panel). The app stays active, so `didResignActive`
+        // never fires — dismiss here instead, but ONLY when an ordinary titled window takes key.
+        // Menus, IME candidate windows and alert panels aren't titled, so right-click menus and
+        // CJK composition won't close the launcher.
+        tokens.resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: session, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.window === session, !self.isTearingDown else { return }
+                if let key = NSApp.keyWindow, key !== session,
+                   !(key is NSPanel), key.styleMask.contains(.titled) {
+                    self.close(restoringFocus: false)
+                }
             }
         }
     }
