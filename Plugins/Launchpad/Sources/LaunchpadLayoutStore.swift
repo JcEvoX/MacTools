@@ -78,6 +78,85 @@ final class LaunchpadLayoutStore: ObservableObject {
         storage.removeObject(forKey: Keys.customLayout)
     }
 
+    // MARK: - Folders (19b)
+
+    /// Stack two root apps into a new folder occupying `targetID`'s slot, carrying both apps;
+    /// the dragged app is removed from the root. The apps must already be root nodes (the
+    /// caller captures the visible order first, exactly as for a reorder). `id` is injectable
+    /// for deterministic tests; production passes a fresh UUID.
+    func makeFolder(target targetID: String, dragged draggedID: String,
+                    name: String, id: String = UUID().uuidString) {
+        guard let current = layout, targetID != draggedID else { return }
+        var nodes = current.nodes
+        guard let targetIndex = nodes.firstIndex(where: { $0.rootID == targetID }),
+              case .app(let targetRef) = nodes[targetIndex],
+              let draggedNode = nodes.first(where: { $0.rootID == draggedID }),
+              case .app(let draggedRef) = draggedNode
+        else { return }
+        nodes[targetIndex] = .folder(id: id, name: name, children: [targetRef, draggedRef])
+        nodes.removeAll { $0.rootID == draggedID }   // drop the now-foldered dragged app from root
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Move a root app into an existing folder (appended to its children, removed from root).
+    func addToFolder(_ folderID: String, app appID: String) {
+        guard let current = layout else { return }
+        var nodes = current.nodes
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, let fname, var children) = nodes[folderIndex],
+              let appNode = nodes.first(where: { $0.rootID == appID }),
+              case .app(let appRef) = appNode,
+              !children.contains(where: { $0.id == appID })
+        else { return }
+        children.append(appRef)
+        nodes[folderIndex] = .folder(id: fid, name: fname, children: children)
+        nodes.removeAll { $0.rootID == appID }
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Remove an app from a folder back to the root tail. Dropping to a single remaining child
+    /// auto-dissolves the folder, lifting the survivor back into the folder's slot (design §7).
+    func removeFromFolder(_ folderID: String, app appID: String) {
+        guard let current = layout else { return }
+        var nodes = current.nodes
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, let fname, var children) = nodes[folderIndex],
+              let childIndex = children.firstIndex(where: { $0.id == appID })
+        else { return }
+        let removed = children.remove(at: childIndex)
+        if children.count <= 1 {
+            // Auto-dissolve: survivor(s) take the folder's slot, removed app goes to the tail.
+            nodes.replaceSubrange(folderIndex...folderIndex, with: children.map(LaunchpadLayoutNode.app))
+        } else {
+            nodes[folderIndex] = .folder(id: fid, name: fname, children: children)
+        }
+        nodes.append(.app(removed))
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Rename a folder. An empty name falls back to a default so a folder is never nameless.
+    func renameFolder(_ folderID: String, name: String) {
+        guard let current = layout else { return }
+        var nodes = current.nodes
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, _, let children) = nodes[folderIndex]
+        else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        nodes[folderIndex] = .folder(id: fid, name: trimmed.isEmpty ? "未命名" : trimmed, children: children)
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Explicitly dissolve a folder: release all its children back to the root, in place.
+    func dissolveFolder(_ folderID: String) {
+        guard let current = layout else { return }
+        var nodes = current.nodes
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(_, _, let children) = nodes[folderIndex]
+        else { return }
+        nodes.replaceSubrange(folderIndex...folderIndex, with: children.map(LaunchpadLayoutNode.app))
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
     // MARK: - Loading
 
     /// Decode the stored layout, tolerating absence and corruption.

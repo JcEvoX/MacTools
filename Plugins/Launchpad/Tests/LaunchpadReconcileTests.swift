@@ -104,4 +104,50 @@ final class LaunchpadReconcileTests: XCTestCase {
         XCTAssertEqual(reconcileIDs(sample(), layout, hidden: [a, b, c]), [])
         XCTAssertEqual(reconcileIDs(sample(), layout, hidden: []), [c, b, a])
     }
+
+    // MARK: - 19b folders
+
+    private func ref(_ id: String) -> LaunchpadAppRef { LaunchpadAppRef(id: id, name: id) }
+
+    private func folderItems(_ cell: LaunchpadDisplayCell?) -> [String]? {
+        guard case .folder(_, _, let items) = cell else { return nil }
+        return items.map(\.id)
+    }
+
+    func testFolderRendersValidChildren() {
+        let layout = LaunchpadLayout(nodes: [.app(ref(a)), .folder(id: "F1", name: "F", children: [ref(b), ref(c)])])
+        let cells = LaunchpadLayoutReconciler.reconcile(apps: sample(), layout: layout, hidden: [])
+        XCTAssertEqual(cells.map(\.id), [a, "folder.F1"])
+        XCTAssertEqual(folderItems(cells.last), [b, c])
+    }
+
+    func testFolderSkipsMissingChildren() {
+        let present = [app(a, "Alpha"), app(c, "Charlie")]   // b 卸载
+        let layout = LaunchpadLayout(nodes: [.folder(id: "F1", name: "F", children: [ref(b), ref(c)]), .app(ref(a))])
+        let cells = LaunchpadLayoutReconciler.reconcile(apps: present, layout: layout, hidden: [])
+        XCTAssertEqual(cells.map(\.id), ["folder.F1", a])
+        XCTAssertEqual(folderItems(cells.first), [c])   // 只剩 c
+    }
+
+    func testEmptyFolderIsDropped() {
+        let present = [app(a, "Alpha")]                     // b、c 都不在
+        let layout = LaunchpadLayout(nodes: [.folder(id: "F1", name: "F", children: [ref(b), ref(c)]), .app(ref(a))])
+        let cells = LaunchpadLayoutReconciler.reconcile(apps: present, layout: layout, hidden: [])
+        XCTAssertEqual(cells.map(\.id), [a], "children 全没了 → 空夹不渲染")
+    }
+
+    func testAppInFolderNotReappendedAtTail() {
+        // a、b 在文件夹里；c 是新装 → 进根层末尾；a、b 不重复出现在顶层
+        let layout = LaunchpadLayout(nodes: [.folder(id: "F1", name: "F", children: [ref(a), ref(b)])])
+        let cells = LaunchpadLayoutReconciler.reconcile(apps: sample(), layout: layout, hidden: [])
+        XCTAssertEqual(cells.map(\.id), ["folder.F1", c])
+        XCTAssertEqual(folderItems(cells.first), [a, b])
+    }
+
+    func testHiddenFolderChildExcluded() {
+        let layout = LaunchpadLayout(nodes: [.folder(id: "F1", name: "F", children: [ref(a), ref(b)])])
+        let cells = LaunchpadLayoutReconciler.reconcile(apps: sample(), layout: layout, hidden: [b])
+        XCTAssertEqual(cells.map(\.id), ["folder.F1", c])
+        XCTAssertEqual(folderItems(cells.first), [a], "隐藏的 folder 内 app 不进缩略")
+    }
 }

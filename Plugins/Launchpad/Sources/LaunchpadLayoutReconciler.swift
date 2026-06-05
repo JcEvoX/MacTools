@@ -2,15 +2,17 @@ import Foundation
 
 /// Display-time expansion of one root grid slot (computed, never persisted).
 ///
-/// 19a only ever produces `.app`; the `.folder` case is added in 19b (design §3 / §8). When
-/// app and folder cells eventually share one render sequence, `id` is the cross-type stable
-/// key that `ForEach` / AppKit diffing must use to avoid drag/animation misplacement.
+/// App and folder cells share one render sequence; `id` is the cross-type stable key that
+/// `ForEach` / AppKit diffing must use to avoid drag/animation misplacement (apps use their
+/// path id, folders use `folder.<uuid>`, which can never collide with an absolute path).
 enum LaunchpadDisplayCell: Identifiable, Equatable {
     case app(LaunchpadAppItem)
+    case folder(id: String, name: String, items: [LaunchpadAppItem])
 
     var id: String {
         switch self {
         case .app(let item): return item.id
+        case .folder(let fid, _, _): return "folder.\(fid)"
         }
     }
 }
@@ -47,9 +49,18 @@ enum LaunchpadLayoutReconciler {
                 // ref so each id is emitted at most once (set stays == visible).
                 guard let item = byID[ref.id], referenced.insert(ref.id).inserted else { continue }
                 cells.append(.app(item))
-            case .folder:
-                // 19a never produces folders; 19b extends reconcile to render folder cells.
-                continue
+            case .folder(let fid, let name, let children):
+                // Resolve the folder's currently-visible children (skip missing / hidden /
+                // already-placed). An empty folder — all children gone (uninstalled / hidden /
+                // unmounted volume) — is dropped from the render but kept in the layout (the
+                // tolerance window; only explicit user actions dissolve it). Design §5.2 / §7.
+                var items: [LaunchpadAppItem] = []
+                for child in children {
+                    guard let item = byID[child.id], referenced.insert(child.id).inserted else { continue }
+                    items.append(item)
+                }
+                guard !items.isEmpty else { continue }
+                cells.append(.folder(id: fid, name: name, items: items))
             }
         }
 
