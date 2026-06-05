@@ -103,7 +103,7 @@ enum MenuBarIconGallerySource: Equatable {
 }
 
 struct MenuBarIconGalleryProviderConfiguration {
-    static let productionCatalogURL = URL(string: "https://ggbond268.github.io/MacTools/icon-gallery/catalog.json")!
+    static let productionCatalogURL = URL(string: "https://mactools.ggbond.app/icon-gallery/catalog.json")!
 
     static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> MenuBarIconGallerySource {
         #if DEBUG

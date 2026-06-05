@@ -1,0 +1,21 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import SiteNav from "@/components/SiteNav.astro";
+import HomeHero from "@/components/HomeHero.astro";
+import FeatureShowcase from "@/components/FeatureShowcase.astro";
+import SiteFooter from "@/components/SiteFooter.astro";
+---
+
+<BaseLayout
+  title="MacTools | 原生 macOS 菜单栏工具集"
+  description="MacTools 是一组免费开源的原生 macOS 菜单栏工具，把显示器、清理、休眠、启动台、插件市场和更多高频系统操作集中到一个轻量入口。"
+  page="home"
+>
+  <SiteNav active="home" />
+  <main>
+    <HomeHero />
+    <FeatureShowcase />
+  </main>
+  <SiteFooter />
+  <script src="../scripts/site-controls.ts"></script>
+</BaseLayout>

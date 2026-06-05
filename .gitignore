@@ -5,6 +5,10 @@ Configs/GeneratedPlugins.yml
 scripts/release.local.env
 build/
 .build/
+site/node_modules/
+site/dist/
+site/.astro/
+site/public/assets
 __pycache__/
 .DS_Store
 *.log

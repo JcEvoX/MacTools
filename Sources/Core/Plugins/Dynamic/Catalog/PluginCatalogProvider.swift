@@ -27,7 +27,7 @@ protocol PluginCatalogProviding {
 }
 
 struct PluginCatalogProviderConfiguration {
-    static let productionCatalogURL = URL(string: "https://ggbond268.github.io/MacTools/plugins/catalog.json")!
+    static let productionCatalogURL = URL(string: "https://mactools.ggbond.app/plugins/catalog.json")!
 
     static func defaultSource(environment: [String: String] = ProcessInfo.processInfo.environment) -> PluginCatalogSource {
         #if DEBUG

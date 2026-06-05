@@ -1,0 +1,56 @@
+---
+const base = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const withBase = (path: string) => `${base}${path.replace(/^\//, "")}`;
+
+const downloadURL = "https://github.com/ggbond268/MacTools/releases/latest/download/MacTools.dmg";
+const installCommand = "brew install --cask mactools";
+---
+
+<section class="home-hero" aria-labelledby="home-title">
+  <div class="hero-wordmark" aria-hidden="true">
+    <img src={withBase("/assets/logo-mactools-rounded.png")} width="112" height="112" alt="" />
+  </div>
+  <div class="home-hero-copy">
+    <p class="eyebrow">
+      <span data-i18n-zh>原生 macOS 菜单栏工具集</span>
+      <span data-i18n-en>Native macOS menu bar toolkit</span>
+    </p>
+    <h1 id="home-title">
+      <span class="hero-title-zh" data-i18n-zh>
+        <span>常用系统操作，</span>
+        <span>安静地留在菜单栏。</span>
+      </span>
+      <span data-i18n-en>Everyday system controls, kept quietly in the menu bar.</span>
+    </h1>
+    <p class="hero-lead">
+      <span data-i18n-zh>MacTools 把显示器、清理、休眠、启动台、插件市场和更多高频动作集中到一个轻量入口。</span>
+      <span data-i18n-en>MacTools collects display controls, cleanup, sleep, Launchpad, plugins, and other frequent actions in one lightweight native app.</span>
+    </p>
+    <div class="hero-actions">
+      <a class="button primary" href={downloadURL} target="_blank" rel="noopener noreferrer">
+        <span data-i18n-zh>下载最新版 DMG</span>
+        <span data-i18n-en>Download latest DMG</span>
+      </a>
+      <a class="button subtle" href="https://github.com/ggbond268/MacTools/releases" target="_blank" rel="noopener noreferrer">
+        <span data-i18n-zh>查看发布记录</span>
+        <span data-i18n-en>View releases</span>
+      </a>
+    </div>
+  </div>
+  <div class="homebrew-panel" id="install">
+    <p>
+      <span data-i18n-zh>也可以使用 Homebrew 安装</span>
+      <span data-i18n-en>Or install with Homebrew</span>
+    </p>
+    <div class="command-line">
+      <span>$</span>
+      <code>{installCommand}</code>
+      <button type="button" data-copy={installCommand}>
+        <span data-i18n-zh>复制</span>
+        <span data-i18n-en>Copy</span>
+      </button>
+    </div>
+  </div>
+</section>
