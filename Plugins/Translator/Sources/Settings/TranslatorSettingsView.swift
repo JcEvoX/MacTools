@@ -43,13 +43,13 @@ struct TranslatorSettingsView: View {
 
             VStack(spacing: 0) {
                 fieldRow(title: "第一语言", description: "自动识别为其他语言时翻译到这里。") {
-                    languagePicker(selection: $firstLanguage)
+                    languagePicker(selection: messageClearing($firstLanguage))
                 }
 
                 PluginSettingsListDivider()
 
                 fieldRow(title: "第二语言", description: "识别为第一语言时翻译到这里。") {
-                    languagePicker(selection: $secondLanguage)
+                    languagePicker(selection: messageClearing($secondLanguage))
                 }
             }
             .pluginSettingsCardBackground(.host)
@@ -163,60 +163,64 @@ struct TranslatorSettingsView: View {
     private func providerRow(index: Int) -> some View {
         let profile = profiles[index]
 
-        return Button {
-            selectedProfileID = profile.id
-        } label: {
-            HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                Toggle("", isOn: binding(for: index, keyPath: \.isEnabled))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+        // 行内的开关与移动/删除按钮各自独立响应，仅名称/模型区域作为选择目标，
+        // 避免把交互控件嵌套进同一个行级 Button 造成点击目标冲突。
+        return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Toggle("", isOn: binding(for: index, keyPath: \.isEnabled))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
 
-                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                    Text(profile.normalizedName.isEmpty ? "未命名服务" : profile.normalizedName)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
-                    Text(profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未设置模型" : profile.model)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            Button {
+                selectedProfileID = profile.id
+            } label: {
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                        Text(profile.normalizedName.isEmpty ? "未命名服务" : profile.normalizedName)
+                            .font(PluginSettingsTheme.Typography.rowTitle)
+                        Text(profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未设置模型" : profile.model)
+                            .font(PluginSettingsTheme.Typography.rowDescription)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+                    if profile.isEnabled, let validationError = profile.validationError {
+                        Text(validationError.localizedDescription)
+                            .font(PluginSettingsTheme.Typography.statusBadge)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    }
                 }
-
-                Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-                if profile.isEnabled, let validationError = profile.validationError {
-                    Text(validationError.localizedDescription)
-                        .font(PluginSettingsTheme.Typography.statusBadge)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
-
-                iconButton("chevron.up", help: "上移") {
-                    moveProfile(from: index, offset: -1)
-                }
-                .disabled(index == 0)
-
-                iconButton("chevron.down", help: "下移") {
-                    moveProfile(from: index, offset: 1)
-                }
-                .disabled(index == profiles.count - 1)
-
-                iconButton("trash", help: "删除") {
-                    deleteProfile(at: index)
-                }
-                .disabled(profiles.count == 1)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .pluginSettingsListRowPadding(interactive: true)
-            .background {
-                if selectedProfileID == profile.id {
-                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.10))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                }
+            .buttonStyle(.plain)
+
+            iconButton("chevron.up", help: "上移") {
+                moveProfile(from: index, offset: -1)
+            }
+            .disabled(index == 0)
+
+            iconButton("chevron.down", help: "下移") {
+                moveProfile(from: index, offset: 1)
+            }
+            .disabled(index == profiles.count - 1)
+
+            iconButton("trash", help: "删除") {
+                deleteProfile(at: index)
+            }
+            .disabled(profiles.count == 1)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+        .background {
+            if selectedProfileID == profile.id {
+                RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.field, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.10))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
             }
         }
-        .buttonStyle(.plain)
     }
 
     private func promptEditor(index: Int) -> some View {
@@ -295,6 +299,7 @@ struct TranslatorSettingsView: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.borderless)
+        .controlSize(.small)
         .foregroundStyle(.secondary)
         .help(help)
     }
@@ -315,14 +320,31 @@ struct TranslatorSettingsView: View {
     ) -> Binding<Value> {
         Binding(
             get: { profiles[index][keyPath: keyPath] },
-            set: { profiles[index][keyPath: keyPath] = $0 }
+            set: {
+                profiles[index][keyPath: keyPath] = $0
+                message = nil
+            }
         )
     }
 
     private func apiKeyBinding(profileID: String) -> Binding<String> {
         Binding(
             get: { apiKeys[profileID] ?? "" },
-            set: { apiKeys[profileID] = $0 }
+            set: {
+                apiKeys[profileID] = $0
+                message = nil
+            }
+        )
+    }
+
+    /// 包装语言选择 binding，在用户改动时清除“已保存”提示，避免未保存改动看起来已保存。
+    private func messageClearing(_ binding: Binding<TranslatorLanguage>) -> Binding<TranslatorLanguage> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: {
+                binding.wrappedValue = $0
+                message = nil
+            }
         )
     }
 

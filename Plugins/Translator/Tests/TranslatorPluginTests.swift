@@ -290,6 +290,63 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
     }
 
+    func testSavingProfilesDeletesKeychainEntriesForRemovedProfiles() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let plugin = makePlugin(secretStore: secretStore)
+        let first = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let second = TranslatorProviderProfile(id: "second", name: "Second")
+        let languagePair = TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first, second],
+            apiKeys: [first.id: "sk-1", second.id: "sk-2"],
+            languagePair: languagePair
+        ))
+
+        // 第二次保存移除了 second，应清理它残留的 Keychain 凭据。
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first],
+            apiKeys: [first.id: "sk-1"],
+            languagePair: languagePair
+        ))
+
+        XCTAssertEqual(secretStore.deletedProfileIDs, ["second"])
+    }
+
+    func testAPIKeyStatePresentWhenOneEnabledProfileHealthyAndAnotherMissesKey() async {
+        let storage = TranslatorInMemoryPluginStorage()
+        let healthy = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let missing = TranslatorProviderProfile(id: "second", name: "Second")
+        try? TranslatorProviderProfileStore(storage: storage).saveProfiles([healthy, missing])
+
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        // 仅 healthy profile 有可用密钥，missing profile 缺密钥。
+        try? secretStore.saveAPIKey("sk-1", forProfileID: healthy.id)
+
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let plugin = makePlugin(
+            storage: storage,
+            secretStore: secretStore,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        // 存在一个可用 provider，整体状态应保持可用，而非被缺密钥的 profile 拉成 missing。
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
+    }
+
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
         let storage = TranslatorInMemoryPluginStorage()
         let plugin = makePlugin(storage: storage)
@@ -577,6 +634,7 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
     private(set) var loadCount = 0
     private(set) var containsCount = 0
     private(set) var saveCount = 0
+    private(set) var deletedProfileIDs: [String] = []
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -617,6 +675,7 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
     }
 
     func deleteAPIKey(forProfileID profileID: String) throws {
+        deletedProfileIDs.append(profileID)
         profileAPIKeys.removeValue(forKey: profileID)
     }
 }
