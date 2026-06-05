@@ -244,7 +244,8 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(secretStore.loadCount, 1)
+        // 默认 profile 未命中 profile 密钥时回退读取 legacy 单密钥，故加载两次存储项。
+        XCTAssertEqual(secretStore.loadCount, 2)
     }
 
     func testSavingBlankAPIKeyWithoutExistingKeyReturnsConfigurationError() {
@@ -283,7 +284,8 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertNil(message)
         XCTAssertEqual(secretStore.loadCount, 0)
-        XCTAssertEqual(secretStore.containsCount, 1)
+        // 先检查 profile 密钥是否存在，未命中再回退检查 legacy 单密钥，故存在性检查两次。
+        XCTAssertEqual(secretStore.containsCount, 2)
         XCTAssertEqual(secretStore.saveCount, 0)
         XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
     }
