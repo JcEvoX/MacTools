@@ -402,6 +402,30 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(storage.bool(forKey: "screenshot.invoked"))
     }
 
+    func testScreenshotShortcutUsesPluginScreenRecordingPermissionProvider() async {
+        let storage = TranslatorInMemoryPluginStorage()
+        let screenshotCapturer = RecordingPluginScreenshotRegionCapturer(
+            permissionProvider: { true },
+            result: .failure(.cancelled)
+        )
+        let plugin = makePlugin(
+            storage: storage,
+            screenRecordingPermissionProvider: { false },
+            screenshotRegionCapturerFactory: { permissionProvider in
+                screenshotCapturer.permissionProvider = permissionProvider
+                return screenshotCapturer
+            },
+            translationProviderFactoryOverride: {
+                .provider(RecordingTranslationProvider(resultText: "unused"))
+            }
+        )
+
+        plugin.handleShortcutAction(id: "screenshot-translation")
+        await screenshotCapturer.waitUntilCaptureCount(1)
+
+        XCTAssertEqual(screenshotCapturer.permissionChecks, [false])
+    }
+
     func testShortcutActionDoesNotStartSelectTranslationWhenDisabled() {
         let storage = TranslatorInMemoryPluginStorage()
         storage.set(false, forKey: "translator.shortcut.enabled")
@@ -617,11 +641,13 @@ final class TranslatorPluginTests: XCTestCase {
         storage: TranslatorInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
         accessibilityTrustRequester: @escaping (Bool) -> Bool = { _ in true },
+        screenRecordingPermissionProvider: @escaping () -> Bool = { true },
         selectTranslationStarter: (() -> Void)? = nil,
         screenshotTranslationStarter: (() -> Void)? = nil,
         secretStore: (any TranslatorSecretStoring)? = nil,
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
+        screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory? = nil,
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil
     ) -> TranslatorPlugin {
         let storage = storage ?? TranslatorInMemoryPluginStorage()
@@ -630,11 +656,13 @@ final class TranslatorPluginTests: XCTestCase {
             context: PluginRuntimeContext(pluginID: "translator", storage: storage),
             accessibilityTrustProvider: accessibilityTrustProvider,
             accessibilityTrustRequester: accessibilityTrustRequester,
+            screenRecordingPermissionProvider: screenRecordingPermissionProvider,
             selectTranslationStarter: selectTranslationStarter,
             screenshotTranslationStarter: screenshotTranslationStarter,
             secretStore: secretStore ?? OpenAICompatibleSecretStore(service: uniqueTestKeychainService()),
             panelController: panelController ?? TranslatorPanelController(),
             selectedTextCapturePipeline: selectedTextCapturePipeline ?? .live(),
+            screenshotRegionCapturerFactory: screenshotRegionCapturerFactory,
             translationProviderFactoryOverride: translationProviderFactoryOverride
         )
     }
@@ -705,6 +733,44 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
     func deleteAPIKey(forProfileID profileID: String) throws {
         deletedProfileIDs.append(profileID)
         profileAPIKeys.removeValue(forKey: profileID)
+    }
+}
+
+@MainActor
+private final class RecordingPluginScreenshotRegionCapturer: ScreenshotRegionCapturing {
+    var permissionProvider: () -> Bool
+    var result: ScreenshotCaptureResult
+    private(set) var permissionChecks: [Bool] = []
+    private(set) var captureCount = 0
+    private var captureCountWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    init(
+        permissionProvider: @escaping () -> Bool,
+        result: ScreenshotCaptureResult
+    ) {
+        self.permissionProvider = permissionProvider
+        self.result = result
+    }
+
+    func captureRegion() async -> ScreenshotCaptureResult {
+        captureCount += 1
+        permissionChecks.append(permissionProvider())
+        resumeCaptureCountWaiters()
+        return result
+    }
+
+    func waitUntilCaptureCount(_ expectedCount: Int) async {
+        if captureCount >= expectedCount { return }
+
+        await withCheckedContinuation { continuation in
+            captureCountWaiters.append((expectedCount, continuation))
+        }
+    }
+
+    private func resumeCaptureCountWaiters() {
+        let matching = captureCountWaiters.filter { captureCount >= $0.0 }
+        captureCountWaiters.removeAll { captureCount >= $0.0 }
+        matching.forEach { $0.1.resume() }
     }
 }
 

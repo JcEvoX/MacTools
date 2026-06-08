@@ -20,6 +20,8 @@ private struct TranslatorPluginProvider: PluginProvider {
     }
 }
 
+typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) -> any ScreenshotRegionCapturing
+
 @MainActor
 final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
     private enum APIKeyState: Equatable {
@@ -52,6 +54,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private let panelController: any TranslatorPanelControlling
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
     private let screenshotRegionCapturer: (any ScreenshotRegionCapturing)?
+    private let screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory
     private let ocrTextRecognizer: (any OCRTextRecognizing)?
     private let translationProviderFactoryOverride: TranslatorProviderFactory?
     private let providerProfileStore: TranslatorProviderProfileStore
@@ -77,6 +80,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
         screenshotRegionCapturer: (any ScreenshotRegionCapturing)? = nil,
+        screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory? = nil,
         ocrTextRecognizer: (any OCRTextRecognizing)? = nil,
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil,
         localization: PluginLocalization? = nil
@@ -101,6 +105,9 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         self.panelController = panelController ?? TranslatorPanelController(localization: localization)
         self.selectedTextCapturePipeline = selectedTextCapturePipeline ?? .live(localization: localization)
         self.screenshotRegionCapturer = screenshotRegionCapturer
+        self.screenshotRegionCapturerFactory = screenshotRegionCapturerFactory ?? { permissionProvider in
+            ScreenshotRegionCapturer(screenRecordingPermissionProvider: permissionProvider)
+        }
         self.ocrTextRecognizer = ocrTextRecognizer
         self.translationProviderFactoryOverride = translationProviderFactoryOverride
         let providerProfileStore = TranslatorProviderProfileStore(storage: context.storage, localization: localization)
@@ -500,7 +507,8 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private func makeCoordinator() -> TranslatorCoordinator {
         TranslatorCoordinator(
             selectedTextCapturePipeline: selectedTextCapturePipeline,
-            screenshotRegionCapturer: screenshotRegionCapturer ?? ScreenshotRegionCapturer(),
+            screenshotRegionCapturer: screenshotRegionCapturer
+                ?? screenshotRegionCapturerFactory(screenRecordingPermissionProvider),
             ocrTextRecognizer: ocrTextRecognizer ?? VisionOCRTextRecognizer(),
             languagePreferenceStore: LanguagePreferenceStore(storage: storage),
             providerFactory: translationProviderFactoryOverride ?? { [weak self] in

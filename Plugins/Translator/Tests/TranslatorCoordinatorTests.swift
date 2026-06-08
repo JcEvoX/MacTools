@@ -322,6 +322,36 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.snapshot.translation?.text, "截图译文")
     }
 
+    func testScreenshotTranslationSurfacesRegionSelectionStateBeforeCaptureCompletes() async {
+        let screenshotCapturer = DeferredScreenshotRegionCapturer(
+            result: .success(
+                image: NSImage(size: NSSize(width: 20, height: 20)),
+                selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20),
+                screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+            )
+        )
+        let ocrRecognizer = RecordingOCRTextRecognizer(
+            result: OCRTextRecognitionResult(text: "captured text", lines: [])
+        )
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: { .provider(RecordingTranslationProvider(resultText: "译文")) },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await screenshotCapturer.waitUntilStarted()
+
+        XCTAssertTrue(panel.shownSnapshots.contains {
+            $0.phase == .capturing && $0.captureStage == .screenshotRegion
+        })
+
+        await coordinator.handle(.close)
+        screenshotCapturer.resume()
+    }
+
     func testScreenshotTranslationDoesNotResolveProviderBeforeOCRTextExists() async {
         let screenshotCapturer = DeferredScreenshotRegionCapturer(
             result: .success(

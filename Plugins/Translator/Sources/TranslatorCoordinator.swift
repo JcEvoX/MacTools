@@ -181,6 +181,7 @@ final class TranslatorCoordinator {
             querySource: .screenshot,
             captureStage: .screenshotRegion
         )
+        panelController?.show(snapshot: snapshot)
 
         guard let screenshotRegionCapturer, let ocrTextRecognizer else {
             setError(
