@@ -12,37 +12,48 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.metadata.id, "translator")
         XCTAssertEqual(plugin.metadata.title, "翻译")
-        XCTAssertEqual(plugin.metadata.defaultDescription, "划词快捷键翻译")
+        XCTAssertEqual(plugin.metadata.defaultDescription, "划词与截图快捷键翻译")
         XCTAssertNotNil(plugin.primaryPanel)
         XCTAssertNotNil(plugin.configuration)
     }
 
-    func testShortcutDefinitionUsesOptionD() throws {
+    func testShortcutDefinitionsIncludeSelectAndScreenshotTranslation() throws {
         let plugin = makePlugin()
-        let definition = try XCTUnwrap(plugin.shortcutDefinitions.first)
+        let definitions = plugin.shortcutDefinitions
+        let select = try XCTUnwrap(definitions.first { $0.id == "translator.select-translation" })
+        let screenshot = try XCTUnwrap(definitions.first { $0.id == "translator.screenshot-translation" })
 
-        XCTAssertEqual(definition.id, "translator.select-translation")
-        XCTAssertEqual(definition.title, "划词翻译")
-        XCTAssertEqual(definition.description, "翻译当前选中的文本。")
-        XCTAssertEqual(definition.actionID, "select-translation")
-        XCTAssertEqual(definition.scope, .global)
-        XCTAssertEqual(definition.defaultBinding?.keyCode, UInt16(kVK_ANSI_D))
-        XCTAssertEqual(definition.defaultBinding?.modifiers, [.option])
-        XCTAssertFalse(definition.isRequired)
+        XCTAssertEqual(definitions.count, 2)
+        XCTAssertEqual(select.title, "划词翻译")
+        XCTAssertEqual(select.description, "翻译当前选中的文本。")
+        XCTAssertEqual(select.actionID, "select-translation")
+        XCTAssertEqual(select.scope, .global)
+        XCTAssertEqual(select.defaultBinding?.keyCode, UInt16(kVK_ANSI_D))
+        XCTAssertEqual(select.defaultBinding?.modifiers, [.option])
+        XCTAssertFalse(select.isRequired)
+
+        XCTAssertEqual(screenshot.title, "截图翻译")
+        XCTAssertEqual(screenshot.description, "框选截图区域并翻译识别出的文字。")
+        XCTAssertEqual(screenshot.actionID, "screenshot-translation")
+        XCTAssertEqual(screenshot.scope, .global)
+        XCTAssertEqual(screenshot.defaultBinding?.keyCode, UInt16(kVK_ANSI_S))
+        XCTAssertEqual(screenshot.defaultBinding?.modifiers, [.option])
+        XCTAssertFalse(screenshot.isRequired)
     }
 
-    func testDeclaresAccessibilityAndAutomationPermissions() {
+    func testDeclaresAccessibilityAutomationAndScreenRecordingPermissions() {
         let plugin = makePlugin()
         let requirements = plugin.permissionRequirements
 
-        XCTAssertEqual(requirements.map(\.id), ["accessibility", "automation"])
-        XCTAssertEqual(requirements.map(\.kind), [.accessibility, .automation])
-        XCTAssertEqual(requirements.map(\.title), ["辅助功能授权", "自动化授权"])
+        XCTAssertEqual(requirements.map(\.id), ["accessibility", "automation", "screen-recording"])
+        XCTAssertEqual(requirements.map(\.kind), [.accessibility, .automation, .screenRecording])
+        XCTAssertEqual(requirements.map(\.title), ["辅助功能授权", "自动化授权", "屏幕录制授权"])
         XCTAssertEqual(
             requirements.map(\.description),
             [
                 "划词翻译需要读取当前选中文本。",
                 "浏览器划词可能需要允许 MacTools 控制当前浏览器。",
+                "截图翻译需要读取框选区域的屏幕内容。",
             ]
         )
     }
@@ -116,7 +127,7 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertEqual(secretStore.loadCount, 0)
         XCTAssertEqual(secretStore.containsCount, 0)
-        XCTAssertEqual(state.subtitle, "按 ⌥D 翻译选中文本")
+        XCTAssertEqual(state.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
     func testPrimaryPanelShowsAccessibilitySubtitleBeforeOpenAISetupWhenPermissionIsMissing() {
@@ -291,7 +302,7 @@ final class TranslatorPluginTests: XCTestCase {
         // 先检查 profile 密钥是否存在，未命中再回退检查 legacy 单密钥，故存在性检查两次。
         XCTAssertEqual(secretStore.containsCount, 2)
         XCTAssertEqual(secretStore.saveCount, 0)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
     func testSavingProfilesDeletesKeychainEntriesForRemovedProfiles() {
@@ -348,7 +359,7 @@ final class TranslatorPluginTests: XCTestCase {
         await capture.waitUntilCompleted()
 
         // 存在一个可用 provider，整体状态应保持可用，而非被缺密钥的 profile 拉成 missing。
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
@@ -378,6 +389,17 @@ final class TranslatorPluginTests: XCTestCase {
         plugin.handleShortcutAction(id: "select-translation")
 
         XCTAssertTrue(storage.bool(forKey: "handler.invoked"))
+    }
+
+    func testShortcutActionStartsScreenshotTranslationWhenEnabled() {
+        let storage = TranslatorInMemoryPluginStorage()
+        let plugin = makePlugin(storage: storage, screenshotTranslationStarter: {
+            storage.set(true, forKey: "screenshot.invoked")
+        })
+
+        plugin.handleShortcutAction(id: "screenshot-translation")
+
+        XCTAssertTrue(storage.bool(forKey: "screenshot.invoked"))
     }
 
     func testShortcutActionDoesNotStartSelectTranslationWhenDisabled() {
@@ -596,6 +618,7 @@ final class TranslatorPluginTests: XCTestCase {
         accessibilityTrustProvider: @escaping () -> Bool = { true },
         accessibilityTrustRequester: @escaping (Bool) -> Bool = { _ in true },
         selectTranslationStarter: (() -> Void)? = nil,
+        screenshotTranslationStarter: (() -> Void)? = nil,
         secretStore: (any TranslatorSecretStoring)? = nil,
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
@@ -608,6 +631,7 @@ final class TranslatorPluginTests: XCTestCase {
             accessibilityTrustProvider: accessibilityTrustProvider,
             accessibilityTrustRequester: accessibilityTrustRequester,
             selectTranslationStarter: selectTranslationStarter,
+            screenshotTranslationStarter: screenshotTranslationStarter,
             secretStore: secretStore ?? OpenAICompatibleSecretStore(service: uniqueTestKeychainService()),
             panelController: panelController ?? TranslatorPanelController(),
             selectedTextCapturePipeline: selectedTextCapturePipeline ?? .live(),

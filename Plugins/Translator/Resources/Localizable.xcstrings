@@ -364,13 +364,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Translate selected text with a shortcut"
+            "value": "Translate selected text or screenshot regions with shortcuts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "划词快捷键翻译"
+            "value": "划词与截图快捷键翻译"
           }
         }
       }
@@ -783,6 +783,40 @@
         }
       }
     },
+    "panel.sourcePlaceholder.ocr": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recognizing screenshot text…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在识别截图文字..."
+          }
+        }
+      }
+    },
+    "panel.sourcePlaceholder.screenshotRegion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecting screenshot region…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在选择截图区域..."
+          }
+        }
+      }
+    },
     "panel.sourcePlaceholder.idle": {
       "extractionState": "manual",
       "localizations": {
@@ -857,13 +891,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Press ⌥D to translate selected text"
+            "value": "Press ⌥D for selection, ⌥S for screenshot"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "按 ⌥D 翻译选中文本"
+            "value": "按 ⌥D 划词，⌥S 截图"
           }
         }
       }
@@ -953,6 +987,23 @@
         }
       }
     },
+    "panelError.missingOCRText": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No text recognized in the screenshot"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图中没有识别到文字"
+          }
+        }
+      }
+    },
     "panelError.permissionRequired": {
       "extractionState": "manual",
       "localizations": {
@@ -966,6 +1017,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "需要辅助功能授权"
+          }
+        }
+      }
+    },
+    "panelError.screenRecordingPermissionRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen Recording permission required"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要屏幕录制授权"
+          }
+        }
+      }
+    },
+    "panelError.screenshotCancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot cancelled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消截图"
+          }
+        }
+      }
+    },
+    "panelError.screenshotFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图失败"
+          }
+        }
+      }
+    },
+    "panelError.screenshotRegionTooSmall": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot region is too small"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图区域太小"
           }
         }
       }
@@ -1085,6 +1204,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "自动化授权"
+          }
+        }
+      }
+    },
+    "permission.screenRecording.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot translation needs to read the selected screen region."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图翻译需要读取框选区域的屏幕内容。"
+          }
+        }
+      }
+    },
+    "permission.screenRecording.footnote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open System Settings > Privacy & Security > Screen Recording and allow MacTools."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往系统设置 → 隐私与安全性 → 屏幕录制，授权 MacTools。"
+          }
+        }
+      }
+    },
+    "permission.screenRecording.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen Recording"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕录制授权"
           }
         }
       }
@@ -1782,6 +1952,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "划词翻译"
+          }
+        }
+      }
+    },
+    "shortcut.screenshotTranslation.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a screenshot region and translate recognized text."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "框选截图区域并翻译识别出的文字。"
+          }
+        }
+      }
+    },
+    "shortcut.screenshotTranslation.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Translate Screenshot"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图翻译"
           }
         }
       }
