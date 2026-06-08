@@ -311,6 +311,7 @@ final class TranslatorCoordinator {
     private func runRetry(sourceText: String) async {
         let currentSessionID = UUID()
         sessionID = currentSessionID
+        let querySource = lastQuerySource
         let providerBuildResult = providerFactory()
 
         switch providerBuildResult {
@@ -324,10 +325,16 @@ final class TranslatorCoordinator {
                         provider: provider
                     ),
                 ],
+                querySource: querySource,
                 sessionID: currentSessionID
             )
         case let .providers(providers):
-            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
+            await translate(
+                sourceText: sourceText,
+                providers: providers,
+                querySource: querySource,
+                sessionID: currentSessionID
+            )
         case let .missing(message):
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.missingConfiguration),
@@ -336,7 +343,7 @@ final class TranslatorCoordinator {
                 translation: nil,
                 providerResults: providerBuildResult.waitingProviderResults(localization: localization),
                 errorMessage: message,
-                querySource: lastQuerySource,
+                querySource: querySource,
                 captureStage: nil
             )
             panelController?.show(snapshot: snapshot)
@@ -346,8 +353,11 @@ final class TranslatorCoordinator {
     private func translate(
         sourceText: String,
         providers: [ResolvedTranslationProvider],
+        querySource: TranslatorQuerySource?,
         sessionID currentSessionID: UUID
     ) async {
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
         let languageSelection = AutomaticLanguageSelector(
             preferredPair: languagePreferenceStore.loadPair()
         ).select(text: sourceText)
@@ -368,7 +378,7 @@ final class TranslatorCoordinator {
             translation: nil,
             providerResults: initialProviderResults,
             errorMessage: nil,
-            querySource: lastQuerySource,
+            querySource: querySource,
             captureStage: nil
         )
         panelController?.show(snapshot: snapshot)
@@ -378,6 +388,7 @@ final class TranslatorCoordinator {
             finishProviderBatch(
                 sourceText: sourceText,
                 languageSelection: languageSelection,
+                querySource: querySource,
                 sessionID: currentSessionID
             )
             return
@@ -435,6 +446,7 @@ final class TranslatorCoordinator {
         finishProviderBatch(
             sourceText: sourceText,
             languageSelection: languageSelection,
+            querySource: querySource,
             sessionID: currentSessionID
         )
     }
@@ -480,6 +492,7 @@ final class TranslatorCoordinator {
     private func finishProviderBatch(
         sourceText: String,
         languageSelection: TranslatorLanguageSelection,
+        querySource: TranslatorQuerySource?,
         sessionID currentSessionID: UUID
     ) {
         let firstSuccess = snapshot.providerResults.first { $0.phase == .success }?.translation
@@ -493,7 +506,7 @@ final class TranslatorCoordinator {
                 translation: firstSuccess,
                 providerResults: snapshot.providerResults,
                 errorMessage: nil,
-                querySource: lastQuerySource,
+                querySource: querySource,
                 captureStage: nil
             )
         } else {
@@ -506,7 +519,7 @@ final class TranslatorCoordinator {
                 translation: nil,
                 providerResults: snapshot.providerResults,
                 errorMessage: message,
-                querySource: lastQuerySource,
+                querySource: querySource,
                 captureStage: nil
             )
         }
@@ -520,6 +533,8 @@ final class TranslatorCoordinator {
         providerResults: [TranslatorProviderResult],
         sessionID currentSessionID: UUID
     ) async {
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
         switch providerBuildResult {
         case let .provider(provider):
             await translate(
@@ -531,10 +546,16 @@ final class TranslatorCoordinator {
                         provider: provider
                     ),
                 ],
+                querySource: querySource,
                 sessionID: currentSessionID
             )
         case let .providers(providers):
-            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
+            await translate(
+                sourceText: sourceText,
+                providers: providers,
+                querySource: querySource,
+                sessionID: currentSessionID
+            )
         case let .missing(message):
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.missingConfiguration),

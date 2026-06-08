@@ -19,9 +19,7 @@ final class ScreenshotOverlaySessionTests: XCTestCase {
         await waitUntil { window.showCount == 1 }
 
         task.cancel()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(window.dismissCount, 1)
+        await waitUntil { window.dismissCount == 1 }
 
         let result = await task.value
         XCTAssertEqual(result, .failure(.cancelled))

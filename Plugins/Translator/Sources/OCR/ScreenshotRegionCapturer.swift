@@ -50,15 +50,18 @@ protocol ScreenshotOverlaySelecting: AnyObject {
 final class ScreenshotRegionCapturer: ScreenshotRegionCapturing {
     private let screenRecordingPermissionProvider: () -> Bool
     private let overlaySelector: any ScreenshotOverlaySelecting
+    private let displayImageProvider: (CGDirectDisplayID) -> CGImage?
 
     init(
         screenRecordingPermissionProvider: @escaping () -> Bool = {
             CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
         },
-        overlaySelector: (any ScreenshotOverlaySelecting)? = nil
+        overlaySelector: (any ScreenshotOverlaySelecting)? = nil,
+        displayImageProvider: @escaping (CGDirectDisplayID) -> CGImage? = CGDisplayCreateImage
     ) {
         self.screenRecordingPermissionProvider = screenRecordingPermissionProvider
         self.overlaySelector = overlaySelector ?? ScreenshotOverlaySession()
+        self.displayImageProvider = displayImageProvider
     }
 
     func captureRegion() async -> ScreenshotCaptureResult {
@@ -78,7 +81,7 @@ final class ScreenshotRegionCapturer: ScreenshotRegionCapturing {
         guard let screenID = selection.displayID else {
             return .failure(.noScreen)
         }
-        guard let displayImage = CGDisplayCreateImage(screenID) else {
+        guard let displayImage = displayImageProvider(screenID) else {
             return .failure(.screenshotFailed)
         }
 
@@ -90,7 +93,15 @@ final class ScreenshotRegionCapturer: ScreenshotRegionCapturing {
             height: selection.selectedRect.height * scale
         ).integral
 
-        guard let croppedImage = displayImage.cropping(to: cropRect) else {
+        let imageBounds = CGRect(
+            origin: .zero,
+            size: CGSize(width: displayImage.width, height: displayImage.height)
+        )
+        let boundedCropRect = cropRect.intersection(imageBounds)
+
+        guard !boundedCropRect.isNull,
+              !boundedCropRect.isEmpty,
+              let croppedImage = displayImage.cropping(to: boundedCropRect) else {
             return .failure(.screenshotFailed)
         }
 

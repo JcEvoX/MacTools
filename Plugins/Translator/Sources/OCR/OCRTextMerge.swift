@@ -15,10 +15,10 @@ enum OCRTextMerge {
         guard !normalizedLines.isEmpty else { return "" }
 
         let positiveHeights = normalizedLines
-            .map { Double($0.boundingBox.height) }
+            .map(\.boundingBox.height)
             .filter { $0 > 0 }
-        let averageHeight = positiveHeights.reduce(0, +) / Double(max(1, positiveHeights.count))
-        let rowTolerance = max(averageHeight * 0.65, 0.015)
+        let averageHeight = positiveHeights.reduce(CGFloat.zero, +) / CGFloat(max(1, positiveHeights.count))
+        let rowTolerance = max(averageHeight * 0.65, CGFloat(0.015))
 
         let sorted = normalizedLines.sorted { lhs, rhs in
             let lhsCenterY = lhs.boundingBox.midY
