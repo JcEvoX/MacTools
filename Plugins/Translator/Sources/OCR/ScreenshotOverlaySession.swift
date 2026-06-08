@@ -3,30 +3,72 @@ import SwiftUI
 
 @MainActor
 final class ScreenshotOverlaySession: ScreenshotOverlaySelecting {
-    private var windows: [ScreenshotOverlayWindow] = []
-    private var closingWindows: [ScreenshotOverlayWindow] = []
+    private var windows: [any ScreenshotOverlayWindowManaging] = []
+    private var closingWindows: [any ScreenshotOverlayWindowManaging] = []
     private var continuation: CheckedContinuation<ScreenshotOverlaySelectionResult, Never>?
+    private let hasAvailableScreens: () -> Bool
+    private let activateApplication: () -> Void
+    private let overlayWindowPresenter: (@escaping (ScreenshotOverlaySelectionResult) -> Void) -> [any ScreenshotOverlayWindowManaging]
+
+    init(
+        hasAvailableScreens: @escaping () -> Bool = { !NSScreen.screens.isEmpty },
+        activateApplication: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+        overlayWindowPresenter: (
+            (@escaping (ScreenshotOverlaySelectionResult) -> Void) -> [any ScreenshotOverlayWindowManaging]
+        )? = nil
+    ) {
+        self.hasAvailableScreens = hasAvailableScreens
+        self.activateApplication = activateApplication
+        self.overlayWindowPresenter = overlayWindowPresenter ?? { completion in
+            Self.makeOverlayWindows(on: NSScreen.screens, completion: completion)
+        }
+    }
 
     func selectRegion() async -> ScreenshotOverlaySelectionResult {
         guard continuation == nil else {
             return .failure(.cancelled)
         }
 
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else {
+        guard hasAvailableScreens() else {
             return .failure(.noScreen)
         }
 
-        return await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            self.showOverlayWindows(on: screens)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                if Task.isCancelled {
+                    self.complete(.failure(.cancelled))
+                    return
+                }
+                self.showOverlayWindows()
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.complete(.failure(.cancelled))
+            }
         }
     }
 
-    private func showOverlayWindows(on screens: [NSScreen]) {
-        NSApp.activate(ignoringOtherApps: true)
+    private func showOverlayWindows() {
+        activateApplication()
+        windows = overlayWindowPresenter { [weak self] result in
+            self?.complete(result)
+        }
 
-        windows = screens.map { screen in
+        guard !windows.isEmpty else {
+            complete(.failure(.noScreen))
+            return
+        }
+
+        windows.forEach { $0.showOverlayWindow() }
+        windows.first?.makeOverlayKeyWindow()
+    }
+
+    private static func makeOverlayWindows(
+        on screens: [NSScreen],
+        completion: @escaping (ScreenshotOverlaySelectionResult) -> Void
+    ) -> [any ScreenshotOverlayWindowManaging] {
+        screens.map { screen in
             let window = ScreenshotOverlayWindow(
                 contentRect: screen.frame,
                 styleMask: [.borderless],
@@ -48,22 +90,17 @@ final class ScreenshotOverlaySession: ScreenshotOverlaySelecting {
                 .ignoresCycle,
                 .stationary,
             ]
-            window.onCancel = { [weak self] in
-                self?.complete(.failure(.cancelled))
+            window.onCancel = {
+                completion(.failure(.cancelled))
             }
             window.contentView = NSHostingView(
                 rootView: ScreenshotOverlayView(
                     screen: screen,
-                    onComplete: { [weak self] result in
-                        self?.complete(result)
-                    }
+                    onComplete: completion
                 )
             )
             return window
         }
-
-        windows.forEach { $0.orderFrontRegardless() }
-        windows.first?.makeKeyAndOrderFront(nil)
     }
 
     private func complete(_ result: ScreenshotOverlaySelectionResult) {
@@ -74,9 +111,7 @@ final class ScreenshotOverlaySession: ScreenshotOverlaySelecting {
         windows = []
         closingWindows.append(contentsOf: currentWindows)
         currentWindows.forEach { window in
-            window.onCancel = nil
-            window.contentView = nil
-            window.orderOut(nil)
+            window.dismissOverlayWindow()
         }
         continuation.resume(returning: result)
 
@@ -86,7 +121,14 @@ final class ScreenshotOverlaySession: ScreenshotOverlaySelecting {
     }
 }
 
-private final class ScreenshotOverlayWindow: NSWindow {
+@MainActor
+protocol ScreenshotOverlayWindowManaging: AnyObject {
+    func showOverlayWindow()
+    func makeOverlayKeyWindow()
+    func dismissOverlayWindow()
+}
+
+private final class ScreenshotOverlayWindow: NSWindow, ScreenshotOverlayWindowManaging {
     var onCancel: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
@@ -103,6 +145,20 @@ private final class ScreenshotOverlayWindow: NSWindow {
 
     override func rightMouseDown(with event: NSEvent) {
         onCancel?()
+    }
+
+    func showOverlayWindow() {
+        orderFrontRegardless()
+    }
+
+    func makeOverlayKeyWindow() {
+        makeKeyAndOrderFront(nil)
+    }
+
+    func dismissOverlayWindow() {
+        onCancel = nil
+        contentView = nil
+        orderOut(nil)
     }
 }
 
