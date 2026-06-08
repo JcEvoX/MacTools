@@ -288,6 +288,183 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.snapshot.translation?.text, "新文本")
     }
 
+    func testScreenshotTranslationRecognizesTextAndTranslates() async {
+        let screenshotCapturer = RecordingScreenshotRegionCapturer(result: .success(image: NSImage(size: NSSize(width: 20, height: 20)), selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20), screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)))
+        let ocrRecognizer = RecordingOCRTextRecognizer(
+            result: OCRTextRecognitionResult(
+                text: "Hello from screenshot",
+                lines: [
+                    OCRRecognizedLine(
+                        text: "Hello from screenshot",
+                        boundingBox: CGRect(x: 0, y: 0, width: 1, height: 1),
+                        confidence: 0.9
+                    ),
+                ]
+            )
+        )
+        let provider = RecordingTranslationProvider(resultText: "截图译文")
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: { .provider(provider) },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(screenshotCapturer.captureCount, 1)
+        XCTAssertEqual(ocrRecognizer.requests.count, 1)
+        XCTAssertEqual(provider.requests.map(\.text), ["Hello from screenshot"])
+        XCTAssertEqual(coordinator.snapshot.querySource, .screenshot)
+        XCTAssertEqual(coordinator.snapshot.sourceText, "Hello from screenshot")
+        XCTAssertEqual(coordinator.snapshot.translation?.text, "截图译文")
+    }
+
+    func testScreenshotTranslationSurfacesRegionSelectionStateBeforeCaptureCompletes() async {
+        let screenshotCapturer = DeferredScreenshotRegionCapturer(
+            result: .success(
+                image: NSImage(size: NSSize(width: 20, height: 20)),
+                selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20),
+                screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+            )
+        )
+        let ocrRecognizer = RecordingOCRTextRecognizer(
+            result: OCRTextRecognitionResult(text: "captured text", lines: [])
+        )
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: { .provider(RecordingTranslationProvider(resultText: "译文")) },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await screenshotCapturer.waitUntilStarted()
+
+        XCTAssertTrue(panel.shownSnapshots.contains {
+            $0.phase == .capturing && $0.captureStage == .screenshotRegion
+        })
+
+        await coordinator.handle(.close)
+        screenshotCapturer.resume()
+    }
+
+    func testScreenshotTranslationDoesNotResolveProviderBeforeOCRTextExists() async {
+        let screenshotCapturer = DeferredScreenshotRegionCapturer(
+            result: .success(
+                image: NSImage(size: NSSize(width: 20, height: 20)),
+                selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20),
+                screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+            )
+        )
+        let ocrRecognizer = DeferredOCRTextRecognizer(
+            result: OCRTextRecognitionResult(text: "captured text", lines: [])
+        )
+        let provider = RecordingTranslationProvider(resultText: "译文")
+        let panel = RecordingTranslatorPanelController()
+        var providerFactoryCallCount = 0
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: {
+                providerFactoryCallCount += 1
+                return .provider(provider)
+            },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await screenshotCapturer.waitUntilStarted()
+        XCTAssertEqual(providerFactoryCallCount, 0)
+
+        screenshotCapturer.resume()
+        await ocrRecognizer.waitUntilStarted()
+        XCTAssertEqual(providerFactoryCallCount, 0)
+
+        ocrRecognizer.resume()
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(providerFactoryCallCount, 1)
+        XCTAssertEqual(provider.requests.map(\.text), ["captured text"])
+    }
+
+    func testScreenshotCancellationDoesNotResolveProvider() async {
+        let screenshotCapturer = RecordingScreenshotRegionCapturer(result: .failure(.cancelled))
+        let ocrRecognizer = RecordingOCRTextRecognizer(
+            result: OCRTextRecognitionResult(text: "unused", lines: [])
+        )
+        let panel = RecordingTranslatorPanelController()
+        var providerFactoryCallCount = 0
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: {
+                providerFactoryCallCount += 1
+                return .provider(RecordingTranslationProvider(resultText: "unused"))
+            },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await panel.waitUntilShown(.error(.screenshotCancelled))
+
+        XCTAssertEqual(providerFactoryCallCount, 0)
+    }
+
+    func testScreenshotTranslationEmptyOCRShowsMissingOCRText() async {
+        let screenshotCapturer = RecordingScreenshotRegionCapturer(result: .success(image: NSImage(size: NSSize(width: 20, height: 20)), selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20), screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)))
+        let ocrRecognizer = RecordingOCRTextRecognizer(error: OCRTextRecognitionError.emptyResult)
+        let provider = RecordingTranslationProvider(resultText: "unused")
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: { .provider(provider) },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await panel.waitUntilShown(.error(.missingOCRText))
+
+        XCTAssertEqual(coordinator.snapshot.phase, .error(.missingOCRText))
+        XCTAssertEqual(coordinator.snapshot.querySource, .screenshot)
+        XCTAssertEqual(coordinator.snapshot.errorMessage, "截图中没有识别到文字")
+        XCTAssertTrue(provider.requests.isEmpty)
+    }
+
+    func testRetryAfterScreenshotFailureStartsScreenshotCaptureAgain() async {
+        let screenshotCapturer = RecordingScreenshotRegionCapturer(result: .failure(.cancelled))
+        let ocrRecognizer = RecordingOCRTextRecognizer(
+            result: OCRTextRecognitionResult(text: "fresh screenshot", lines: [])
+        )
+        let provider = RecordingTranslationProvider(resultText: "新截图译文")
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
+            providerFactory: { .provider(provider) },
+            panelController: panel
+        )
+
+        coordinator.startScreenshotTranslation()
+        await panel.waitUntilShown(.error(.screenshotCancelled))
+        screenshotCapturer.result = .success(
+            image: NSImage(size: NSSize(width: 20, height: 20)),
+            selectedRect: CGRect(x: 0, y: 0, width: 20, height: 20),
+            screenFrame: CGRect(x: 0, y: 0, width: 100, height: 100)
+        )
+
+        await coordinator.handle(.retry)
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(screenshotCapturer.captureCount, 2)
+        XCTAssertEqual(provider.requests.map(\.text), ["fresh screenshot"])
+        XCTAssertEqual(coordinator.snapshot.querySource, .screenshot)
+    }
+
     func testRetryAfterFreshMissingSelectionDoesNotRetranslatePreviousSource() async {
         let capture = RecordingSelectedTextCapture(result: selectedText("first"))
         let provider = RecordingTranslationProvider(resultText: "第一段")
@@ -408,6 +585,8 @@ final class TranslatorCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(
         captures: [any SelectedTextCapturing],
+        screenshotCapturer: (any ScreenshotRegionCapturing)? = nil,
+        ocrRecognizer: (any OCRTextRecognizing)? = nil,
         providerFactory: @escaping TranslatorProviderFactory,
         panelController: TranslatorPanelControlling? = nil
     ) -> TranslatorCoordinator {
@@ -419,7 +598,24 @@ final class TranslatorCoordinatorTests: XCTestCase {
 
         return TranslatorCoordinator(
             selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: captures),
+            screenshotRegionCapturer: screenshotCapturer,
+            ocrTextRecognizer: ocrRecognizer,
             languagePreferenceStore: languagePreferenceStore,
+            providerFactory: providerFactory,
+            panelController: panelController
+        )
+    }
+
+    private func makeCoordinator(
+        screenshotCapturer: any ScreenshotRegionCapturing,
+        ocrRecognizer: any OCRTextRecognizing,
+        providerFactory: @escaping TranslatorProviderFactory,
+        panelController: TranslatorPanelControlling? = nil
+    ) -> TranslatorCoordinator {
+        makeCoordinator(
+            captures: [RecordingSelectedTextCapture(result: .missing)],
+            screenshotCapturer: screenshotCapturer,
+            ocrRecognizer: ocrRecognizer,
             providerFactory: providerFactory,
             panelController: panelController
         )
@@ -433,6 +629,117 @@ final class TranslatorCoordinatorTests: XCTestCase {
             sourceApplicationBundleID: "com.example.app",
             failureReason: nil
         )
+    }
+}
+
+@MainActor
+private final class RecordingScreenshotRegionCapturer: ScreenshotRegionCapturing {
+    var result: ScreenshotCaptureResult
+    private(set) var captureCount = 0
+
+    init(result: ScreenshotCaptureResult) {
+        self.result = result
+    }
+
+    func captureRegion() async -> ScreenshotCaptureResult {
+        captureCount += 1
+        return result
+    }
+}
+
+private final class RecordingOCRTextRecognizer: OCRTextRecognizing {
+    var result: OCRTextRecognitionResult?
+    var error: Error?
+    private(set) var requests: [NSImage] = []
+
+    init(result: OCRTextRecognitionResult) {
+        self.result = result
+        self.error = nil
+    }
+
+    init(error: Error) {
+        self.result = nil
+        self.error = error
+    }
+
+    func recognizeText(in image: NSImage) async throws -> OCRTextRecognitionResult {
+        requests.append(image)
+        if let error {
+            throw error
+        }
+        guard let result else {
+            throw OCRTextRecognitionError.emptyResult
+        }
+        return result
+    }
+}
+
+@MainActor
+private final class DeferredScreenshotRegionCapturer: ScreenshotRegionCapturing {
+    let result: ScreenshotCaptureResult
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var resultContinuation: CheckedContinuation<ScreenshotCaptureResult, Never>?
+    private var didStart = false
+
+    init(result: ScreenshotCaptureResult) {
+        self.result = result
+    }
+
+    func captureRegion() async -> ScreenshotCaptureResult {
+        didStart = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+
+        return await withCheckedContinuation { continuation in
+            resultContinuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        if didStart { return }
+
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func resume() {
+        resultContinuation?.resume(returning: result)
+        resultContinuation = nil
+    }
+}
+
+private final class DeferredOCRTextRecognizer: OCRTextRecognizing {
+    let result: OCRTextRecognitionResult
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var resultContinuation: CheckedContinuation<OCRTextRecognitionResult, Error>?
+    private var didStart = false
+
+    init(result: OCRTextRecognitionResult) {
+        self.result = result
+    }
+
+    func recognizeText(in image: NSImage) async throws -> OCRTextRecognitionResult {
+        didStart = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+
+        return try await withCheckedThrowingContinuation { continuation in
+            resultContinuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        if didStart { return }
+
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func resume() {
+        resultContinuation?.resume(returning: result)
+        resultContinuation = nil
     }
 }
 

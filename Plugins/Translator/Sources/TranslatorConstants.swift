@@ -1,4 +1,6 @@
+import Carbon
 import Foundation
+import MacToolsPluginKit
 
 enum TranslatorConstants {
     static let pluginID = "translator"
@@ -6,14 +8,17 @@ enum TranslatorConstants {
     enum PermissionID {
         static let accessibility = "accessibility"
         static let automation = "automation"
+        static let screenRecording = "screen-recording"
     }
 
     enum ShortcutID {
         static let selectTranslation = "translator.select-translation"
+        static let screenshotTranslation = "translator.screenshot-translation"
     }
 
     enum ActionID {
         static let selectTranslation = "select-translation"
+        static let screenshotTranslation = "screenshot-translation"
     }
 
     enum StorageKey {
@@ -28,5 +33,13 @@ enum TranslatorConstants {
 
     enum Defaults {
         static let shortcutEnabled = true
+        static let selectTranslationShortcut = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_D),
+            modifiers: [.option]
+        )
+        static let screenshotTranslationShortcut = ShortcutBinding(
+            keyCode: UInt16(kVK_ANSI_S),
+            modifiers: [.option]
+        )
     }
 }

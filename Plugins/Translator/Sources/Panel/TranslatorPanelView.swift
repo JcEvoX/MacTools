@@ -244,11 +244,31 @@ struct TranslatorPanelView: View {
     private var sourcePlaceholder: String {
         switch snapshot.phase {
         case .capturing:
+            if let captureStage = snapshot.captureStage {
+                switch captureStage {
+                case .selectedText:
+                    return localization.string("panel.sourcePlaceholder.capturing", defaultValue: "正在读取选中文本...")
+                case .screenshotRegion:
+                    return localization.string("panel.sourcePlaceholder.screenshotRegion", defaultValue: "正在选择截图区域...")
+                case .ocr:
+                    return localization.string("panel.sourcePlaceholder.ocr", defaultValue: "正在识别截图文字...")
+                }
+            }
             return localization.string("panel.sourcePlaceholder.capturing", defaultValue: "正在读取选中文本...")
         case .error(.missingSelection):
             return localization.string("panelError.missingSelection", defaultValue: "未找到选中文本")
+        case .error(.missingOCRText):
+            return localization.string("panelError.missingOCRText", defaultValue: "截图中没有识别到文字")
         case .error(.permissionRequired):
             return localization.string("panelError.permissionRequired", defaultValue: "需要辅助功能授权")
+        case .error(.screenRecordingPermissionRequired):
+            return localization.string("panelError.screenRecordingPermissionRequired", defaultValue: "需要屏幕录制授权")
+        case .error(.screenshotCancelled):
+            return localization.string("panelError.screenshotCancelled", defaultValue: "已取消截图")
+        case .error(.screenshotRegionTooSmall):
+            return localization.string("panelError.screenshotRegionTooSmall", defaultValue: "截图区域太小")
+        case .error(.screenshotFailed):
+            return localization.string("panelError.screenshotFailed", defaultValue: "截图失败")
         default:
             return localization.string("panel.sourcePlaceholder.idle", defaultValue: "等待选中文本")
         }

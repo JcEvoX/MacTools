@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import Foundation
 import SwiftUI
@@ -18,6 +19,8 @@ private struct TranslatorPluginProvider: PluginProvider {
         [TranslatorPlugin(context: context)]
     }
 }
+
+typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) -> any ScreenshotRegionCapturing
 
 @MainActor
 final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
@@ -43,11 +46,16 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private let storage: PluginStorage
     private let accessibilityTrustProvider: () -> Bool
     private let accessibilityTrustRequester: (Bool) -> Bool
+    private let screenRecordingPermissionProvider: () -> Bool
     private let selectTranslationStarter: (() -> Void)?
+    private let screenshotTranslationStarter: (() -> Void)?
     private let secretStore: any TranslatorSecretStoring
     private let languagePreferenceStore: LanguagePreferenceStore
     private let panelController: any TranslatorPanelControlling
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
+    private let screenshotRegionCapturer: (any ScreenshotRegionCapturing)?
+    private let screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory
+    private let ocrTextRecognizer: (any OCRTextRecognizing)?
     private let translationProviderFactoryOverride: TranslatorProviderFactory?
     private let providerProfileStore: TranslatorProviderProfileStore
     private let localization: PluginLocalization
@@ -65,10 +73,15 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: TranslatorConstants.pluginID),
         accessibilityTrustProvider: @escaping () -> Bool = AccessibilityCheck.isTrusted,
         accessibilityTrustRequester: @escaping (Bool) -> Bool = AccessibilityCheck.requestTrust,
+        screenRecordingPermissionProvider: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
         selectTranslationStarter: (() -> Void)? = nil,
+        screenshotTranslationStarter: (() -> Void)? = nil,
         secretStore: any TranslatorSecretStoring = OpenAICompatibleSecretStore(),
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
+        screenshotRegionCapturer: (any ScreenshotRegionCapturing)? = nil,
+        screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory? = nil,
+        ocrTextRecognizer: (any OCRTextRecognizing)? = nil,
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil,
         localization: PluginLocalization? = nil
     ) {
@@ -80,15 +93,22 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             iconName: "text.bubble",
             iconTint: Color(nsColor: .systemBlue),
             order: 57,
-            defaultDescription: localization.string("metadata.description", defaultValue: "划词快捷键翻译")
+            defaultDescription: localization.string("metadata.description", defaultValue: "划词与截图快捷键翻译")
         )
         self.storage = context.storage
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.accessibilityTrustRequester = accessibilityTrustRequester
+        self.screenRecordingPermissionProvider = screenRecordingPermissionProvider
         self.selectTranslationStarter = selectTranslationStarter
+        self.screenshotTranslationStarter = screenshotTranslationStarter
         self.secretStore = secretStore
         self.panelController = panelController ?? TranslatorPanelController(localization: localization)
         self.selectedTextCapturePipeline = selectedTextCapturePipeline ?? .live(localization: localization)
+        self.screenshotRegionCapturer = screenshotRegionCapturer
+        self.screenshotRegionCapturerFactory = screenshotRegionCapturerFactory ?? { permissionProvider in
+            ScreenshotRegionCapturer(screenRecordingPermissionProvider: permissionProvider)
+        }
+        self.ocrTextRecognizer = ocrTextRecognizer
         self.translationProviderFactoryOverride = translationProviderFactoryOverride
         let providerProfileStore = TranslatorProviderProfileStore(storage: context.storage, localization: localization)
         let providerProfiles = providerProfileStore.loadProfiles()
@@ -134,6 +154,12 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                 title: localization.string("permission.automation.title", defaultValue: "自动化授权"),
                 description: localization.string("permission.automation.description", defaultValue: "浏览器划词可能需要允许 MacTools 控制当前浏览器。")
             ),
+            PluginPermissionRequirement(
+                id: TranslatorConstants.PermissionID.screenRecording,
+                kind: .screenRecording,
+                title: localization.string("permission.screenRecording.title", defaultValue: "屏幕录制授权"),
+                description: localization.string("permission.screenRecording.description", defaultValue: "截图翻译需要读取框选区域的屏幕内容。")
+            ),
         ]
     }
 
@@ -147,12 +173,18 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                 description: localization.string("shortcut.selectTranslation.description", defaultValue: "翻译当前选中的文本。"),
                 actionID: TranslatorConstants.ActionID.selectTranslation,
                 scope: .global,
-                defaultBinding: ShortcutBinding(
-                    keyCode: UInt16(kVK_ANSI_D),
-                    modifiers: [.option]
-                ),
+                defaultBinding: TranslatorConstants.Defaults.selectTranslationShortcut,
                 isRequired: false
-            )
+            ),
+            PluginShortcutDefinition(
+                id: TranslatorConstants.ShortcutID.screenshotTranslation,
+                title: localization.string("shortcut.screenshotTranslation.title", defaultValue: "截图翻译"),
+                description: localization.string("shortcut.screenshotTranslation.description", defaultValue: "框选截图区域并翻译识别出的文字。"),
+                actionID: TranslatorConstants.ActionID.screenshotTranslation,
+                scope: .global,
+                defaultBinding: TranslatorConstants.Defaults.screenshotTranslationShortcut,
+                isRequired: false
+            ),
         ]
     }
 
@@ -219,6 +251,17 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                 statusSystemImage: "sparkles",
                 statusTone: .neutral
             )
+        case TranslatorConstants.PermissionID.screenRecording:
+            let isGranted = screenRecordingPermissionProvider()
+            return PluginPermissionState(
+                isGranted: isGranted,
+                footnote: isGranted
+                    ? nil
+                    : localization.string(
+                        "permission.screenRecording.footnote",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕录制，授权 MacTools。"
+                    )
+            )
         default:
             return PluginPermissionState(isGranted: true, footnote: nil)
         }
@@ -231,6 +274,11 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             onStateChange?()
         case TranslatorConstants.PermissionID.automation:
             requestPermissionGuidance?(TranslatorConstants.PermissionID.automation)
+            onStateChange?()
+        case TranslatorConstants.PermissionID.screenRecording:
+            NSWorkspace.shared.open(
+                URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
+            )
             onStateChange?()
         default:
             return
@@ -253,20 +301,32 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     }
 
     func handleShortcutAction(id: String) {
-        guard id == TranslatorConstants.ActionID.selectTranslation,
-              isShortcutEnabled
-        else {
+        guard isShortcutEnabled else {
             return
         }
 
-        if let selectTranslationStarter {
-            selectTranslationStarter()
+        switch id {
+        case TranslatorConstants.ActionID.selectTranslation:
+            if let selectTranslationStarter {
+                selectTranslationStarter()
+                return
+            }
+
+            let coordinator = coordinator ?? makeCoordinator()
+            self.coordinator = coordinator
+            coordinator.startSelectTranslation()
+        case TranslatorConstants.ActionID.screenshotTranslation:
+            if let screenshotTranslationStarter {
+                screenshotTranslationStarter()
+                return
+            }
+
+            let coordinator = coordinator ?? makeCoordinator()
+            self.coordinator = coordinator
+            coordinator.startScreenshotTranslation()
+        default:
             return
         }
-
-        let coordinator = coordinator ?? makeCoordinator()
-        self.coordinator = coordinator
-        coordinator.startSelectTranslation()
     }
 
     private var isShortcutEnabled: Bool {
@@ -292,7 +352,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         case .missing, .error:
             return localization.string("panel.subtitle.needsProvider", defaultValue: "需要配置翻译服务")
         case .unknown, .present:
-            return localization.string("panel.subtitle.ready", defaultValue: "按 ⌥D 翻译选中文本")
+            return localization.string("panel.subtitle.ready", defaultValue: "按 ⌥D 划词，⌥S 截图")
         }
     }
 
@@ -447,6 +507,9 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private func makeCoordinator() -> TranslatorCoordinator {
         TranslatorCoordinator(
             selectedTextCapturePipeline: selectedTextCapturePipeline,
+            screenshotRegionCapturer: screenshotRegionCapturer
+                ?? screenshotRegionCapturerFactory(screenRecordingPermissionProvider),
+            ocrTextRecognizer: ocrTextRecognizer ?? VisionOCRTextRecognizer(),
             languagePreferenceStore: LanguagePreferenceStore(storage: storage),
             providerFactory: translationProviderFactoryOverride ?? { [weak self] in
                 guard let self else {

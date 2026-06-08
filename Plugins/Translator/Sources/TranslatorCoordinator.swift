@@ -51,6 +51,8 @@ private struct ProviderTranslationOutcome: Sendable {
 @MainActor
 final class TranslatorCoordinator {
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
+    private let screenshotRegionCapturer: (any ScreenshotRegionCapturing)?
+    private let ocrTextRecognizer: (any OCRTextRecognizing)?
     private let languagePreferenceStore: LanguagePreferenceStore
     private let providerFactory: TranslatorProviderFactory
     private weak var panelController: TranslatorPanelControlling?
@@ -60,6 +62,7 @@ final class TranslatorCoordinator {
     private var sessionID = UUID()
     private var activeTask: Task<Void, Never>?
     private var lastSourceText: String?
+    private var lastQuerySource: TranslatorQuerySource?
 
     private(set) var snapshot: TranslatorPanelSnapshot = .idle {
         didSet {
@@ -69,12 +72,16 @@ final class TranslatorCoordinator {
 
     init(
         selectedTextCapturePipeline: SelectedTextCapturePipeline,
+        screenshotRegionCapturer: (any ScreenshotRegionCapturing)? = nil,
+        ocrTextRecognizer: (any OCRTextRecognizing)? = nil,
         languagePreferenceStore: LanguagePreferenceStore,
         providerFactory: @escaping TranslatorProviderFactory,
         panelController: TranslatorPanelControlling?,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.selectedTextCapturePipeline = selectedTextCapturePipeline
+        self.screenshotRegionCapturer = screenshotRegionCapturer
+        self.ocrTextRecognizer = ocrTextRecognizer
         self.languagePreferenceStore = languagePreferenceStore
         self.providerFactory = providerFactory
         self.panelController = panelController
@@ -88,10 +95,18 @@ final class TranslatorCoordinator {
         }
     }
 
+    func startScreenshotTranslation() {
+        activeTask?.cancel()
+        activeTask = Task { [weak self] in
+            await self?.runScreenshotTranslation()
+        }
+    }
+
     private func runSelectTranslation() async {
         let currentSessionID = UUID()
         sessionID = currentSessionID
         lastSourceText = nil
+        lastQuerySource = .selectedText
         let providerBuildResult = providerFactory()
         let initialProviderResults = providerBuildResult.waitingProviderResults(localization: localization)
         snapshot = TranslatorPanelSnapshot(
@@ -100,7 +115,9 @@ final class TranslatorCoordinator {
             languageSelection: nil,
             translation: nil,
             providerResults: initialProviderResults,
-            errorMessage: nil
+            errorMessage: nil,
+            querySource: .selectedText,
+            captureStage: .selectedText
         )
         // 立即展示取词加载态；capturing 阶段面板不抢焦点，避免影响 AX 取词与模拟复制。
         panelController?.show(snapshot: snapshot)
@@ -138,30 +155,110 @@ final class TranslatorCoordinator {
         }
 
         lastSourceText = sourceText
+        lastQuerySource = .selectedText
 
-        switch providerBuildResult {
-        case let .provider(provider):
-            await translate(
+        await translateOrShowConfigurationError(
+            sourceText: sourceText,
+            querySource: .selectedText,
+            providerBuildResult: providerBuildResult,
+            providerResults: initialProviderResults,
+            sessionID: currentSessionID
+        )
+    }
+
+    private func runScreenshotTranslation() async {
+        let currentSessionID = UUID()
+        sessionID = currentSessionID
+        lastSourceText = nil
+        lastQuerySource = .screenshot
+        snapshot = TranslatorPanelSnapshot(
+            phase: .capturing,
+            sourceText: nil,
+            languageSelection: nil,
+            translation: nil,
+            providerResults: [],
+            errorMessage: nil,
+            querySource: .screenshot,
+            captureStage: .screenshotRegion
+        )
+        panelController?.show(snapshot: snapshot)
+
+        guard let screenshotRegionCapturer, let ocrTextRecognizer else {
+            setError(
+                .screenshotFailed,
+                sourceText: nil,
+                languageSelection: nil,
+                providerResults: [],
+                querySource: .screenshot
+            )
+            panelController?.show(snapshot: snapshot)
+            return
+        }
+
+        let captureResult = await screenshotRegionCapturer.captureRegion()
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
+        guard let screenshot = captureResult.image else {
+            let panelError = Self.panelError(for: captureResult.error ?? .screenshotFailed)
+            setError(
+                panelError,
+                sourceText: nil,
+                languageSelection: nil,
+                providerResults: [],
+                querySource: .screenshot
+            )
+            panelController?.show(snapshot: snapshot)
+            return
+        }
+
+        snapshot = TranslatorPanelSnapshot(
+            phase: .capturing,
+            sourceText: nil,
+            languageSelection: nil,
+            translation: nil,
+            providerResults: [],
+            errorMessage: nil,
+            querySource: .screenshot,
+            captureStage: .ocr
+        )
+        panelController?.show(snapshot: snapshot)
+
+        do {
+            let recognitionResult = try await ocrTextRecognizer.recognizeText(in: screenshot)
+            guard !Task.isCancelled, sessionID == currentSessionID else { return }
+            let sourceText = recognitionResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !sourceText.isEmpty else {
+                setError(
+                    .missingOCRText,
+                    sourceText: nil,
+                    languageSelection: nil,
+                    providerResults: [],
+                    querySource: .screenshot
+                )
+                panelController?.show(snapshot: snapshot)
+                return
+            }
+
+            lastSourceText = sourceText
+            lastQuerySource = .screenshot
+            let providerBuildResult = providerFactory()
+            let initialProviderResults = providerBuildResult.waitingProviderResults(localization: localization)
+            await translateOrShowConfigurationError(
                 sourceText: sourceText,
-                providers: [
-                    ResolvedTranslationProvider(
-                        id: "default",
-                        title: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
-                        provider: provider
-                    ),
-                ],
+                querySource: .screenshot,
+                providerBuildResult: providerBuildResult,
+                providerResults: initialProviderResults,
                 sessionID: currentSessionID
             )
-        case let .providers(providers):
-            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
-        case let .missing(message):
-            snapshot = TranslatorPanelSnapshot(
-                phase: .error(.missingConfiguration),
-                sourceText: sourceText,
+        } catch {
+            guard !Task.isCancelled, sessionID == currentSessionID else { return }
+            let panelError = Self.panelError(forOCR: error)
+            setError(
+                panelError,
+                sourceText: nil,
                 languageSelection: nil,
-                translation: nil,
-                providerResults: initialProviderResults,
-                errorMessage: message
+                providerResults: [],
+                querySource: .screenshot
             )
             panelController?.show(snapshot: snapshot)
         }
@@ -197,7 +294,11 @@ final class TranslatorCoordinator {
 
     private func retry() {
         guard let sourceText = lastSourceText else {
-            startSelectTranslation()
+            if lastQuerySource == .screenshot {
+                startScreenshotTranslation()
+            } else {
+                startSelectTranslation()
+            }
             return
         }
 
@@ -210,6 +311,7 @@ final class TranslatorCoordinator {
     private func runRetry(sourceText: String) async {
         let currentSessionID = UUID()
         sessionID = currentSessionID
+        let querySource = lastQuerySource
         let providerBuildResult = providerFactory()
 
         switch providerBuildResult {
@@ -223,10 +325,16 @@ final class TranslatorCoordinator {
                         provider: provider
                     ),
                 ],
+                querySource: querySource,
                 sessionID: currentSessionID
             )
         case let .providers(providers):
-            await translate(sourceText: sourceText, providers: providers, sessionID: currentSessionID)
+            await translate(
+                sourceText: sourceText,
+                providers: providers,
+                querySource: querySource,
+                sessionID: currentSessionID
+            )
         case let .missing(message):
             snapshot = TranslatorPanelSnapshot(
                 phase: .error(.missingConfiguration),
@@ -234,7 +342,9 @@ final class TranslatorCoordinator {
                 languageSelection: snapshot.languageSelection,
                 translation: nil,
                 providerResults: providerBuildResult.waitingProviderResults(localization: localization),
-                errorMessage: message
+                errorMessage: message,
+                querySource: querySource,
+                captureStage: nil
             )
             panelController?.show(snapshot: snapshot)
         }
@@ -243,8 +353,11 @@ final class TranslatorCoordinator {
     private func translate(
         sourceText: String,
         providers: [ResolvedTranslationProvider],
+        querySource: TranslatorQuerySource?,
         sessionID currentSessionID: UUID
     ) async {
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
         let languageSelection = AutomaticLanguageSelector(
             preferredPair: languagePreferenceStore.loadPair()
         ).select(text: sourceText)
@@ -264,7 +377,9 @@ final class TranslatorCoordinator {
             languageSelection: languageSelection,
             translation: nil,
             providerResults: initialProviderResults,
-            errorMessage: nil
+            errorMessage: nil,
+            querySource: querySource,
+            captureStage: nil
         )
         panelController?.show(snapshot: snapshot)
 
@@ -273,6 +388,7 @@ final class TranslatorCoordinator {
             finishProviderBatch(
                 sourceText: sourceText,
                 languageSelection: languageSelection,
+                querySource: querySource,
                 sessionID: currentSessionID
             )
             return
@@ -330,6 +446,7 @@ final class TranslatorCoordinator {
         finishProviderBatch(
             sourceText: sourceText,
             languageSelection: languageSelection,
+            querySource: querySource,
             sessionID: currentSessionID
         )
     }
@@ -338,7 +455,8 @@ final class TranslatorCoordinator {
         _ error: TranslatorPanelError,
         sourceText: String?,
         languageSelection: TranslatorLanguageSelection?,
-        providerResults: [TranslatorProviderResult] = []
+        providerResults: [TranslatorProviderResult] = [],
+        querySource: TranslatorQuerySource? = nil
     ) {
         snapshot = TranslatorPanelSnapshot(
             phase: .error(error),
@@ -346,7 +464,9 @@ final class TranslatorCoordinator {
             languageSelection: languageSelection,
             translation: nil,
             providerResults: providerResults,
-            errorMessage: error.message(localization: localization)
+            errorMessage: error.message(localization: localization),
+            querySource: querySource,
+            captureStage: nil
         )
     }
 
@@ -372,6 +492,7 @@ final class TranslatorCoordinator {
     private func finishProviderBatch(
         sourceText: String,
         languageSelection: TranslatorLanguageSelection,
+        querySource: TranslatorQuerySource?,
         sessionID currentSessionID: UUID
     ) {
         let firstSuccess = snapshot.providerResults.first { $0.phase == .success }?.translation
@@ -384,7 +505,9 @@ final class TranslatorCoordinator {
                 languageSelection: languageSelection,
                 translation: firstSuccess,
                 providerResults: snapshot.providerResults,
-                errorMessage: nil
+                errorMessage: nil,
+                querySource: querySource,
+                captureStage: nil
             )
         } else {
             let message = snapshot.providerResults.compactMap(\.errorMessage).first
@@ -395,10 +518,85 @@ final class TranslatorCoordinator {
                 languageSelection: languageSelection,
                 translation: nil,
                 providerResults: snapshot.providerResults,
-                errorMessage: message
+                errorMessage: message,
+                querySource: querySource,
+                captureStage: nil
             )
         }
         panelController?.show(snapshot: snapshot)
+    }
+
+    private func translateOrShowConfigurationError(
+        sourceText: String,
+        querySource: TranslatorQuerySource,
+        providerBuildResult: TranslatorProviderBuildResult,
+        providerResults: [TranslatorProviderResult],
+        sessionID currentSessionID: UUID
+    ) async {
+        guard !Task.isCancelled, sessionID == currentSessionID else { return }
+
+        switch providerBuildResult {
+        case let .provider(provider):
+            await translate(
+                sourceText: sourceText,
+                providers: [
+                    ResolvedTranslationProvider(
+                        id: "default",
+                        title: localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
+                        provider: provider
+                    ),
+                ],
+                querySource: querySource,
+                sessionID: currentSessionID
+            )
+        case let .providers(providers):
+            await translate(
+                sourceText: sourceText,
+                providers: providers,
+                querySource: querySource,
+                sessionID: currentSessionID
+            )
+        case let .missing(message):
+            snapshot = TranslatorPanelSnapshot(
+                phase: .error(.missingConfiguration),
+                sourceText: sourceText,
+                languageSelection: nil,
+                translation: nil,
+                providerResults: providerResults,
+                errorMessage: message,
+                querySource: querySource,
+                captureStage: nil
+            )
+            panelController?.show(snapshot: snapshot)
+        }
+    }
+
+    private static func panelError(for error: ScreenshotCaptureError) -> TranslatorPanelError {
+        switch error {
+        case .screenRecordingPermissionRequired:
+            return .screenRecordingPermissionRequired
+        case .cancelled:
+            return .screenshotCancelled
+        case .regionTooSmall:
+            return .screenshotRegionTooSmall
+        case .noScreen, .screenshotFailed:
+            return .screenshotFailed
+        }
+    }
+
+    private static func panelError(forOCR error: Error) -> TranslatorPanelError {
+        if let ocrError = error as? OCRTextRecognitionError {
+            switch ocrError {
+            case .emptyResult:
+                return .missingOCRText
+            case .invalidImage:
+                return .screenshotFailed
+            case let .requestFailed(message):
+                return .requestFailed(message)
+            }
+        }
+
+        return .requestFailed(error.localizedDescription)
     }
 
     nonisolated private static func userFacingMessage(
