@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-05T14:01:21Z",
+  "generatedAt": "2026-06-08T15:28:42Z",
   "minimumHostVersion": "1.0.17",
   "pluginKitVersion": 2,
   "plugins": [
@@ -1082,28 +1082,29 @@
       "localizedMetadata": {
         "en": {
           "displayName": "Translator",
-          "summary": "Translate selected text with a shortcut."
+          "summary": "Translate selected text or screenshot regions with shortcuts."
         },
         "zh-Hans": {
           "displayName": "翻译",
-          "summary": "划词快捷键翻译"
+          "summary": "划词与截图快捷键翻译"
         }
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "8edaa482725198da5de769c11c501e1eec8902bbbf6d261b77ac27f063db1055",
-        "size": 592770,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/translator.mactoolsplugin.zip"
+        "sha256": "9deea25eb50614fa64568c38b2407507fc9919fbe0d36d82182a825ab6a27c82",
+        "size": 712827,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.17/translator.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
-        "automation"
+        "automation",
+        "screen-recording"
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
-      "summary": "划词快捷键翻译",
-      "version": "0.1.1"
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.17",
+      "summary": "划词与截图快捷键翻译",
+      "version": "0.1.4"
     },
     {
       "capabilities": {
@@ -1174,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "W+3KvnD57oQ4PBrmkFg0E2xUkIWvB+bH7mgl9/Ii4X8SS+AZ70zaTF4aYdhZIcmh7dFjd0ON71IsvVwKWOIHBQ=="
+    "value": "VWf2K0JJHDgFifq6pw6+oHG90bG/XNh5sTKDEKSanBhf3pJbG9aTSjwCAXHqd483t2xcuNlp8zoI6L+6aoGMBg=="
   }
 }
