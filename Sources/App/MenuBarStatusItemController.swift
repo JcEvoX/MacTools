@@ -56,7 +56,7 @@ final class MenuBarStatusItemController: NSObject {
         self.pluginHost = pluginHost
         self.windowRouter = windowRouter
         self.iconSettings = iconSettings
-        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
+        MenuBarControlItemDefaults.prepareVisibleControlItem()
         self.statusItem = NSStatusBar.system.statusItem(withLength: 0)
         self.statusItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         super.init()
@@ -169,11 +169,9 @@ final class MenuBarStatusItemController: NSObject {
 
     private func resetStatusItemPosition() {
         dismissPanels()
-        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
 
         let oldItem = statusItem
         NSStatusBar.system.removeStatusItem(oldItem)
-        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions()
 
         let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName

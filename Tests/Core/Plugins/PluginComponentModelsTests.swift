@@ -87,12 +87,11 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testVisibleControlItemDefaultsRightOfHiddenDivider() {
+    func testVisibleControlItemPreflightDoesNotForcePreferredPosition() {
         MenuBarControlItemDefaults.prepareVisibleControlItem(userDefaults: userDefaults)
 
-        XCTAssertEqual(
-            userDefaults.double(forKey: preferredPositionKey(MenuBarControlItemDefaults.visibleAutosaveName)),
-            0.5
+        XCTAssertNil(
+            userDefaults.object(forKey: preferredPositionKey(MenuBarControlItemDefaults.visibleAutosaveName))
         )
         XCTAssertTrue(userDefaults.bool(forKey: visibleKey(MenuBarControlItemDefaults.visibleAutosaveName)))
         XCTAssertTrue(userDefaults.bool(forKey: visibleControlCenterKey(MenuBarControlItemDefaults.visibleAutosaveName)))
@@ -129,14 +128,30 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
         )
     }
 
-    func testHiddenDividerResetsMovedPreferredPosition() {
+    func testHiddenDividerCanInitializeLeftOfCurrentVisiblePosition() {
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(8, userDefaults: userDefaults)
+
+        MenuBarControlItemDefaults.prepareHiddenDividerControlItem(
+            preferredPosition: MenuBarControlItemDefaults.preferredPositionForHiddenDividerLeftOfVisibleControlItem(
+                userDefaults: userDefaults
+            ),
+            userDefaults: userDefaults
+        )
+
+        XCTAssertEqual(
+            userDefaults.double(forKey: preferredPositionKey(MenuBarControlItemDefaults.hiddenAutosaveName)),
+            8.5
+        )
+    }
+
+    func testHiddenDividerKeepsMovedPreferredPosition() {
         userDefaults.set(12, forKey: preferredPositionKey(MenuBarControlItemDefaults.hiddenAutosaveName))
 
         MenuBarControlItemDefaults.prepareHiddenDividerControlItem(userDefaults: userDefaults)
 
         XCTAssertEqual(
             userDefaults.double(forKey: preferredPositionKey(MenuBarControlItemDefaults.hiddenAutosaveName)),
-            1
+            12
         )
     }
 
@@ -172,22 +187,6 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
         )
         XCTAssertTrue(userDefaults.bool(forKey: visibleKey(MenuBarControlItemDefaults.alwaysHiddenAutosaveName)))
         XCTAssertTrue(userDefaults.bool(forKey: visibleControlCenterKey(MenuBarControlItemDefaults.alwaysHiddenAutosaveName)))
-    }
-
-    func testControlItemRecoveryRestoresThawDefaultOrder() {
-        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(12, userDefaults: userDefaults)
-        MenuBarControlItemDefaults.setHiddenDividerControlItemPreferredPosition(18, userDefaults: userDefaults)
-
-        MenuBarControlItemDefaults.recoverVisibleAndHiddenControlItemDefaultPositions(userDefaults: userDefaults)
-
-        XCTAssertEqual(
-            userDefaults.double(forKey: preferredPositionKey(MenuBarControlItemDefaults.visibleAutosaveName)),
-            0.5
-        )
-        XCTAssertEqual(
-            userDefaults.double(forKey: preferredPositionKey(MenuBarControlItemDefaults.hiddenAutosaveName)),
-            1
-        )
     }
 
     private func preferredPositionKey(_ autosaveName: String) -> String {

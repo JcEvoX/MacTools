@@ -104,12 +104,7 @@ public enum MenuBarControlItemDefaults {
     public static let adjacentPreferredPositionOffset: Double = 0.5
 
     public static func prepareVisibleControlItem(userDefaults: UserDefaults = .standard) {
-        prepareControlItem(
-            autosaveName: visibleAutosaveName,
-            preferredPosition: preferredPositionForVisibleControlItemRightOfHiddenDivider(userDefaults: userDefaults),
-            alwaysResetPreferredPosition: false,
-            userDefaults: userDefaults
-        )
+        prepareControlItemVisibility(autosaveName: visibleAutosaveName, userDefaults: userDefaults)
     }
 
     public static func resetVisibleControlItemPosition(userDefaults: UserDefaults = .standard) {
@@ -139,7 +134,7 @@ public enum MenuBarControlItemDefaults {
         prepareControlItem(
             autosaveName: hiddenAutosaveName,
             preferredPosition: preferredPosition,
-            alwaysResetPreferredPosition: true,
+            alwaysResetPreferredPosition: false,
             userDefaults: userDefaults
         )
     }
@@ -188,16 +183,6 @@ public enum MenuBarControlItemDefaults {
         let visiblePosition = visibleControlItemPreferredPosition(userDefaults: userDefaults)
             ?? visibleDefaultPreferredPosition
         return visiblePosition + adjacentPreferredPositionOffset
-    }
-
-    public static func recoverVisibleAndHiddenControlItemDefaultPositions(
-        userDefaults: UserDefaults = .standard
-    ) {
-        setHiddenDividerControlItemPreferredPosition(hiddenDefaultPreferredPosition, userDefaults: userDefaults)
-        setVisibleControlItemPreferredPosition(
-            preferredPositionForVisibleControlItemRightOfHiddenDivider(userDefaults: userDefaults),
-            userDefaults: userDefaults
-        )
     }
 
     private static func prepareControlItem(
