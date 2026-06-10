@@ -82,6 +82,7 @@
 
 ## 测试要求
 - 行为改动优先补或更新相邻 XCTest；测试文件命名使用 `<TypeName>Tests.swift`。
+- 本地和 agent 验证默认优先只跑受影响的测试方法或测试类，例如使用 `-only-testing:MacToolsTests/<TestClassName>` 或 `-only-testing:MacToolsTests/<TestClassName>/<testMethod>`；不要因为窄改动直接跑完整测试套件。
 - 插件测试优先放在 `Plugins/<PluginName>/Tests/`；Core/App 共享逻辑测试放在 `Tests/Core/` 或 `Tests/App/` 对应目录。
 - 文件系统测试使用临时目录或 fake store，禁止删除真实用户目录。
 - 插件交互测试应覆盖 `PluginPanelAction`、派生 `PluginPanelState`、权限状态和错误状态。
@@ -97,5 +98,5 @@
 - 开始修改前用 `rg`/`rg --files` 快速定位现有模式，优先复用相邻实现。
 - 保持改动聚焦，不顺手重构无关模块，不覆盖用户已有改动。
 - 修改 `project.yml` 后运行或建议运行 `make generate`。
-- 验证从最小相关测试开始，再视情况运行完整测试或 `make build`。
+- 验证从最小相关测试方法/测试类开始；只有改动跨模块、影响共享基础设施、发布前检查或用户明确要求时，才考虑完整测试或 `make build`。
 - 不要自动 commit、创建分支、打 tag、发布 release 或清理用户文件，除非用户明确要求。
