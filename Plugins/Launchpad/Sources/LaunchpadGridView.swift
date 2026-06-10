@@ -230,6 +230,10 @@ struct LaunchpadGridView: View {
                 .frame(width: geo.size.width, alignment: .leading)
                 .offset(x: -CGFloat(visiblePage) * geo.size.width + pageDragTranslation)
                 .clipped()
+                // OUTSIDE the .offset: this background's frame chain is clean of the paging
+                // transform, so it measures the viewport (the visible page slot) in window space.
+                .background(LaunchpadViewportRelay(coordinator: dragCoordinator,
+                                                   pageCount: pageCount, perPage: perPage))
                 // Paging is handled inside the AppKit grid: `onPageDrag` tracks an empty-space
                 // drag live (follow-the-cursor) and `onPageSwipe` handles scroll; both share one
                 // event-arbitration tree with per-item drag (design §5.1). Page changes animate
@@ -240,8 +244,14 @@ struct LaunchpadGridView: View {
                     pageIndicator(current: visiblePage)
                 }
             }
-            .onAppear { updateLayout(size: geo.size) }
+            .onAppear {
+                updateLayout(size: geo.size)
+                dragCoordinator.currentPageDidChange(currentPage)   // @State resets per open; the coordinator outlives it
+            }
             .onChange(of: geo.size) { _, size in updateLayout(size: size) }
+            // Single funnel for page changes — every flip path (goToPage, snap, keyboard, hide,
+            // search reset, …) mutates this one @State, so the coordinator can't miss one (§3.2).
+            .onChange(of: currentPage) { _, page in dragCoordinator.currentPageDidChange(page) }
         }
     }
 
@@ -277,7 +287,7 @@ struct LaunchpadGridView: View {
             onDismiss: onDismiss,
             allowsCustomOrderActions: isLayoutEditable,   // search = read-only projection
             coordinator: dragCoordinator,
-            isCurrentRootPage: page == currentPage
+            pageIndex: page
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -728,5 +738,58 @@ private struct FrostedGlassScrim: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
+    }
+}
+
+/// Measures the paging viewport (the visible page slot) in AppKit window space and pushes it to
+/// the drag coordinator. It sits OUTSIDE the paging `.offset` — a render-only transform that never
+/// enters the AppKit frame chain — so this view's own frame chain IS the viewport, with no per-page
+/// correction and no y-flip guesswork (design §5.2; events pass through, hitTest nil).
+private struct LaunchpadViewportRelay: NSViewRepresentable {
+    let coordinator: LaunchpadDragCoordinator
+    let pageCount: Int
+    let perPage: Int
+
+    final class RelayView: NSView {
+        weak var coordinator: LaunchpadDragCoordinator?
+        var pageCount = 1
+        var perPage = 1
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func layout() {
+            super.layout()
+            pushGeometry()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            pushGeometry()
+        }
+
+        func pushGeometry() {
+            guard window != nil, bounds.width > 0, bounds.height > 0 else { return }
+            let rect = convert(bounds, to: nil)            // window space, y-up
+            coordinator?.syncGeometry(LaunchpadPageGeometry(
+                pageWidth: bounds.width,
+                gridHeight: bounds.height,
+                pageCount: pageCount,
+                perPage: perPage,
+                viewportMinX: rect.minX,
+                viewportTopY: rect.maxY))                  // top edge in y-up space
+        }
+    }
+
+    func makeNSView(context _: Context) -> RelayView {
+        let view = RelayView()
+        view.coordinator = coordinator
+        return view
+    }
+
+    func updateNSView(_ view: RelayView, context _: Context) {
+        view.coordinator = coordinator
+        view.pageCount = pageCount
+        view.perPage = perPage
+        view.pushGeometry()
     }
 }

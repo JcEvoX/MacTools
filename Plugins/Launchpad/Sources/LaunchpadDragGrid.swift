@@ -80,7 +80,7 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var allowsCustomOrderActions: Bool = true
     var coordinator: LaunchpadDragCoordinator? = nil   // shared across root pages + the open folder; owns the finger-bound folder-exit handoff
     var folderContextID: String? = nil                 // non-nil only on the open folder's grid → its id, so an ejected app knows its source folder
-    var isCurrentRootPage: Bool = false                // true on the visible root page → registers with the coordinator as the eject drop target
+    var pageIndex: Int? = nil                          // root page number; nil on the folder grid (folder grids never register as page containers)
 
     func makeNSView(context _: Context) -> LaunchpadGridContainerView {
         let view = LaunchpadGridContainerView()
@@ -162,6 +162,12 @@ final class LaunchpadGridContainerView: NSView {
     }
 
     func apply(grid: LaunchpadDragGrid) {
+        // Registration must stay ABOVE the isDragging guard and read only the incoming `grid`
+        // (self.grid stays stale during a deferred apply): during a cross-page carry the source
+        // container has isDragging == true, and flipping away then back must still re-register it
+        // or the handoff dies on the most common path (design §3.1). Pure dictionary write — it
+        // never touches cells, so running it before the guard is safe.
+        if let page = grid.pageIndex { grid.coordinator?.registerPageContainer(self, page: page) }
         guard !isDragging else { pendingGrid = grid; return }
         // Compare the full display cells (Equatable) so a folder rename / contents change still
         // rebuilds, whilst an offset/selection-only change during paging takes the fast path.
@@ -170,8 +176,6 @@ final class LaunchpadGridContainerView: NSView {
         self.grid = grid
         self.columns = max(1, grid.columns)
         self.metrics = grid.metrics
-        // The visible root page is the drop target for an app ejected from a folder.
-        if grid.isCurrentRootPage { grid.coordinator?.registerRootContainer(self) }
         if sameItems {
             for cell in cells { cell.isSelected = (cell.layoutID == grid.selectedID) }
             if !sameColumns { needsLayout = true }
@@ -403,6 +407,7 @@ final class LaunchpadGridContainerView: NSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
         guard newWindow == nil else { return }
+        grid?.coordinator?.unregisterPageContainer(self)
         if let cell = draggedCell {
             if let coord = grid?.coordinator, grid?.folderContextID != nil, coord.ejectActive {
                 coord.cancelEject()
@@ -586,17 +591,23 @@ final class LaunchpadGridContainerView: NSView {
         return true
     }
 
-    /// Resolve a root drop target from a WINDOW point using THIS container's live geometry — used
-    /// when an app is ejected from a folder and dropped onto the root grid, so it lands at the slot
-    /// under the cursor (not the tail). The cursor's side of the slot midline picks before/after.
-    /// The ejected app is not among `cells` (it's still in the folder), so no self-exclusion.
-    func rootDropTarget(atWindowPoint windowPoint: NSPoint) -> LaunchpadDropTarget? {
+    /// Resolve a root drop target from a CONTAINER-LOCAL point — the coordinator maps the window
+    /// point through the pushed page geometry (`LaunchpadCarrySpace`), never through `convert`,
+    /// which is blind to the SwiftUI paging offset. The carried app lands at the slot under the
+    /// cursor (not the tail); the cursor's side of the slot midline picks before/after. The
+    /// ejected app is not among `cells` (it's still in the folder), so no self-exclusion.
+    func rootDropTarget(atContainerPoint p: NSPoint) -> LaunchpadDropTarget? {
         guard !cells.isEmpty else { return nil }
-        let p = convert(windowPoint, from: nil)
         let slot = slotIndex(at: p, count: cells.count)
         guard cells.indices.contains(slot) else { return nil }
         let id = cells[slot].layoutID
         return p.x < slotRect(slot).midX ? .before(id) : .after(id)
+    }
+
+    /// Legacy window-point entrance (correct on page 0 only — kept for the cold-start fallback
+    /// before the first geometry push; retire once §11 step 9 proves it unreachable).
+    func rootDropTarget(atWindowPoint windowPoint: NSPoint) -> LaunchpadDropTarget? {
+        rootDropTarget(atContainerPoint: window != nil ? convert(windowPoint, from: nil) : windowPoint)
     }
 
     // MARK: External drag (an app carried over this root grid after being ejected from a folder)
@@ -614,11 +625,10 @@ final class LaunchpadGridContainerView: NSView {
     /// phantom carried item: merge arms a real `cells` target (app → makeFolder, folder → addToFolder);
     /// otherwise a make-way GAP opens on the hovered cell's near side. Reuses mergeRect/slotIndex and
     /// the same central dead-band + sticky hysteresis so it can't flicker.
-    func updateExternalDrag(atWindowPoint windowPoint: NSPoint) {
+    /// The point is CONTAINER-LOCAL, mapped by the coordinator through the pushed page geometry —
+    /// `convert` from window space is blind to the SwiftUI paging offset (page>0 misread).
+    func updateExternalDrag(atContainerPoint point: NSPoint) {
         guard externalDragActive, draggedCell == nil, !cells.isEmpty else { return }
-        // With a window, map window→container (flips y for this flipped view). Windowless (unit tests),
-        // `convert(_:from: nil)` would mis-flip, so treat the point as already container-local.
-        let point = window != nil ? convert(windowPoint, from: nil) : windowPoint
         if let armed = stackTargetCell, armed.frame.insetBy(dx: -6, dy: -6).contains(point) { return }
         let slot = slotIndex(at: point, count: cells.count)
         guard cells.indices.contains(slot) else { return }
@@ -640,6 +650,12 @@ final class LaunchpadGridContainerView: NSView {
             externalGapIndex = gap
             layoutCellsWithGap(animated: true)
         }
+    }
+
+    /// Legacy window-point entrance (correct on page 0 only — cold-start fallback before the first
+    /// geometry push; windowless unit tests treat the point as already container-local).
+    func updateExternalDrag(atWindowPoint windowPoint: NSPoint) {
+        updateExternalDrag(atContainerPoint: window != nil ? convert(windowPoint, from: nil) : windowPoint)
     }
 
     /// Make-way for the phantom carried item: lay cell `i` at `slotRect(i)`, shifted one slot forward
