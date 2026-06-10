@@ -291,7 +291,7 @@ final class LaunchpadLayoutStore: ObservableObject {
 
     /// Decode the stored layout, tolerating absence and corruption.
     /// Missing key → `nil` (alphabetical — the zero-migration default for upgrading users).
-    /// Decode failure or `version < currentVersion` → `nil` + a warning, never a crash.
+    /// Decode failure or version mismatch → `nil` + a warning, never a crash.
     private static func loadLayout(
         from storage: PluginStorage,
         decoder: JSONDecoder,
@@ -302,9 +302,12 @@ final class LaunchpadLayoutStore: ObservableObject {
             logger.warning("Failed to decode custom layout; falling back to alphabetical order.")
             return nil
         }
-        guard decoded.version >= LaunchpadLayout.currentVersion else {
+        // Exact-version match only. Older formats never shipped; a NEWER version (downgraded app)
+        // may carry fields this build's Codable silently drops — loading it and re-stamping the
+        // future version onto v2-shaped data on the next save would corrupt it for the newer build.
+        guard decoded.version == LaunchpadLayout.currentVersion else {
             logger.warning(
-                "Custom layout version \(decoded.version, privacy: .public) below \(LaunchpadLayout.currentVersion, privacy: .public); falling back to alphabetical order."
+                "Custom layout version \(decoded.version, privacy: .public) != supported \(LaunchpadLayout.currentVersion, privacy: .public); falling back to alphabetical order."
             )
             return nil
         }

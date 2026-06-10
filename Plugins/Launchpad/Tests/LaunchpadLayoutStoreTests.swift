@@ -44,6 +44,19 @@ final class LaunchpadLayoutStoreTests: XCTestCase {
         XCTAssertNil(store.layout, "version < currentVersion 应 fallback 到 nil")
     }
 
+    func testFutureVersionFallsBackToNilWithoutRewriting() throws {
+        // 降级安装不能加载更新版本的布局（本版 Codable 会丢掉未来字段，下次保存等于毁数据），
+        // 且仅仅加载不能动盘上的数据。
+        let storage = FakePluginStorage()
+        let future = LaunchpadLayout(version: LaunchpadLayout.currentVersion + 1,
+                                     nodes: [.app(LaunchpadAppRef(id: a, name: "Alpha"))])
+        let stored = try JSONEncoder().encode(future)
+        storage.values["customLayout"] = stored
+        let store = LaunchpadLayoutStore(storage: storage)
+        XCTAssertNil(store.layout, "version > currentVersion 应 fallback 到 nil")
+        XCTAssertEqual(storage.values["customLayout"] as? Data, stored, "加载不得改写未来版本数据")
+    }
+
     // MARK: - Materialize
 
     func testMaterializeSnapshotsAlphabeticalAllApps() {
@@ -87,6 +100,21 @@ final class LaunchpadLayoutStoreTests: XCTestCase {
         let writes = storage.writeCount
         store.captureVisibleOrder(sampleApps())
         XCTAssertEqual(storage.writeCount, writes, "无缺失不重复写盘")
+    }
+
+    func testCaptureVisibleOrderWithFoldersKeepsChildrenAndAppendsOnlyRootMissing() {
+        // 含夹布局：capture 只追加「根层缺失」的可见 app；夹内 children 原样保留、不被复制到根层。
+        let store = LaunchpadLayoutStore(storage: FakePluginStorage())
+        store.materializeIfNeeded(from: sampleApps())                  // [a, b, c]
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")   // [F1, c]; F1=[a,b]
+        let d = "/Applications/Delta.app"
+        // 可见根层 = [c, d]（夹内 a/b 不出现在根层 capture 输入里；d 是新装 app）
+        store.captureVisibleOrder([app(c, "Charlie"), app(d, "Delta")])
+        XCTAssertEqual(ids(store.layout), ["F1", c, d], "夹保留原位，只追加新装 d")
+        guard case .folder(_, _, let children)? = store.layout?.nodes.first else {
+            return XCTFail("F1 应仍是 folder 节点")
+        }
+        XCTAssertEqual(children.map(\.id), [a, b], "children 不被 capture 改动或外提")
     }
 
     func testAppendedAppBecomesMovableAfterCapture() {
