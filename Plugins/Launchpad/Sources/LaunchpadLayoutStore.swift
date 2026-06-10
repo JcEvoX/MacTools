@@ -134,6 +134,95 @@ final class LaunchpadLayoutStore: ObservableObject {
         setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
     }
 
+    /// Move an app OUT of a folder and drop it at a chosen ROOT position (iOS finger-bound exit) —
+    /// not the tail. Auto-dissolve still applies (a single remaining child lifts the survivor into
+    /// the folder's slot). `target == nil`, or a target whose id no longer resolves (e.g. it WAS the
+    /// folder that just dissolved), falls back to the tail. The target is resolved against the
+    /// post-dissolve node list, so a survivor target still works.
+    func moveOutOfFolder(_ folderID: String, app appID: String, to target: LaunchpadDropTarget?) {
+        guard let current = layout else { return }
+        var nodes = current.nodes
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, let fname, var children) = nodes[folderIndex],
+              let childIndex = children.firstIndex(where: { $0.id == appID })
+        else { return }
+        let removed = children.remove(at: childIndex)
+        if children.count <= 1 {
+            nodes.replaceSubrange(folderIndex...folderIndex, with: children.map(LaunchpadLayoutNode.app))
+        } else {
+            nodes[folderIndex] = .folder(id: fid, name: fname, children: children)
+        }
+        insert(.app(removed), relativeTo: target, into: &nodes)
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Insert a node at a root drop target (before/after an existing root id); a nil or stale
+    /// target appends at the tail.
+    private func insert(_ node: LaunchpadLayoutNode, relativeTo target: LaunchpadDropTarget?,
+                        into nodes: inout [LaunchpadLayoutNode]) {
+        switch target {
+        case .none:
+            nodes.append(node)
+        case .before(let id):
+            if let i = nodes.firstIndex(where: { $0.rootID == id }) { nodes.insert(node, at: i) }
+            else { nodes.append(node) }
+        case .after(let id):
+            if let i = nodes.firstIndex(where: { $0.rootID == id }) { nodes.insert(node, at: i + 1) }
+            else { nodes.append(node) }
+        }
+    }
+
+    /// Eject `app` from its `source` folder AND fold it into a NEW folder occupying `target`'s root
+    /// slot — in ONE mutation (no intermediate tail hop / double render). Auto-dissolve of the now
+    /// smaller source still applies. Falls back to a tail insert (app never lost) if the target no
+    /// longer resolves to a root app after the source dissolves.
+    func ejectIntoNewFolder(source: String, app appID: String, target targetID: String, name: String, id: String) {
+        guard let current = layout, targetID != source, appID != targetID else { return }
+        var nodes = current.nodes
+        guard let removed = detachChild(appID, fromFolder: source, in: &nodes) else { return }
+        guard let targetIndex = nodes.firstIndex(where: { $0.rootID == targetID }),
+              case .app(let targetRef) = nodes[targetIndex] else {
+            nodes.append(.app(removed))
+            setLayout(LaunchpadLayout(version: current.version, nodes: nodes)); return
+        }
+        nodes[targetIndex] = .folder(id: id, name: name, children: [targetRef, removed])
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Eject `app` from its `source` folder AND append it to existing `destination` folder — one
+    /// mutation. Falls back to a tail insert if the destination no longer resolves to a folder.
+    func ejectIntoFolder(source: String, app appID: String, destination destID: String) {
+        guard let current = layout, destID != source else { return }
+        var nodes = current.nodes
+        guard let removed = detachChild(appID, fromFolder: source, in: &nodes) else { return }
+        guard let destIndex = nodes.firstIndex(where: { $0.rootID == destID }),
+              case .folder(let dfid, let dfname, var dchildren) = nodes[destIndex],
+              !dchildren.contains(where: { $0.id == appID }) else {
+            nodes.append(.app(removed))
+            setLayout(LaunchpadLayout(version: current.version, nodes: nodes)); return
+        }
+        dchildren.append(removed)
+        nodes[destIndex] = .folder(id: dfid, name: dfname, children: dchildren)
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Remove `appID` from `folderID`'s children, auto-dissolving the folder in place when ≤1 child
+    /// remains. Returns the detached app, or nil if it can't be resolved. Mutates `nodes` only.
+    private func detachChild(_ appID: String, fromFolder folderID: String,
+                             in nodes: inout [LaunchpadLayoutNode]) -> LaunchpadAppRef? {
+        guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, let fname, var children) = nodes[folderIndex],
+              let childIndex = children.firstIndex(where: { $0.id == appID })
+        else { return nil }
+        let removed = children.remove(at: childIndex)
+        if children.count <= 1 {
+            nodes.replaceSubrange(folderIndex...folderIndex, with: children.map(LaunchpadLayoutNode.app))
+        } else {
+            nodes[folderIndex] = .folder(id: fid, name: fname, children: children)
+        }
+        return removed
+    }
+
     /// Rename a folder. An empty name falls back to a default so a folder is never nameless.
     func renameFolder(_ folderID: String, name: String) {
         guard let current = layout else { return }
@@ -143,6 +232,36 @@ final class LaunchpadLayoutStore: ObservableObject {
         else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         nodes[folderIndex] = .folder(id: fid, name: trimmed.isEmpty ? "未命名" : trimmed, children: children)
+        setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
+    }
+
+    /// Reorder a child WITHIN a folder: move `appID` to immediately before `siblingID` in that
+    /// folder's children. No-op (no write) when the folder/child/sibling can't be resolved, when
+    /// they're the same, or when nothing changes — and, unlike the root reorder, a missing sibling
+    /// is a no-op rather than an append (the child stays put; design: in-folder order is explicit).
+    func moveChildWithinFolder(_ folderID: String, child appID: String, before siblingID: String) {
+        reorderChild(in: folderID, child: appID, relativeTo: siblingID, placeAfter: false)
+    }
+
+    /// Reorder a child WITHIN a folder: move `appID` to immediately after `siblingID`.
+    func moveChildWithinFolder(_ folderID: String, child appID: String, after siblingID: String) {
+        reorderChild(in: folderID, child: appID, relativeTo: siblingID, placeAfter: true)
+    }
+
+    private func reorderChild(in folderID: String, child appID: String, relativeTo siblingID: String, placeAfter: Bool) {
+        guard let current = layout, appID != siblingID,
+              let folderIndex = current.nodes.firstIndex(where: { $0.rootID == folderID }),
+              case .folder(let fid, let fname, var children) = current.nodes[folderIndex],
+              let sourceIndex = children.firstIndex(where: { $0.id == appID })
+        else { return }
+        let moved = children.remove(at: sourceIndex)
+        guard let targetIndex = children.firstIndex(where: { $0.id == siblingID }) else { return }  // stale sibling → no-op
+        children.insert(moved, at: placeAfter ? targetIndex + 1 : targetIndex)
+
+        var nodes = current.nodes
+        let updated = LaunchpadLayoutNode.folder(id: fid, name: fname, children: children)
+        guard updated != nodes[folderIndex] else { return }   // dropped in place → no write (R8)
+        nodes[folderIndex] = updated
         setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
     }
 

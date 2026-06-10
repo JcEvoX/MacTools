@@ -15,6 +15,20 @@ enum LaunchpadDisplayCell: Identifiable, Equatable {
         case .folder(let fid, _, _): return "folder.\(fid)"
         }
     }
+
+    /// The id the *store* keys on — an app's path, or a folder's bare UUID (not the `folder.`
+    /// prefixed display id). Used for drag payloads and reorder targets.
+    var layoutID: String {
+        switch self {
+        case .app(let item): return item.id
+        case .folder(let fid, _, _): return fid
+        }
+    }
+
+    var folderID: String? {
+        if case .folder(let fid, _, _) = self { return fid }
+        return nil
+    }
 }
 
 /// Pure projection: alphabetical `catalog.apps` (the truth source) + an optional custom

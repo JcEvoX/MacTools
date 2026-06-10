@@ -106,4 +106,122 @@ final class LaunchpadFolderOpsTests: XCTestCase {
         XCTAssertEqual(rootIDs(reloaded), ["F1", c, d])
         XCTAssertEqual(folderChildren(reloaded, "F1"), [a, b])
     }
+
+    func testMoveChildWithinFolderReorders() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // F1=[a,b]
+        store.addToFolder("F1", app: c)                                // F1=[a,b,c]
+        store.moveChildWithinFolder("F1", child: c, before: a)         // → [c,a,b]
+        XCTAssertEqual(folderChildren(store, "F1"), [c, a, b])
+        store.moveChildWithinFolder("F1", child: c, after: b)          // → [a,b,c]
+        XCTAssertEqual(folderChildren(store, "F1"), [a, b, c])
+    }
+
+    // MARK: - moveOutOfFolder (finger-bound exit: drop at a chosen root slot, not the tail)
+
+    func testMoveOutOfFolderInsertsAtTargetSlotNotTail() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.addToFolder("F1", app: c)                                // [F1, d]; F1=[a,b,c]
+        store.moveOutOfFolder("F1", app: b, to: .before(d))            // b out, before d
+        XCTAssertEqual(folderChildren(store, "F1"), [a, c])
+        XCTAssertEqual(rootIDs(store), ["F1", b, d], "落在光标槽位（d 之前），不是末尾")
+    }
+
+    func testMoveOutOfFolderAutoDissolvesAndDropsAtCursorSlot() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.moveOutOfFolder("F1", app: b, to: .after(c))            // F1 → [a] dissolves; b after c
+        XCTAssertNil(folderChildren(store, "F1"), "降到 1 个自动解散")
+        XCTAssertEqual(rootIDs(store), [a, c, b, d], "幸存者归原位(最前)，移出的落在 c 之后")
+    }
+
+    func testMoveOutOfFolderNilTargetAppendsTail() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.addToFolder("F1", app: c)                                // [F1, d]; F1=[a,b,c]
+        store.moveOutOfFolder("F1", app: b, to: nil)                   // nil → tail (== removeFromFolder)
+        XCTAssertEqual(folderChildren(store, "F1"), [a, c])
+        XCTAssertEqual(rootIDs(store), ["F1", d, b])
+    }
+
+    func testMoveOutOfFolderStaleTargetFallsBackToTail() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.addToFolder("F1", app: c)                                // [F1, d]; F1=[a,b,c]
+        store.moveOutOfFolder("F1", app: b, to: .before("/nope.app"))  // stale → tail
+        XCTAssertEqual(rootIDs(store), ["F1", d, b])
+    }
+
+    func testMoveOutOfFolderTargetIsDissolvedFolderFallsBackToTail() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.moveOutOfFolder("F1", app: b, to: .after("F1"))         // F1 dissolves → target gone → tail
+        XCTAssertNil(folderChildren(store, "F1"))
+        XCTAssertEqual(rootIDs(store), [a, c, d, b])
+    }
+
+    // MARK: - eject INTO another app/folder (carry-merge during a folder drag-out)
+
+    func testEjectIntoNewFolderRemovesFromSourceAndStacksAtTarget() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")          // [F1, c, d]; F1=[a,b]
+        store.ejectIntoNewFolder(source: "F1", app: b, target: c, name: "X", id: "F2")
+        XCTAssertNil(folderChildren(store, "F1"), "源夹降到 1 个自动解散")
+        XCTAssertEqual(folderChildren(store, "F2"), [c, b], "新夹 = [被叠, 被拖出]")
+        XCTAssertEqual(rootIDs(store), [a, "F2", d])
+    }
+
+    func testEjectIntoNewFolderSourceStaysWhenTwoChildrenRemain() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")          // [F1, c, d]; F1=[a,b]
+        store.addToFolder("F1", app: c)                                        // [F1, d]; F1=[a,b,c]
+        store.ejectIntoNewFolder(source: "F1", app: b, target: d, name: "X", id: "F2")
+        XCTAssertEqual(folderChildren(store, "F1"), [a, c], "≥2 不解散")
+        XCTAssertEqual(folderChildren(store, "F2"), [d, b])
+        XCTAssertEqual(rootIDs(store), ["F1", "F2"])
+    }
+
+    func testEjectIntoFolderAppendsToDestination() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F1n", id: "F1")        // [F1, c, d]; F1=[a,b]
+        store.makeFolder(target: c, dragged: d, name: "F2n", id: "F2")        // [F1, F2]; F2=[c,d]
+        store.ejectIntoFolder(source: "F1", app: b, destination: "F2")
+        XCTAssertNil(folderChildren(store, "F1"))
+        XCTAssertEqual(folderChildren(store, "F2"), [c, d, b])
+        XCTAssertEqual(rootIDs(store), [a, "F2"])
+    }
+
+    func testEjectIntoNewFolderStaleTargetFallsBackToTail() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")          // [F1, c, d]; F1=[a,b]
+        store.ejectIntoNewFolder(source: "F1", app: b, target: "/nope.app", name: "X", id: "F2")
+        XCTAssertNil(folderChildren(store, "F2"), "目标不存在 → 不建夹")
+        XCTAssertEqual(rootIDs(store), [a, c, d, b], "被拖出的回末尾，不丢")
+    }
+
+    func testEjectIntoFolderBackToSourceIsNoOp() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")          // [F1, c, d]; F1=[a,b]
+        store.ejectIntoFolder(source: "F1", app: b, destination: "F1")        // 拖出来又放回源夹
+        XCTAssertEqual(folderChildren(store, "F1"), [a, b], "放回源夹 → app 留在夹里（撤销）")
+        XCTAssertEqual(rootIDs(store), ["F1", c, d])
+    }
+
+    func testEjectIntoNewFolderTargetEqualsSourceIsNoOp() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")          // [F1, c, d]; F1=[a,b]
+        store.ejectIntoNewFolder(source: "F1", app: b, target: "F1", name: "X", id: "F2")
+        XCTAssertEqual(folderChildren(store, "F1"), [a, b], "目标是源夹本身 → 不动")
+        XCTAssertEqual(rootIDs(store), ["F1", c, d])
+    }
+
+    func testMoveChildWithinFolderStaleOrSelfIsNoOp() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")   // F1=[a,b]
+        store.moveChildWithinFolder("F1", child: a, before: d)         // d not in folder → no-op
+        XCTAssertEqual(folderChildren(store, "F1"), [a, b])
+        store.moveChildWithinFolder("F1", child: a, before: a)         // self → no-op
+        XCTAssertEqual(folderChildren(store, "F1"), [a, b])
+    }
 }

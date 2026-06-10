@@ -43,9 +43,23 @@ struct LaunchpadGridView: View {
     @State private var rowCount = 5
     /// Visible order frozen at drag start, so a drop reorders against exactly what the user
     /// dragged — even if an async catalog reload lands mid-drag (design §5.3 / Codex P2).
-    @State private var dragOrderSnapshot: [LaunchpadAppItem]?
+    @State private var dragOrderSnapshot: [LaunchpadDisplayCell]?
     /// Live horizontal offset while an empty-space drag pages the grid (follow-the-cursor).
     @State private var pageDragTranslation: CGFloat = 0
+    /// Debounces the end of a two-finger scroll — its accumulation lives here (shared), NOT in the
+    /// per-page AppKit containers, so a sliding grid can't feed two totals into the offset.
+    @State private var pageScrollEndWork: DispatchWorkItem?
+    /// The open folder's id, or `nil` when no folder overlay is showing. Tapping a folder cell
+    /// sets it; the scrim tap / typing / Esc clears it.
+    @State private var openFolderID: String?
+    /// Drives the open/close zoom explicitly. A `.transition` on the conditionally-inserted panel
+    /// never animates reliably in this ZStack-over-AppKit hierarchy (the tuple-derived view has no
+    /// stable identity), so the panel is always rendered while open and zoomed via this flag.
+    @State private var folderShown = false
+    /// Shared across the root pages and the open folder; owns the finger-bound folder-exit handoff.
+    /// `@StateObject` so its `@Published` eject token re-renders this view — the eject is requested
+    /// from an AppKit mouseUp handler, where a captured-closure `@State` write doesn't invalidate.
+    @StateObject private var dragCoordinator = LaunchpadDragCoordinator()
 
     // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
     private let cellWidth: CGFloat = 116
@@ -53,19 +67,33 @@ struct LaunchpadGridView: View {
     private let columnSpacing: CGFloat = 8
     private let rowSpacing: CGFloat = 16
 
-    private var filtered: [LaunchpadAppItem] {
+    private var filtered: [LaunchpadDisplayCell] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.isEmpty else { return searchResults(query: query) }
-        // Layout state: custom order via the pure reconcile projection. `layout == nil` →
-        // alphabetical, byte-for-byte the previous behaviour. 19a only yields `.app` cells,
-        // so the grid stays a flat `[LaunchpadAppItem]` and every paging / selection path
-        // below is untouched (design §5.2: output set == visible, only order differs).
-        return LaunchpadLayoutReconciler
+        // Search is a flat, folder-agnostic projection: every matching app surfaces as its own
+        // `.app` cell, folders dissolved (design §6). Clearing the query returns to the layout.
+        guard query.isEmpty else { return searchResults(query: query).map(LaunchpadDisplayCell.app) }
+        // Layout state: custom order + folders via the pure reconcile projection. `layout == nil`
+        // → alphabetical `.app`-only cells, byte-for-byte the previous behaviour (design §5.2:
+        // output set == visible, only order differs).
+        let cells = LaunchpadLayoutReconciler
             .reconcile(apps: catalog.apps, layout: layoutStore.layout, hidden: sessionHidden)
-            .compactMap { cell -> LaunchpadAppItem? in
-                guard case .app(let item) = cell else { return nil }
-                return item
-            }
+        // During a folder carry, hide the carried app from its source folder's thumbnail (display
+        // only — the data isn't touched until release, preserving the drop-back-in revert).
+        guard dragCoordinator.ejectActive,
+              let appID = dragCoordinator.carriedAppID,
+              let folderID = dragCoordinator.carriedSourceFolderID
+        else { return cells }
+        return cells.map { cell in
+            guard case .folder(let id, let name, let items) = cell, id == folderID else { return cell }
+            return .folder(id: id, name: name, items: items.filter { $0.id != appID })
+        }
+    }
+
+    /// The root-level apps among the display cells — folders excluded. Used when capturing the
+    /// visible order before a reorder (a folder is already a layout node; only loose apps need
+    /// folding into the layout).
+    private func rootApps(of cells: [LaunchpadDisplayCell]) -> [LaunchpadAppItem] {
+        cells.compactMap { if case .app(let item) = $0 { return item }; return nil }
     }
 
     /// Flat fuzzy search — ignores layout/folders entirely and never touches persistence
@@ -112,9 +140,41 @@ struct LaunchpadGridView: View {
             .padding(.top, isCompact ? 24 : 60)
             .padding(.bottom, isCompact ? 20 : 32)
             .padding(.horizontal, isCompact ? 24 : 48)
+
+            // Folder overlay = a frosted scrim + the folder panel. Both are rendered whenever a
+            // folder is open and animated via `folderShown` (explicit scale/opacity, not a
+            // transition — see the `folderShown` note). The grid below is interaction-disabled
+            // while it's up, so a scrim tap reliably closes instead of being eaten by a cell.
+            if let folder = openFolder {
+                folderScrim
+                    .opacity(folderShown ? 1 : 0)
+                    .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
+
+                folderPanel(folder)
+                    .scaleEffect(folderShown ? 1 : 0.55, anchor: .center)
+                    .opacity(folderShown ? 1 : 0)
+                    .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
+            }
         }
         .onAppear { selectedIndex = 0; currentPage = 0; sessionHidden = hiddenAppIDs }
-        .onChange(of: searchText) { _, _ in selectedIndex = 0; currentPage = 0 }
+        // Mid-drag: the app left the folder → zoom the folder closed NOW while the drag continues
+        // (kept mounted so the folder cell stays the live mouse-event target until release). Driven
+        // by the coordinator's @Published flag so this runs in a tracked SwiftUI transaction.
+        .onChange(of: dragCoordinator.ejectActive) { _, active in
+            if active { withAnimation(folderCloseAnimation) { folderShown = false } }
+        }
+        // Release: apply the carried app's resolved outcome (reorder / make folder / add to folder)
+        // and finish unmounting the folder.
+        .onChange(of: dragCoordinator.ejectToken) { _, _ in
+            guard let req = dragCoordinator.pendingEject else { return }
+            handleMoveOutOfFolder(req.folderID, req.appID, req.result)
+            openFolderID = nil
+            folderShown = false
+        }
+        .onChange(of: searchText) { _, _ in
+            selectedIndex = 0; currentPage = 0
+            closeFolder()        // typing dissolves folders into a flat search (animated close)
+        }
     }
 
     private var searchBar: some View {
@@ -122,7 +182,7 @@ struct LaunchpadGridView: View {
             text: $searchText,
             onMove: handleMove,
             onLaunch: activateSelection,
-            onCancel: onDismiss
+            onCancel: handleCancel
         )
         .frame(width: 360, height: 28)
     }
@@ -189,35 +249,48 @@ struct LaunchpadGridView: View {
             columns: columns,
             selectedID: selectedID,
             isCompact: isCompact,
+            interactionEnabled: openFolder == nil,    // exactly matches overlay visibility
             iconProvider: { catalog.icon(for: $0) },
-            onActivate: activateApp,
+            onActivate: activateCell,
             onReveal: onReveal,
             onCopyPath: copyPath,
             onHide: hideApp,
             onMoveToFront: moveAppToFront,
             onMoveToEnd: moveAppToEnd,
-            onSelect: selectApp,
+            onSelect: selectCell,
             onReorder: handleReorder,
+            onMakeFolder: handleMakeFolder,
+            onAddToFolder: handleAddToFolder,
             onDragBegan: { dragOrderSnapshot = filtered },
             onPageSwipe: { direction in goToPage(min(currentPage, pageCount - 1) + direction) },
             onPageDrag: handlePageDrag,
-            onDismiss: onDismiss
+            onPageScroll: handlePageScroll,
+            onDismiss: onDismiss,
+            coordinator: dragCoordinator,
+            isCurrentRootPage: page == currentPage
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// Selected app id for the AppKit cell highlight, derived from the global `selectedIndex`.
+    /// Selected cell's layoutID for the AppKit cell highlight, derived from `selectedIndex`.
     private var selectedID: String? {
-        filtered.indices.contains(selectedIndex) ? filtered[selectedIndex].id : nil
+        filtered.indices.contains(selectedIndex) ? filtered[selectedIndex].layoutID : nil
     }
 
-    private func activateApp(_ app: LaunchpadAppItem) {
-        if let index = filtered.firstIndex(where: { $0.id == app.id }) { selectedIndex = index }
-        onActivate(app)
+    /// App → launch; folder → open the overlay. Keeps the selection on whatever was activated.
+    private func activateCell(_ cell: LaunchpadDisplayCell) {
+        if let index = filtered.firstIndex(where: { $0.layoutID == cell.layoutID }) { selectedIndex = index }
+        switch cell {
+        case .app(let item): onActivate(item)
+        case .folder(let id, _, _):
+            openFolderID = id
+            folderShown = false
+            DispatchQueue.main.async { if openFolderID == id { folderShown = true } }  // next tick → zoom
+        }
     }
 
-    private func selectApp(_ app: LaunchpadAppItem) {
-        if let index = filtered.firstIndex(where: { $0.id == app.id }) { selectedIndex = index }
+    private func selectCell(_ layoutID: String) {
+        if let index = filtered.firstIndex(where: { $0.layoutID == layoutID }) { selectedIndex = index }
     }
 
     private func copyPath(_ app: LaunchpadAppItem) {
@@ -242,8 +315,8 @@ struct LaunchpadGridView: View {
         let order = dragOrderSnapshot ?? filtered
         dragOrderSnapshot = nil
         // A drop that changes nothing visible must not flip alphabetical → custom mode (Codex P2).
-        guard isLayoutEditable, !target.isNoOp(dragged: draggedID, in: order.map(\.id)) else { return }
-        layoutStore.captureVisibleOrder(order)
+        guard isLayoutEditable, !target.isNoOp(dragged: draggedID, in: order.map(\.layoutID)) else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: order))
         switch target {
         case .before(let id): layoutStore.move(id: draggedID, before: id)
         case .after(let id):  layoutStore.move(id: draggedID, after: id)
@@ -251,24 +324,69 @@ struct LaunchpadGridView: View {
         relocateSelection(to: draggedID)
     }
 
+    /// Drag-to-stack: dropping app `draggedID` onto app `targetID` folds both into a new folder
+    /// occupying the target's slot (iOS). Materialises against the order frozen at drag start —
+    /// the same one the (frozen) AppKit page is showing — so the persisted order matches what the
+    /// user saw, exactly like `handleReorder`. The target is always a drag-start cell, so it's in
+    /// the snapshot. Selection follows to the *new folder's* id (the target app is now inside it).
+    private func handleMakeFolder(_ targetID: String, _ draggedID: String) {
+        let order = dragOrderSnapshot ?? filtered
+        dragOrderSnapshot = nil
+        guard isLayoutEditable, targetID != draggedID else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: order))
+        let folderID = UUID().uuidString
+        layoutStore.makeFolder(target: targetID, dragged: draggedID, name: "未命名", id: folderID)
+        relocateSelection(to: folderID)
+    }
+
+    /// Drag-to-stack onto an existing folder: app joins it.
+    private func handleAddToFolder(_ folderID: String, _ appID: String) {
+        let order = dragOrderSnapshot ?? filtered
+        dragOrderSnapshot = nil
+        guard isLayoutEditable else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: order))
+        layoutStore.addToFolder(folderID, app: appID)
+        relocateSelection(to: folderID)
+    }
+
+    /// Finger-bound folder exit commit: apply the carried app's resolved outcome over the root grid —
+    /// reorder at the cursor slot, merge onto an app (new folder), or add to a folder — each as a
+    /// single store mutation. Selection follows the result (the new/destination folder, or the app).
+    private func handleMoveOutOfFolder(_ folderID: String, _ appID: String, _ result: LaunchpadExternalDropResult) {
+        guard isLayoutEditable else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: filtered))
+        switch result {
+        case .reorder(let target):
+            layoutStore.moveOutOfFolder(folderID, app: appID, to: target)
+            relocateSelection(to: appID)
+        case .makeFolder(let targetAppID):
+            let newID = UUID().uuidString
+            layoutStore.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID, name: "未命名", id: newID)
+            relocateSelection(to: newID)
+        case .addToFolder(let destFolderID):
+            layoutStore.ejectIntoFolder(source: folderID, app: appID, destination: destFolderID)
+            relocateSelection(to: destFolderID)
+        }
+    }
+
     private func moveAppToFront(_ app: LaunchpadAppItem) {
-        guard isLayoutEditable, let first = filtered.first, first.id != app.id else { return }
-        layoutStore.captureVisibleOrder(filtered)
-        layoutStore.move(id: app.id, before: first.id)
+        guard isLayoutEditable, let first = filtered.first, first.layoutID != app.id else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: filtered))
+        layoutStore.move(id: app.id, before: first.layoutID)
         relocateSelection(to: app.id)
     }
 
     private func moveAppToEnd(_ app: LaunchpadAppItem) {
-        guard isLayoutEditable, let last = filtered.last, last.id != app.id else { return }
-        layoutStore.captureVisibleOrder(filtered)
-        layoutStore.move(id: app.id, after: last.id)
+        guard isLayoutEditable, let last = filtered.last, last.layoutID != app.id else { return }
+        layoutStore.captureVisibleOrder(rootApps(of: filtered))
+        layoutStore.move(id: app.id, after: last.layoutID)
         relocateSelection(to: app.id)
     }
 
-    /// After a reorder, keep the selection on the moved app by id (not position) and bring its
-    /// page on screen (design §5.5: selection is identity-, not index-, anchored).
+    /// After a reorder, keep the selection on the moved item by layoutID (not position) and
+    /// bring its page on screen (design §5.5: selection is identity-, not index-, anchored).
     private func relocateSelection(to id: String) {
-        guard let index = filtered.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = filtered.firstIndex(where: { $0.layoutID == id }) else { return }
         selectedIndex = index
         currentPage = perPage > 0 ? index / perPage : 0
     }
@@ -318,7 +436,7 @@ struct LaunchpadGridView: View {
     /// edge turns the page keeping the cross-axis position (→ at the rightmost column jumps
     /// to the next page's same row, etc.).
     private func handleMove(_ direction: LaunchpadSearchField.MoveDirection) {
-        guard !filtered.isEmpty else { return }
+        guard openFolder == nil, !filtered.isEmpty else { return }   // folder open → grid nav inert
         let cols = max(1, columnCount)
         let rows = max(1, rowCount)
         let per = perPage
@@ -371,6 +489,35 @@ struct LaunchpadGridView: View {
         if (cur == 0 && t > 0) || (cur == last && t < 0) { t *= 0.35 }
         t = min(max(t, -pageW), pageW)
         guard ended else { pageDragTranslation = t; return }
+        snapToNearestPage(width: pageW)
+    }
+
+    /// Two-finger trackpad paging. The raw delta arrives from whichever page container is under
+    /// the (stationary) cursor; accumulating it HERE (shared) — not per-container — is what fixes
+    /// the every-frame offset oscillation. The gesture ends when deltas stop for a beat (debounce),
+    /// since trackpad phase is unreliable on slow drags.
+    private func handlePageScroll(_ delta: CGFloat, _ width: CGFloat) {
+        pageScrollEndWork?.cancel()
+        let pageW = max(1, width)
+        let last = max(0, pageCount - 1)
+        let cur = min(currentPage, last)
+        var t = pageDragTranslation + delta
+        if cur == 0, t > 0 { t = min(t, pageW * 0.12) }            // soft over-pull at the ends
+        else if cur == last, t < 0 { t = max(t, -pageW * 0.12) }
+        else { t = min(max(t, -pageW), pageW) }
+        pageDragTranslation = t
+        let work = DispatchWorkItem { snapToNearestPage(width: pageW) }
+        pageScrollEndWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+    }
+
+    /// Snap `pageDragTranslation` to the nearest page (advancing past a threshold), shared by the
+    /// empty-space drag and the two-finger scroll on release.
+    private func snapToNearestPage(width: CGFloat) {
+        let pageW = max(1, width)
+        let last = max(0, pageCount - 1)
+        let cur = min(currentPage, last)
+        let t = pageDragTranslation
         let threshold = max(45, pageW * 0.18)
         withAnimation(pageSnap) {
             if t <= -threshold, cur < last { currentPage = cur + 1 }
@@ -381,7 +528,154 @@ struct LaunchpadGridView: View {
     }
 
     private func activateSelection() {
-        guard filtered.indices.contains(selectedIndex) else { return }
-        onActivate(filtered[selectedIndex])
+        guard openFolder == nil, filtered.indices.contains(selectedIndex) else { return }
+        activateCell(filtered[selectedIndex])
+    }
+
+    // MARK: - Folder overlay
+
+    private func handleCancel() {
+        if openFolderID != nil { closeFolder() } else { onDismiss() }
+    }
+
+    private func closeFolder() {
+        guard let id = openFolderID else { return }
+        folderShown = false                                    // zoom back out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            // Remove only if still closing THIS folder — a reopen (new id, or folderShown back true)
+            // must not be wiped by this stale clear.
+            if openFolderID == id, !folderShown { openFolderID = nil }
+        }
+    }
+
+    /// Smooth, lightly-settled spring on open (a gentle zoom, minimal bounce — the iOS feel),
+    /// a touch quicker on close.
+    private var folderOpenAnimation: Animation { .spring(response: 0.50, dampingFraction: 0.78) }
+    private var folderCloseAnimation: Animation { .spring(response: 0.32, dampingFraction: 0.92) }
+
+    /// The open folder resolved from `filtered`, or `nil` when none is open *or* the open one
+    /// no longer renders (emptied / dissolved underneath). Driving both the overlay and the
+    /// grid's `interactionEnabled` off this one value keeps them from disagreeing — a stale
+    /// `openFolderID` can never leave the grid frozen with no scrim to dismiss.
+    private var openFolder: (id: String, name: String, items: [LaunchpadAppItem])? {
+        openFolderID.flatMap(folderCell)
+    }
+
+    private func folderCell(_ id: String) -> (id: String, name: String, items: [LaunchpadAppItem])? {
+        for cell in filtered {
+            if case .folder(let fid, let name, let items) = cell, fid == id {
+                return (fid, name, items)
+            }
+        }
+        return nil
+    }
+
+    /// Frosted-glass dim behind the folder panel: a real NSVisualEffectView blur of the grid
+    /// (SwiftUI `.blur` can't touch the embedded AppKit grid) + a slight darken, with a clear
+    /// tap layer on top so a tap anywhere closes the folder.
+    private var folderScrim: some View {
+        ZStack {
+            FrostedGlassScrim(isCompact: isCompact)
+                .ignoresSafeArea()
+            Rectangle()
+                .fill(.black.opacity(0.18))
+                .ignoresSafeArea()
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { closeFolder() }
+        }
+    }
+
+    private func folderPanel(_ folder: (id: String, name: String, items: [LaunchpadAppItem])) -> some View {
+        let metrics = LaunchpadGridMetrics()
+        let cols = min(max(folder.items.count, 1), 5)              // Mac is wide; cap at 5 per row
+        let rows = max(1, (folder.items.count + cols - 1) / cols)
+        let gridW = CGFloat(cols) * metrics.cellWidth + CGFloat(cols - 1) * metrics.columnSpacing
+        let gridH = CGFloat(rows) * metrics.cellHeight + CGFloat(max(0, rows - 1)) * metrics.rowSpacing
+
+        return VStack(spacing: 18) {
+            Text(folder.name)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            // Same direct-tracking grid as the launcher itself → identical drag feel inside and
+            // outside a folder. Merge is disabled (no nested folders); reorder maps to the folder's
+            // child order; dragging a cell clearly OUT of the grid pulls the app out of the folder.
+            LaunchpadDragGrid(
+                items: folder.items.map { .app($0) },
+                columns: cols,
+                selectedID: nil,
+                isCompact: isCompact,
+                metrics: metrics,
+                iconProvider: { catalog.icon(for: $0) },
+                onActivate: { cell in
+                    if case .app(let appItem) = cell {
+                        openFolderID = nil          // clear up front, in case launch doesn't tear down
+                        onActivate(appItem)
+                    }
+                },
+                onReveal: onReveal,
+                onCopyPath: copyPath,
+                onHide: hideApp,
+                onMoveToFront: { _ in },
+                onMoveToEnd: { _ in },
+                onSelect: { _ in },
+                onReorder: { id, target in
+                    switch target {
+                    case .before(let t): layoutStore.moveChildWithinFolder(folder.id, child: id, before: t)
+                    case .after(let t):  layoutStore.moveChildWithinFolder(folder.id, child: id, after: t)
+                    }
+                },
+                onMakeFolder: { _, _ in },
+                onAddToFolder: { _, _ in },
+                onDragBegan: {},
+                onPageSwipe: { _ in },
+                onPageDrag: { _, _, _ in },
+                onPageScroll: { _, _ in },
+                onDismiss: {},
+                allowFolderCreation: false,
+                coordinator: dragCoordinator,
+                folderContextID: folder.id
+            )
+            .frame(width: gridW, height: gridH)
+        }
+        .padding(30)
+        .frame(maxWidth: 760)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(.white.opacity(0.10))
+        )
+        .shadow(color: .black.opacity(0.4), radius: 36, y: 16)
+        .padding(40)
+    }
+}
+
+/// A real frosted-glass blur of whatever is behind it in the same window — used as the folder
+/// scrim so the grid genuinely frosts (SwiftUI `.blur` can't blur the embedded AppKit grid).
+/// `.withinWindow` blends with the sibling views behind it; `hitTest` returns nil so the clear
+/// SwiftUI tap layer above it still receives the tap-to-close.
+private struct FrostedGlassScrim: NSViewRepresentable {
+    var isCompact = false
+
+    private final class PassthroughEffectView: NSVisualEffectView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    private var material: NSVisualEffectView.Material { isCompact ? .popover : .fullScreenUI }
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = PassthroughEffectView()
+        view.material = material
+        view.blendingMode = .withinWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
     }
 }
