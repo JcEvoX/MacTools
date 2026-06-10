@@ -13,7 +13,6 @@ final class LaunchpadDragToStackTests: XCTestCase {
         var madeFolders: [(target: String, dragged: String)] = []
         var addedToFolders: [(folder: String, app: String)] = []
         var reorders: [(id: String, target: LaunchpadDropTarget)] = []
-        var ejectCommits: [(folder: String, app: String, hasTarget: Bool)] = []
     }
 
     private func app(_ path: String, _ name: String) -> LaunchpadAppItem {
@@ -261,6 +260,59 @@ final class LaunchpadDragToStackTests: XCTestCase {
         container.beginExternalDrag(appID: "/Apps/Ext.app")                  // must be a no-op
         container.updateExternalDrag(atWindowPoint: centre(of: cells[1]))
         XCTAssertNil(container.externalGapIndex, "有真拖拽时外部拖拽不生效")
+    }
+
+    // MARK: - Aborting a carry (unmount / overlay close must not leak the floating window)
+
+    func testCancelEjectTearsDownWithoutCommit() {
+        let coord = LaunchpadDragCoordinator()
+        coord.beginEject(appID: "/Apps/A.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                         atScreenPoint: .zero, aboveLevel: .normal)
+        XCTAssertTrue(coord.ejectActive)
+        XCTAssertEqual(coord.carriedAppID, "/Apps/A.app")
+
+        coord.cancelEject()
+        XCTAssertFalse(coord.ejectActive, "取消必须收掉浮动图标并退出 carry 态")
+        XCTAssertNil(coord.carriedAppID)
+        XCTAssertNil(coord.pendingEject, "中止不产生 commit")
+        XCTAssertEqual(coord.ejectToken, 0)
+    }
+
+    func testUnmountMidCarryCancelsEjectAndDragState() {
+        let rec = Recorder()
+        let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B")
+        let coord = LaunchpadDragCoordinator()
+        let container = makeContainer([.app(a), .app(b)], rec,
+                                      allowFolderCreation: false, coordinator: coord, folderContextID: "F1")
+        let cells = container.cellViews
+
+        container.beginDirectDrag(cells[0], atWindowPoint: .zero)
+        // Windowless harness can't pass the screen-conversion gate in updateDirectDrag, so enter
+        // the carry directly — the state the container must clean up is the same.
+        coord.beginEject(appID: a.id, sourceFolderID: "F1", icon: nil, iconSide: 64,
+                         atScreenPoint: .zero, aboveLevel: .normal)
+        XCTAssertTrue(coord.ejectActive)
+
+        container.viewWillMove(toWindow: nil)   // folder panel unmounted mid-carry (Esc / 打字 / overlay 关闭)
+        XCTAssertFalse(coord.ejectActive, "卸载中止 carry：浮动图标窗口必须被收掉")
+        XCTAssertFalse(container.hasActiveDrag, "本地拖拽状态一并清理")
+        XCTAssertNil(coord.pendingEject)
+        XCTAssertEqual(coord.ejectToken, 0, "中止不触发 SwiftUI commit")
+    }
+
+    func testUnmountMidExternalCarrySettlesRootGap() {
+        let rec = Recorder()
+        let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B")
+        let container = makeContainer([.app(a), .app(b)], rec)
+        let cells = container.cellViews
+
+        container.beginExternalDrag(appID: "/Apps/Ext.app")
+        container.updateExternalDrag(atWindowPoint: NSPoint(x: cells[0].frame.minX + 2, y: cells[0].frame.midY))
+        XCTAssertNotNil(container.externalGapIndex)
+
+        container.viewWillMove(toWindow: nil)   // root page unmounted mid-carry
+        XCTAssertNil(container.externalGapIndex, "卸载收掉外部让位 gap")
+        XCTAssertNil(container.stackTargetCell)
     }
 
     func testDropInsideFolderGridReordersNotEject() {

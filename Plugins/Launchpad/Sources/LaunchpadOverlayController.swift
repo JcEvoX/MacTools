@@ -52,6 +52,10 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// Custom-order layout shared with the grid as `@ObservedObject` so a reorder /
     /// reset re-renders the open overlay (the grid does NOT observe `onStateChange`).
     private let layoutStore: LaunchpadLayoutStore
+    /// Folder-eject handoff (the floating icon rides in its own child NSWindow). Controller-owned
+    /// so `close()` can abort an in-flight eject deterministically — that floating window is NOT
+    /// part of the overlay window and would survive it otherwise.
+    private let dragCoordinator = LaunchpadDragCoordinator()
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
     /// `preferences`, which could drift mid-session and desync frame vs. content (Codex P2).
@@ -114,6 +118,7 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         let host = NSHostingView(rootView: LaunchpadGridView(
             catalog: catalog,
             layoutStore: layoutStore,
+            dragCoordinator: dragCoordinator,
             columns: preferences.columns,
             isCompact: isCompact,
             hiddenAppIDs: preferences.hiddenAppIDs,
@@ -143,6 +148,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     func close(restoringFocus: Bool = true) {
         guard !isTearingDown, let win = window else { return }
         isTearingDown = true
+        // A folder eject may be mid-flight (mouse still down): drop its floating icon window
+        // before the overlay goes — it's a separate child window and would outlive us.
+        dragCoordinator.cancelEject()
         removeDismissHandlers()
         win.delegate = nil
         win.orderOut(nil)

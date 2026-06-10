@@ -20,6 +20,12 @@ struct LaunchpadGridView: View {
     /// re-evaluates `filtered` and re-renders — the overlay grid does NOT observe
     /// `onStateChange`, so this injection is the only reorder-refresh path (design §5.5 / R1).
     @ObservedObject var layoutStore: LaunchpadLayoutStore
+    /// Shared across the root pages and the open folder; owns the finger-bound folder-exit handoff.
+    /// Injected (the overlay controller owns it) so overlay teardown can abort an in-flight eject —
+    /// the floating icon is a separate child NSWindow that would otherwise outlive the launcher.
+    /// `@ObservedObject` so its `@Published` eject token re-renders this view: the eject is requested
+    /// from an AppKit mouseUp handler, where a captured-closure `@State` write doesn't invalidate.
+    @ObservedObject var dragCoordinator: LaunchpadDragCoordinator
     /// Fixed column count, or `LaunchpadPreferences.autoColumns` (0) to fit to width.
     var columns: Int = LaunchpadPreferences.autoColumns
     /// Compact (centered panel) vs fullscreen — tightens padding and, since a small
@@ -56,11 +62,6 @@ struct LaunchpadGridView: View {
     /// never animates reliably in this ZStack-over-AppKit hierarchy (the tuple-derived view has no
     /// stable identity), so the panel is always rendered while open and zoomed via this flag.
     @State private var folderShown = false
-    /// Shared across the root pages and the open folder; owns the finger-bound folder-exit handoff.
-    /// `@StateObject` so its `@Published` eject token re-renders this view — the eject is requested
-    /// from an AppKit mouseUp handler, where a captured-closure `@State` write doesn't invalidate.
-    @StateObject private var dragCoordinator = LaunchpadDragCoordinator()
-
     // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
     private let cellWidth: CGFloat = 116
     private let cellHeight: CGFloat = 124

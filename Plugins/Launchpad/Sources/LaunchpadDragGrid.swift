@@ -378,6 +378,23 @@ final class LaunchpadGridContainerView: NSView {
         lastWindowDragPoint = nil
     }
 
+    /// The grid is being unmounted — the folder closed under the drag (Esc / typing flattened the
+    /// layout to search) or the whole overlay is being torn down. A live drag can never finish
+    /// here (its mouseUp is lost with the view), so abort it: tear down the coordinator's floating
+    /// eject window and settle any external make-way gap. Without this the floating icon window
+    /// outlives the launcher and the next session's drags are wedged.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard newWindow == nil else { return }
+        if let cell = draggedCell {
+            if let coord = grid?.coordinator, grid?.folderContextID != nil, coord.ejectActive {
+                coord.cancelEject()
+            }
+            teardownDragState(cell)
+        }
+        if externalDragActive { endExternalDrag() }
+    }
+
     func endDirectDrag() { endDirectDrag(atWindowPoint: lastWindowDragPoint ?? .zero) }
 
     func endDirectDrag(atWindowPoint windowPoint: NSPoint) {
