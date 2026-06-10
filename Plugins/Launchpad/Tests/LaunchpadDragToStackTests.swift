@@ -4,8 +4,9 @@ import XCTest
 @testable import LaunchpadPlugin
 
 /// Drives the AppKit grid container's drag-to-stack path directly (no real NSDraggingSession),
-/// proving the dwell → arm → drop wiring fires the right folder callbacks. This is the runtime
-/// behaviour that compile + data-layer tests can't reach.
+/// proving the centre-hover → arm → drop wiring fires the right folder callbacks (arming is
+/// instant on entering a cell's central merge rect — there is no dwell timer). This is the
+/// runtime behaviour that compile + data-layer tests can't reach.
 @MainActor
 final class LaunchpadDragToStackTests: XCTestCase {
 
@@ -63,7 +64,7 @@ final class LaunchpadDragToStackTests: XCTestCase {
 
     // MARK: - Arm + drop
 
-    func testDwellOverAppArmsThenDropMakesFolder() {
+    func testCentreHoverOverAppArmsThenDropMakesFolder() {
         let rec = Recorder()
         let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B"), c = app("/Apps/C.app", "C")
         let container = makeContainer([.app(a), .app(b), .app(c)], rec)
@@ -71,8 +72,8 @@ final class LaunchpadDragToStackTests: XCTestCase {
         XCTAssertEqual(cells.count, 3)
 
         container.beginDirectDrag(cells[0], atWindowPoint: .zero)                       // drag A
-        container.updateDrag(at: centre(of: cells[1]))  // dwell over B
-        XCTAssertTrue(container.stackTargetCell === cells[1], "停在 B 中心应 arm B")
+        container.updateDrag(at: centre(of: cells[1]))  // into B's central merge rect
+        XCTAssertTrue(container.stackTargetCell === cells[1], "进入 B 中心应 arm B")
 
         XCTAssertTrue(container.commitDrop(dragged: cells[0]))
         XCTAssertEqual(rec.madeFolders.count, 1)
@@ -82,7 +83,7 @@ final class LaunchpadDragToStackTests: XCTestCase {
         XCTAssertNil(container.stackTargetCell, "drop 后 disarm")
     }
 
-    func testDwellOverFolderAddsToIt() {
+    func testCentreHoverOverFolderAddsToIt() {
         let rec = Recorder()
         let a = app("/Apps/A.app", "A")
         let folder = LaunchpadDisplayCell.folder(id: "F1", name: "夹", items: [app("/Apps/X.app", "X")])
@@ -90,7 +91,7 @@ final class LaunchpadDragToStackTests: XCTestCase {
         let cells = container.cellViews
 
         container.beginDirectDrag(cells[0], atWindowPoint: .zero)                       // drag A
-        container.updateDrag(at: centre(of: cells[1]))  // dwell over the folder
+        container.updateDrag(at: centre(of: cells[1]))  // into the folder's central merge rect
         XCTAssertTrue(container.stackTargetCell === cells[1])
 
         container.commitDrop(dragged: cells[0])
@@ -106,10 +107,27 @@ final class LaunchpadDragToStackTests: XCTestCase {
         let cells = container.cellViews
 
         container.beginDirectDrag(cells[0], atWindowPoint: .zero)
-        container.commitDrop(dragged: cells[0])             // no dwell armed
+        container.commitDrop(dragged: cells[0])             // nothing armed
         XCTAssertEqual(rec.madeFolders.count, 0)
         XCTAssertEqual(rec.addedToFolders.count, 0)
         XCTAssertEqual(rec.reorders.count, 1, "无 stack target → 退回重排")
+    }
+
+    func testReorderDropReportsExactRelativeTarget() {
+        let rec = Recorder()
+        let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B"), c = app("/Apps/C.app", "C")
+        let container = makeContainer([.app(a), .app(b), .app(c)], rec)
+        let cells = container.cellViews
+
+        // Capture the point BEFORE updateDrag re-layouts the others (slot geometry is stable).
+        let rightOfC = NSPoint(x: cells[2].frame.maxX - 4, y: cells[2].frame.midY)
+        container.beginDirectDrag(cells[0], atWindowPoint: .zero)        // drag A
+        container.updateDrag(at: rightOfC)                               // C 右侧缝隙 → [B, C, A]
+        container.commitDrop(dragged: cells[0])
+        XCTAssertEqual(rec.reorders.count, 1)
+        XCTAssertEqual(rec.reorders.first?.id, a.id)
+        XCTAssertEqual(rec.reorders.first?.target, .after(c.id),
+                       "落点必须精确为 .after(C) — before/after 颠倒或差一位会在这里暴露")
     }
 
     func testDraggedFolderNeverArms() {
