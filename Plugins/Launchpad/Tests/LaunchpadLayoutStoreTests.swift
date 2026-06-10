@@ -44,6 +44,30 @@ final class LaunchpadLayoutStoreTests: XCTestCase {
         XCTAssertNil(store.layout, "version < currentVersion 应 fallback 到 nil")
     }
 
+    func testDuplicateAppAcrossRootAndFolderFallsBackToNil() throws {
+        // 同一 app 同时在根层和夹里（损坏数据）：store 的 mutation 假设 app 只在一个位置，
+        // 加载即拒绝，回退字母序，避免后续操作把损坏状态写回。
+        let storage = FakePluginStorage()
+        let corrupt = LaunchpadLayout(nodes: [
+            .app(LaunchpadAppRef(id: a, name: "Alpha")),
+            .folder(id: "F1", name: "夹", children: [LaunchpadAppRef(id: a, name: "Alpha")]),
+        ])
+        storage.values["customLayout"] = try JSONEncoder().encode(corrupt)
+        let store = LaunchpadLayoutStore(storage: storage)
+        XCTAssertNil(store.layout, "语义无效（app 重复出现）应 fallback 到 nil")
+    }
+
+    func testDuplicateRootIDFallsBackToNil() throws {
+        let storage = FakePluginStorage()
+        let corrupt = LaunchpadLayout(nodes: [
+            .app(LaunchpadAppRef(id: a, name: "Alpha")),
+            .app(LaunchpadAppRef(id: a, name: "Alpha")),
+        ])
+        storage.values["customLayout"] = try JSONEncoder().encode(corrupt)
+        let store = LaunchpadLayoutStore(storage: storage)
+        XCTAssertNil(store.layout, "根层重复 id 应 fallback 到 nil")
+    }
+
     func testFutureVersionFallsBackToNilWithoutRewriting() throws {
         // 降级安装不能加载更新版本的布局（本版 Codable 会丢掉未来字段，下次保存等于毁数据），
         // 且仅仅加载不能动盘上的数据。

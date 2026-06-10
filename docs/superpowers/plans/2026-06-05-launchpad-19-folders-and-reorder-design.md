@@ -162,7 +162,7 @@ enum LaunchpadDisplayCell: Identifiable {
 
 ### 5.2 reconcile：派生显示顺序（纯函数，可单测，无 UI）
 
-```
+```text
 reconcile(apps: [LaunchpadAppItem], layout: LaunchpadLayout?, hidden: Set<String>)
     -> [LaunchpadDisplayCell]
 ```
@@ -200,7 +200,7 @@ reconcile(apps: [LaunchpadAppItem], layout: LaunchpadLayout?, hidden: Set<String
 
 **刷新链路（评审揪出的最严重事实错误的修正）**：overlay 网格不吃 `onStateChange`。布局变更让网格重渲染的机制是：
 
-```
+```text
 用户拖拽/建夹/恢复  →  store.mutating 方法（改 layout 树 + persist）
                     →  store 是 @ObservedObject，@Published layout 变化
                     →  GridView 重新求值 → reconcile → 重渲染

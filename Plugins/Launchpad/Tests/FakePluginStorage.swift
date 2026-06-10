@@ -33,6 +33,7 @@ final class FakePluginStorage: PluginStorage {
         if values[key] == nil, let legacy = values[legacyKey] {
             values[key] = legacy
             values[legacyKey] = nil
+            writeCount += 1     // a migration mutates persisted state — no-write assertions must see it
         }
     }
 }

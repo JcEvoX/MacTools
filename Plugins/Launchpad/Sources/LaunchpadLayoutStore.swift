@@ -311,7 +311,28 @@ final class LaunchpadLayoutStore: ObservableObject {
             )
             return nil
         }
+        guard isSemanticallyValid(decoded) else {
+            logger.warning("Custom layout failed semantic validation; falling back to alphabetical order.")
+            return nil
+        }
         return decoded
+    }
+
+    /// Reject persisted blobs that decode but break the store's structural assumptions: every
+    /// mutation looks nodes up by `rootID` and assumes an app lives in exactly one place, so a
+    /// duplicate root id or an app referenced twice would make moves target the wrong node and
+    /// then persist that corruption back. (Empty folders stay valid — the reconcile tolerance
+    /// window keeps them around deliberately.)
+    private static func isSemanticallyValid(_ layout: LaunchpadLayout) -> Bool {
+        var rootIDs = Set<String>()
+        var appIDs = Set<String>()
+        for node in layout.nodes {
+            guard rootIDs.insert(node.rootID).inserted else { return false }
+            for id in node.appIDs {
+                guard appIDs.insert(id).inserted else { return false }
+            }
+        }
+        return true
     }
 
     // MARK: - Mutation

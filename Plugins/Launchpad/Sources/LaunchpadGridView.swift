@@ -505,7 +505,8 @@ struct LaunchpadGridView: View {
         // Rubber-band so you can't pull past the first / last page.
         if (cur == 0 && t > 0) || (cur == last && t < 0) { t *= 0.35 }
         t = min(max(t, -pageW), pageW)
-        guard ended else { pageDragTranslation = t; return }
+        pageDragTranslation = t        // ended too: snap must read the RELEASE translation, not the previous frame's
+        guard ended else { return }
         snapToNearestPage(width: pageW)
     }
 

@@ -43,7 +43,7 @@
 
 ## 2. 文件结构
 
-```
+```text
 Plugins/Launchpad/
   plugin.json
   project.yml                      # 仅当需要额外 framework/资源时；v1 大概率不需要
