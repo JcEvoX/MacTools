@@ -267,6 +267,7 @@ struct LaunchpadGridView: View {
             onPageDrag: handlePageDrag,
             onPageScroll: handlePageScroll,
             onDismiss: onDismiss,
+            allowsCustomOrderActions: isLayoutEditable,   // search = read-only projection
             coordinator: dragCoordinator,
             isCurrentRootPage: page == currentPage
         )
@@ -595,6 +596,12 @@ struct LaunchpadGridView: View {
         let rows = max(1, (folder.items.count + cols - 1) / cols)
         let gridW = CGFloat(cols) * metrics.cellWidth + CGFloat(cols - 1) * metrics.columnSpacing
         let gridH = CGFloat(rows) * metrics.cellHeight + CGFloat(max(0, rows - 1)) * metrics.rowSpacing
+        // Cap the panel so a big folder can't outgrow the launcher (a compact panel is ~560-680pt
+        // tall; fullscreen leaves ~700+ after chrome). Past the cap the grid scrolls; the grid's
+        // scrollWheel bubbles up (folder grids don't page) so two-finger scrolling just works.
+        let maxVisibleRows = isCompact ? 3 : 4
+        let visibleRows = min(rows, maxVisibleRows)
+        let visibleH = CGFloat(visibleRows) * metrics.cellHeight + CGFloat(max(0, visibleRows - 1)) * metrics.rowSpacing
 
         return VStack(spacing: 18) {
             Text(folder.name)
@@ -602,46 +609,16 @@ struct LaunchpadGridView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 
-            // Same direct-tracking grid as the launcher itself → identical drag feel inside and
-            // outside a folder. Merge is disabled (no nested folders); reorder maps to the folder's
-            // child order; dragging a cell clearly OUT of the grid pulls the app out of the folder.
-            LaunchpadDragGrid(
-                items: folder.items.map { .app($0) },
-                columns: cols,
-                selectedID: nil,
-                isCompact: isCompact,
-                metrics: metrics,
-                iconProvider: { catalog.icon(for: $0) },
-                onActivate: { cell in
-                    if case .app(let appItem) = cell {
-                        openFolderID = nil          // clear up front, in case launch doesn't tear down
-                        onActivate(appItem)
-                    }
-                },
-                onReveal: onReveal,
-                onCopyPath: copyPath,
-                onHide: hideApp,
-                onMoveToFront: { _ in },
-                onMoveToEnd: { _ in },
-                onSelect: { _ in },
-                onReorder: { id, target in
-                    switch target {
-                    case .before(let t): layoutStore.moveChildWithinFolder(folder.id, child: id, before: t)
-                    case .after(let t):  layoutStore.moveChildWithinFolder(folder.id, child: id, after: t)
-                    }
-                },
-                onMakeFolder: { _, _ in },
-                onAddToFolder: { _, _ in },
-                onDragBegan: {},
-                onPageSwipe: { _ in },
-                onPageDrag: { _, _, _ in },
-                onPageScroll: { _, _ in },
-                onDismiss: {},
-                allowFolderCreation: false,
-                coordinator: dragCoordinator,
-                folderContextID: folder.id
-            )
-            .frame(width: gridW, height: gridH)
+            if rows > maxVisibleRows {
+                ScrollView(.vertical) {
+                    folderGrid(folder, cols: cols, metrics: metrics)
+                        .frame(width: gridW, height: gridH)
+                }
+                .frame(width: gridW, height: visibleH)
+            } else {
+                folderGrid(folder, cols: cols, metrics: metrics)
+                    .frame(width: gridW, height: gridH)
+            }
         }
         .padding(30)
         .frame(maxWidth: 760)
@@ -652,6 +629,58 @@ struct LaunchpadGridView: View {
         )
         .shadow(color: .black.opacity(0.4), radius: 36, y: 16)
         .padding(40)
+    }
+
+    /// Same direct-tracking grid as the launcher itself → identical drag feel inside and
+    /// outside a folder. Merge is disabled (no nested folders); reorder maps to the folder's
+    /// child order; dragging a cell clearly OUT of the grid pulls the app out of the folder.
+    private func folderGrid(
+        _ folder: (id: String, name: String, items: [LaunchpadAppItem]),
+        cols: Int,
+        metrics: LaunchpadGridMetrics
+    ) -> some View {
+        LaunchpadDragGrid(
+            items: folder.items.map { .app($0) },
+            columns: cols,
+            selectedID: nil,
+            isCompact: isCompact,
+            metrics: metrics,
+            iconProvider: { catalog.icon(for: $0) },
+            onActivate: { cell in
+                if case .app(let appItem) = cell {
+                    openFolderID = nil          // clear up front, in case launch doesn't tear down
+                    onActivate(appItem)
+                }
+            },
+            onReveal: onReveal,
+            onCopyPath: copyPath,
+            onHide: hideApp,
+            onMoveToFront: { app in
+                guard let first = folder.items.first, first.id != app.id else { return }
+                layoutStore.moveChildWithinFolder(folder.id, child: app.id, before: first.id)
+            },
+            onMoveToEnd: { app in
+                guard let last = folder.items.last, last.id != app.id else { return }
+                layoutStore.moveChildWithinFolder(folder.id, child: app.id, after: last.id)
+            },
+            onSelect: { _ in },
+            onReorder: { id, target in
+                switch target {
+                case .before(let t): layoutStore.moveChildWithinFolder(folder.id, child: id, before: t)
+                case .after(let t):  layoutStore.moveChildWithinFolder(folder.id, child: id, after: t)
+                }
+            },
+            onMakeFolder: { _, _ in },
+            onAddToFolder: { _, _ in },
+            onDragBegan: {},
+            onPageSwipe: { _ in },
+            onPageDrag: { _, _, _ in },
+            onPageScroll: { _, _ in },
+            onDismiss: {},
+            allowFolderCreation: false,
+            coordinator: dragCoordinator,
+            folderContextID: folder.id
+        )
     }
 }
 

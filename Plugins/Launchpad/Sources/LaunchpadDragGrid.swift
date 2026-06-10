@@ -72,6 +72,10 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var onPageScroll: (CGFloat, CGFloat) -> Void       // trackpad two-finger: raw deltaX, pageWidth — accumulated SHARED in SwiftUI (per-page containers must NOT each accumulate, or the offset oscillates)
     var onDismiss: () -> Void
     var allowFolderCreation: Bool = true               // false inside an open folder (no nested folders → never arm a merge)
+    /// False while searching: the search list is a read-only flat projection, so a reorder drag
+    /// would show make-way/merge cues whose drop is then discarded — don't start one, and drop
+    /// the 移到最前/移到最后 menu items (their handlers no-op outside the layout state).
+    var allowsCustomOrderActions: Bool = true
     var coordinator: LaunchpadDragCoordinator? = nil   // shared across root pages + the open folder; owns the finger-bound folder-exit handoff
     var folderContextID: String? = nil                 // non-nil only on the open folder's grid → its id, so an ejected app knows its source folder
     var isCurrentRootPage: Bool = false                // true on the visible root page → registers with the coordinator as the eject drop target
@@ -273,9 +277,11 @@ final class LaunchpadGridContainerView: NSView {
         add("在 Finder 中显示", #selector(menuReveal(_:)))
         add("拷贝路径", #selector(menuCopy(_:)))
         menu.addItem(.separator())
-        add("移到最前", #selector(menuMoveFront(_:)))
-        add("移到最后", #selector(menuMoveEnd(_:)))
-        menu.addItem(.separator())
+        if grid?.allowsCustomOrderActions != false {
+            add("移到最前", #selector(menuMoveFront(_:)))
+            add("移到最后", #selector(menuMoveEnd(_:)))
+            menu.addItem(.separator())
+        }
         add("隐藏", #selector(menuHide(_:)))
         return menu
     }
@@ -685,6 +691,9 @@ final class LaunchpadGridContainerView: NSView {
     /// so swiping to page can never grab an app. Cells don't override `scrollWheel`, so a
     /// swipe over an icon bubbles up to here.
     override func scrollWheel(with event: NSEvent) {
+        // The open-folder grid doesn't page — let the event bubble to the panel's enclosing
+        // ScrollView so a folder taller than the visible cap can be two-finger scrolled.
+        if grid?.folderContextID != nil { super.scrollWheel(with: event); return }
         if event.hasPreciseScrollingDeltas {
             // Trackpad two-finger swipe: follow-the-finger paging — the SAME live-track + snap
             // as the empty-space mouse drag, so the two gestures feel identical.
@@ -985,6 +994,9 @@ final class LaunchpadGridCellView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard let start = mouseDownPoint else { return }
         if !didDrag {
+            // Searching: read-only projection — never lift, so no make-way/merge cues whose
+            // drop would be silently discarded. The click (mouseUp) still activates.
+            guard container?.callbacks?.allowsCustomOrderActions != false else { return }
             let point = convert(event.locationInWindow, from: nil)
             guard hypot(point.x - start.x, point.y - start.y) > dragThreshold else { return }
             didDrag = true
@@ -1003,6 +1015,9 @@ final class LaunchpadGridCellView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        // Mid-drag right-click would open a menu whose tracking loop swallows the drag's mouseUp,
+        // wedging the lifted cell and the deferred grid apply. Ignore it; finish the drag first.
+        guard container?.hasActiveDrag != true else { return }
         container?.select(self)   // highlight which app the menu targets (user feedback)
         guard let menu = container?.contextMenu(for: self) else { return }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
