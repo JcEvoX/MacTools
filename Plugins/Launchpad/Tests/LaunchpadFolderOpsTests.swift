@@ -153,12 +153,20 @@ final class LaunchpadFolderOpsTests: XCTestCase {
         XCTAssertEqual(rootIDs(store), ["F1", d, b])
     }
 
-    func testMoveOutOfFolderTargetIsDissolvedFolderFallsBackToTail() {
+    func testMoveOutOfFolderTargetOnDissolvedFolderFollowsSurvivorAfter() {
         let store = materializedStore()
         store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
-        store.moveOutOfFolder("F1", app: b, to: .after("F1"))         // F1 dissolves → target gone → tail
+        store.moveOutOfFolder("F1", app: b, to: .after("F1"))         // 落在夹自身 tile 右侧，夹随即解散
         XCTAssertNil(folderChildren(store, "F1"))
-        XCTAssertEqual(rootIDs(store), [a, c, d, b])
+        XCTAssertEqual(rootIDs(store), [a, b, c, d], "目标跟随占据原槽的幸存者，而不是落到末尾")
+    }
+
+    func testMoveOutOfFolderTargetOnDissolvedFolderFollowsSurvivorBefore() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "F", id: "F1")  // [F1, c, d]; F1=[a,b]
+        store.moveOutOfFolder("F1", app: b, to: .before("F1"))        // 落在夹自身 tile 左侧
+        XCTAssertNil(folderChildren(store, "F1"))
+        XCTAssertEqual(rootIDs(store), [b, a, c, d], "幸存者 a 占原槽，b 落在它之前")
     }
 
     // MARK: - eject INTO another app/folder (carry-merge during a folder drag-out)

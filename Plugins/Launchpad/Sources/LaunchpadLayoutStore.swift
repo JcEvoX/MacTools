@@ -136,9 +136,9 @@ final class LaunchpadLayoutStore: ObservableObject {
 
     /// Move an app OUT of a folder and drop it at a chosen ROOT position (iOS finger-bound exit) —
     /// not the tail. Auto-dissolve still applies (a single remaining child lifts the survivor into
-    /// the folder's slot). `target == nil`, or a target whose id no longer resolves (e.g. it WAS the
-    /// folder that just dissolved), falls back to the tail. The target is resolved against the
-    /// post-dissolve node list, so a survivor target still works.
+    /// the folder's slot); a target that referenced the dissolving folder's own tile follows the
+    /// survivor that takes its slot. `target == nil`, or a target whose id no longer resolves,
+    /// falls back to the tail (the app is never lost).
     func moveOutOfFolder(_ folderID: String, app appID: String, to target: LaunchpadDropTarget?) {
         guard let current = layout else { return }
         var nodes = current.nodes
@@ -147,12 +147,23 @@ final class LaunchpadLayoutStore: ObservableObject {
               let childIndex = children.firstIndex(where: { $0.id == appID })
         else { return }
         let removed = children.remove(at: childIndex)
+        var resolvedTarget = target
         if children.count <= 1 {
+            // Dropping "beside the folder" from a 2-app folder: the folder id vanishes with the
+            // dissolve, so redirect the target to the survivor occupying its slot — otherwise the
+            // stale id would send the app to the tail instead of where the user dropped it.
+            if let survivor = children.first {
+                switch target {
+                case .before(let id) where id == folderID: resolvedTarget = .before(survivor.id)
+                case .after(let id) where id == folderID: resolvedTarget = .after(survivor.id)
+                default: break
+                }
+            }
             nodes.replaceSubrange(folderIndex...folderIndex, with: children.map(LaunchpadLayoutNode.app))
         } else {
             nodes[folderIndex] = .folder(id: fid, name: fname, children: children)
         }
-        insert(.app(removed), relativeTo: target, into: &nodes)
+        insert(.app(removed), relativeTo: resolvedTarget, into: &nodes)
         setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
     }
 
