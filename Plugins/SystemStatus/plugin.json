@@ -2,7 +2,17 @@
   "id": "system-status",
   "displayName": "系统状态",
   "summary": "实时查看系统状态",
-  "version": "1.0.5",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "系统状态",
+      "summary": "实时查看系统状态"
+    },
+    "en": {
+      "displayName": "System Status",
+      "summary": "View live system status."
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "SystemStatus.bundle",

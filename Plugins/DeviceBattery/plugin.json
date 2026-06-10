@@ -2,7 +2,17 @@
   "id": "device-battery",
   "displayName": "设备电量",
   "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "设备电量",
+      "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量"
+    },
+    "en": {
+      "displayName": "Device Battery",
+      "summary": "View battery levels for your Mac, Bluetooth accessories, and Rapoo mice."
+    }
+  },
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DeviceBattery.bundle",

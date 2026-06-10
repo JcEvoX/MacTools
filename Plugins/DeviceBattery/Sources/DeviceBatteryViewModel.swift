@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 final class DeviceBatteryViewModel: ObservableObject {
@@ -14,6 +15,7 @@ final class DeviceBatteryViewModel: ObservableObject {
 
     private let sampler: any DeviceBatterySampling
     private let rapooMonitor: any RapooBatteryMonitoring
+    private let localization: PluginLocalization
     private var samplingTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var systemItems: [DeviceBatteryItem] = []
@@ -27,18 +29,22 @@ final class DeviceBatteryViewModel: ObservableObject {
     var onSnapshotChange: (() -> Void)?
 
     convenience init() {
+        let localization = PluginLocalization(bundle: .main)
         self.init(
-            sampler: DeviceBatterySampler(),
-            rapooMonitor: RapooHIDBatteryMonitor()
+            sampler: DeviceBatterySampler(localization: localization),
+            rapooMonitor: RapooHIDBatteryMonitor(localization: localization),
+            localization: localization
         )
     }
 
     init(
         sampler: any DeviceBatterySampling,
-        rapooMonitor: any RapooBatteryMonitoring
+        rapooMonitor: any RapooBatteryMonitoring,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.sampler = sampler
         self.rapooMonitor = rapooMonitor
+        self.localization = localization
         rapooSnapshot = rapooMonitor.snapshot
     }
 
@@ -159,7 +165,7 @@ final class DeviceBatteryViewModel: ObservableObject {
             }
         }
 
-        if includeRapooDevices, let rapooItem = rapooSnapshot.batteryItem {
+        if includeRapooDevices, let rapooItem = rapooSnapshot.batteryItem(localization: localization) {
             items.append(rapooItem)
         }
 
@@ -189,7 +195,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         var orderedKeys: [String] = []
 
         for item in DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items) {
-            let key = "\(item.kind.title)-\(item.name.lowercased())-\(item.parentName ?? "")"
+            let key = "\(item.kind)-\(item.name.lowercased())-\(item.parentName ?? "")"
             if let existing = bestByKey[key] {
                 bestByKey[key] = preferredItem(existing, item)
             } else {

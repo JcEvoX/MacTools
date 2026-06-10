@@ -240,13 +240,13 @@ public enum ShortcutValidationError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .missingModifier:
-            return "快捷键至少需要一个修饰键。"
+            return PluginKitLocalization.shortcutValidationMissingModifier
         case .modifierOnly:
-            return "快捷键必须包含一个非修饰键。"
+            return PluginKitLocalization.shortcutValidationModifierOnly
         case .requiredShortcut:
-            return "该快捷键不能为空。"
+            return PluginKitLocalization.shortcutValidationRequiredShortcut
         case let .duplicate(ownerDescription):
-            return "该快捷键已被“\(ownerDescription)”占用。"
+            return PluginKitLocalization.shortcutValidationDuplicate(ownerDescription: ownerDescription)
         }
     }
 }

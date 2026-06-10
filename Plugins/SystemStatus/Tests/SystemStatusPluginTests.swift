@@ -56,7 +56,11 @@ final class SystemStatusPluginTests: XCTestCase {
         let viewModel = SystemStatusViewModel(sampler: sampler)
 
         viewModel.start()
-        try await Task.sleep(for: .milliseconds(40))
+        try await waitUntilSystemStatusSnapshotReady {
+            viewModel.snapshot.cpu.isCollecting == false
+                && viewModel.snapshot.disk.usedBytes != nil
+                && !viewModel.snapshot.topProcesses.isEmpty
+        }
         viewModel.stop()
 
         let cachedSnapshot = viewModel.snapshot
@@ -166,4 +170,24 @@ private actor StubSystemStatusSampler: SystemStatusSampling {
         publicIPCallCount += 1
         return "203.0.113.1"
     }
+}
+
+private func waitUntilSystemStatusSnapshotReady(
+    timeout: TimeInterval = 2,
+    pollIntervalNanoseconds: UInt64 = 10_000_000,
+    file: StaticString = #filePath,
+    line: UInt = #line,
+    condition: @escaping @MainActor () -> Bool
+) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+
+    while Date() < deadline {
+        if await condition() {
+            return
+        }
+
+        try await Task.sleep(nanoseconds: pollIntervalNanoseconds)
+    }
+
+    XCTFail("Condition was not satisfied before timeout", file: file, line: line)
 }

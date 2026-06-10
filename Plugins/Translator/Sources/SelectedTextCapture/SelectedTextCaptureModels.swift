@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MacToolsPluginKit
 
 enum SelectedTextCaptureStrategyID: String, Equatable, Sendable {
     case accessibility
@@ -32,13 +33,19 @@ struct SelectedTextCaptureResult: Equatable, Sendable {
     let sourceApplicationBundleID: String?
     let failureReason: String?
 
-    static let missing = SelectedTextCaptureResult(
-        text: nil,
-        strategyID: nil,
-        isEditable: false,
-        sourceApplicationBundleID: nil,
-        failureReason: "未找到选中文本"
-    )
+    static let missing = missing()
+
+    static func missing(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> SelectedTextCaptureResult {
+        SelectedTextCaptureResult(
+            text: nil,
+            strategyID: nil,
+            isEditable: false,
+            sourceApplicationBundleID: nil,
+            failureReason: localization.string("capture.error.missingSelection", defaultValue: "未找到选中文本")
+        )
+    }
 }
 
 @MainActor

@@ -2,7 +2,17 @@
   "id": "lock-screen",
   "displayName": "锁定屏幕",
   "summary": "一键立即锁定屏幕，进入密码解锁界面",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "锁定屏幕",
+      "summary": "一键立即锁定屏幕，进入密码解锁界面"
+    },
+    "en": {
+      "displayName": "Lock Screen",
+      "summary": "Lock the screen immediately and require password unlock."
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",

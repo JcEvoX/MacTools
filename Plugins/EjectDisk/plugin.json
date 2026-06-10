@@ -2,7 +2,17 @@
   "id": "eject-disk",
   "displayName": "推出磁盘",
   "summary": "推出所有可移动磁盘",
-  "version": "1.0.5",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "推出磁盘",
+      "summary": "推出所有可移动磁盘"
+    },
+    "en": {
+      "displayName": "Eject Disks",
+      "summary": "Eject all removable disks."
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "EjectDisk.bundle",

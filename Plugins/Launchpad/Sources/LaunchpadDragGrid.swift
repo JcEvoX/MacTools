@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 /// Fixed cell geometry — mirrors the previous SwiftUI cell so the AppKit grid looks the
@@ -55,6 +56,7 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var isCompact: Bool
     var interactionEnabled: Bool = true                // false while a folder overlay is up
     var metrics = LaunchpadGridMetrics()
+    var localization = PluginLocalization(bundle: .main)   // context-menu titles
     var iconProvider: (LaunchpadAppItem) -> NSImage
     var onActivate: (LaunchpadDisplayCell) -> Void     // app → launch, folder → open
     var onReveal: (LaunchpadAppItem) -> Void
@@ -264,7 +266,8 @@ final class LaunchpadGridContainerView: NSView {
     /// App context menu. Folders carry a different menu (rename / dissolve, 19b-4); returning
     /// `nil` suppresses the menu on a folder cell for now.
     func contextMenu(for cell: LaunchpadGridCellView) -> NSMenu? {
-        guard case .app(let app) = cell.cell else { return nil }
+        guard case .app(let app) = cell.cell, let grid else { return nil }
+        let loc = grid.localization
         let menu = NSMenu()
         func add(_ title: String, _ action: Selector) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
@@ -272,17 +275,17 @@ final class LaunchpadGridContainerView: NSView {
             item.representedObject = app
             menu.addItem(item)
         }
-        add("打开", #selector(menuOpen(_:)))
+        add(loc.string("grid.menu.open", defaultValue: "打开"), #selector(menuOpen(_:)))
         menu.addItem(.separator())
-        add("在 Finder 中显示", #selector(menuReveal(_:)))
-        add("拷贝路径", #selector(menuCopy(_:)))
+        add(loc.string("grid.menu.revealInFinder", defaultValue: "在 Finder 中显示"), #selector(menuReveal(_:)))
+        add(loc.string("grid.menu.copyPath", defaultValue: "拷贝路径"), #selector(menuCopy(_:)))
         menu.addItem(.separator())
-        if grid?.allowsCustomOrderActions != false {
-            add("移到最前", #selector(menuMoveFront(_:)))
-            add("移到最后", #selector(menuMoveEnd(_:)))
+        if grid.allowsCustomOrderActions {
+            add(loc.string("grid.menu.moveToFront", defaultValue: "移到最前"), #selector(menuMoveFront(_:)))
+            add(loc.string("grid.menu.moveToEnd", defaultValue: "移到最后"), #selector(menuMoveEnd(_:)))
             menu.addItem(.separator())
         }
-        add("隐藏", #selector(menuHide(_:)))
+        add(loc.string("grid.menu.hide", defaultValue: "隐藏"), #selector(menuHide(_:)))
         return menu
     }
 

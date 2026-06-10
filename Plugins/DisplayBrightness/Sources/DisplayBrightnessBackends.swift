@@ -367,7 +367,7 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
         )
 
         guard result == .success else {
-            throw DisplayBrightnessControllerError.failed(message: "软件亮度调节失败")
+            throw DisplayBrightnessControllerError.softwareBrightnessFailed
         }
 
         currentBrightness = clampedValue
@@ -603,7 +603,7 @@ final class DisplayServicesBrightnessBridge: @unchecked Sendable {
 
         var value: Float = 0
         guard getBrightness(displayID, &value) == 0 else {
-            throw DisplayBrightnessControllerError.brightnessUnavailable(displayName: "显示器")
+            throw DisplayBrightnessControllerError.genericBrightnessUnavailable
         }
 
         return Double(max(0, min(value, 1)))
@@ -615,7 +615,7 @@ final class DisplayServicesBrightnessBridge: @unchecked Sendable {
         }
 
         guard setBrightness(displayID, Float(max(0, min(value, 1)))) == 0 else {
-            throw DisplayBrightnessControllerError.failed(message: "原生亮度写入失败")
+            throw DisplayBrightnessControllerError.nativeBrightnessWriteFailed
         }
     }
 

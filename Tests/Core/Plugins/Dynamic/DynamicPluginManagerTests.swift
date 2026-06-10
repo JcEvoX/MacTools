@@ -46,7 +46,10 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .disabled)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.detailText,
-            "已移出界面，重启后彻底释放已加载代码。"
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterRemoval",
+                defaultValue: "已移出界面，重启后彻底释放已加载代码。"
+            )
         )
     }
 
@@ -94,7 +97,10 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .restartRequired)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.detailText,
-            "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterUpdate",
+                defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            )
         )
     }
 
@@ -259,7 +265,14 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertTrue(manager.installedCapabilitiesByID().isEmpty)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.state,
-            .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。")
+            .incompatible(
+                AppL10n.pluginsFormat(
+                    "plugin.error.store.installedSDKIncompatibleFormat",
+                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                    1,
+                    PluginPackageManifestLoader.supportedPluginKitVersion
+                )
+            )
         )
     }
 

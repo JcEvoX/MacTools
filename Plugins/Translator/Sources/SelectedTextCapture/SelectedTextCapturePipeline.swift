@@ -1,15 +1,27 @@
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 struct SelectedTextCapturePipeline {
     let strategies: [any SelectedTextCapturing]
+    private let localization: PluginLocalization
 
-    static func live() -> SelectedTextCapturePipeline {
+    init(
+        strategies: [any SelectedTextCapturing],
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
+        self.strategies = strategies
+        self.localization = localization
+    }
+
+    static func live(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> SelectedTextCapturePipeline {
         SelectedTextCapturePipeline(strategies: [
-            AccessibilitySelectedTextCapture(),
-            BrowserAppleScriptSelectedTextCapture(),
-            SimulatedCopySelectedTextCapture(),
-        ])
+            AccessibilitySelectedTextCapture(localization: localization),
+            BrowserAppleScriptSelectedTextCapture(localization: localization),
+            SimulatedCopySelectedTextCapture(localization: localization),
+        ], localization: localization)
     }
 
     func capture(context: SelectedTextCaptureContext) async -> SelectedTextCaptureResult {
@@ -39,12 +51,13 @@ struct SelectedTextCapturePipeline {
         context: SelectedTextCaptureContext
     ) async -> SelectedTextCaptureResult {
         var permissionRequiredResult: SelectedTextCaptureResult?
+        let permissionRequiredMessage = TranslatorPanelError.permissionRequired.message(localization: localization)
 
         for strategy in strategies {
             let result = await strategy.capture(context: context)
             guard let success = successfulResult(from: result) else {
                 if permissionRequiredResult == nil,
-                   result.failureReason == TranslatorPanelError.permissionRequired.message {
+                   result.failureReason == permissionRequiredMessage {
                     permissionRequiredResult = result
                 }
 
@@ -58,7 +71,7 @@ struct SelectedTextCapturePipeline {
             return permissionRequiredResult
         }
 
-        return .missing
+        return .missing(localization: localization)
     }
 
     private func successfulResult(from result: SelectedTextCaptureResult) -> SelectedTextCaptureResult? {

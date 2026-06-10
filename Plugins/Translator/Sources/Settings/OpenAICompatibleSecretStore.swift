@@ -1,17 +1,43 @@
 import Foundation
 import LocalAuthentication
+import MacToolsPluginKit
 import Security
 
 protocol TranslatorSecretStoring: Sendable {
     func containsAPIKey() throws -> Bool
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool
     func loadAPIKey() throws -> String?
+    func loadAPIKey(forProfileID profileID: String) throws -> String?
     func saveAPIKey(_ apiKey: String) throws
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws
     func deleteAPIKey() throws
+    func deleteAPIKey(forProfileID profileID: String) throws
+}
+
+extension TranslatorSecretStoring {
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool {
+        try containsAPIKey()
+    }
+
+    func loadAPIKey(forProfileID profileID: String) throws -> String? {
+        try loadAPIKey()
+    }
+
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        try saveAPIKey(apiKey)
+    }
+
+    func deleteAPIKey(forProfileID profileID: String) throws {
+        try deleteAPIKey()
+    }
 }
 
 struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
     static let defaultService = "cc.ggbond.mactools.translator"
     static let defaultAccount = "translator.openai.api-key"
+    static func account(profileID: String) -> String {
+        "translator.provider.\(profileID).api-key"
+    }
 
     let service: String
     let account: String
@@ -25,7 +51,40 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
     }
 
     func containsAPIKey() throws -> Bool {
+        try containsAPIKey(account: account)
+    }
+
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool {
+        try containsAPIKey(account: Self.account(profileID: profileID))
+    }
+
+    func loadAPIKey() throws -> String? {
+        try loadAPIKey(account: account)
+    }
+
+    func loadAPIKey(forProfileID profileID: String) throws -> String? {
+        try loadAPIKey(account: Self.account(profileID: profileID))
+    }
+
+    func saveAPIKey(_ apiKey: String) throws {
+        try saveAPIKey(apiKey, account: account)
+    }
+
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        try saveAPIKey(apiKey, account: Self.account(profileID: profileID))
+    }
+
+    func deleteAPIKey() throws {
+        try deleteAPIKey(account: account)
+    }
+
+    func deleteAPIKey(forProfileID profileID: String) throws {
+        try deleteAPIKey(account: Self.account(profileID: profileID))
+    }
+
+    private func containsAPIKey(account: String) throws -> Bool {
         var query = baseQuery
+        query[kSecAttrAccount as String] = account
         let context = LAContext()
         context.interactionNotAllowed = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -49,8 +108,9 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
         }
     }
 
-    func loadAPIKey() throws -> String? {
+    private func loadAPIKey(account: String) throws -> String? {
         var query = baseQuery
+        query[kSecAttrAccount as String] = account
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -74,16 +134,17 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
         }
     }
 
-    func saveAPIKey(_ apiKey: String) throws {
+    private func saveAPIKey(_ apiKey: String, account: String) throws {
         let trimmedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedAPIKey.isEmpty else {
-            try deleteAPIKey()
+            try deleteAPIKey(account: account)
             return
         }
 
         let data = Data(trimmedAPIKey.utf8)
         var attributes = baseQuery
+        attributes[kSecAttrAccount as String] = account
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
@@ -97,7 +158,9 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
             updateAttributes[kSecValueData as String] = data
             updateAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-            let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttributes as CFDictionary)
+            var updateQuery = baseQuery
+            updateQuery[kSecAttrAccount as String] = account
+            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
             guard updateStatus == errSecSuccess else {
                 throw OpenAICompatibleSecretStoreError.security(updateStatus)
             }
@@ -106,8 +169,10 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
         }
     }
 
-    func deleteAPIKey() throws {
-        let status = SecItemDelete(baseQuery as CFDictionary)
+    private func deleteAPIKey(account: String) throws {
+        var query = baseQuery
+        query[kSecAttrAccount as String] = account
+        let status = SecItemDelete(query as CFDictionary)
 
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw OpenAICompatibleSecretStoreError.security(status)
@@ -118,7 +183,6 @@ struct OpenAICompatibleSecretStore: TranslatorSecretStoring {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
         ]
     }
 }
@@ -130,11 +194,15 @@ enum OpenAICompatibleSecretStoreError: Error, Equatable, Sendable {
 
 extension OpenAICompatibleSecretStoreError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .unexpectedItemData:
-            return "API Key 数据无效。"
+            return localization.string("secretStore.error.unexpectedItemData", defaultValue: "API Key 数据无效。")
         case .security:
-            return "无法访问钥匙串。"
+            return localization.string("secretStore.error.security", defaultValue: "无法访问钥匙串。")
         }
     }
 }

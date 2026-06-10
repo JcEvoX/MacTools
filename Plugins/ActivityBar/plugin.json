@@ -2,7 +2,17 @@
   "id": "activity-bar",
   "displayName": "活动统计",
   "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-  "version": "1.0.6",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "活动统计",
+      "summary": "统计输入、前台应用使用时长和 AI 编程活动"
+    },
+    "en": {
+      "displayName": "Activity Stats",
+      "summary": "Track input, foreground app usage time, and AI coding activity."
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ActivityBar.bundle",

@@ -31,6 +31,7 @@
 - 新增插件放在 `Plugins/<PluginName>/`，至少包含 `plugin.json`、`Sources/` 和 `Bundle/`。
 - 普通插件只需要在目录内定义 `plugin.json`、源码和 bundle 入口；`make generate` 会扫描 `Plugins/*/plugin.json` 并生成本地 `Configs/GeneratedPlugins.yml`，不要手改生成文件。
 - 新增和更新插件的命令流程见 `docs/plugins/local-native-plugins.md` 的 Development Steps。
+- 文档保持简短、聚焦任务。用户可见行为变化应同步更新 `README.md` 或 `docs/` 下的相关文档；插件包、catalog 或发布流程变化应更新 `docs/plugins/`。
 - 插件实现 `MacToolsPlugin`；菜单栏主面板实现 `PluginPrimaryPanel`，组件面板实现 `PluginComponentPanel`。
 - `plugin.json.id` 必须稳定、可读，并与运行时 `PluginMetadata.id` 完全一致；每个插件包只返回一个插件实例。
 - 插件展示状态通过 `PluginPanelState`、`PluginPanelDetail`、`PluginPanelControl` 等模型表达，不绕过现有面板框架。
@@ -39,6 +40,8 @@
 - 自定义插件设置视图必须复用 `MacToolsPluginKit.PluginSettingsTheme` 和 `.pluginSettingsCardBackground(...)`，不要复制插件私有 settings style，也不要让插件依赖 `Sources/App/SettingsStyle.swift`。
 - 插件状态变化后调用 `onStateChange?()`；耗时扫描、文件系统和系统调用不要长时间阻塞主线程。
 - 用户可见文案以中文为主，保持简洁、清楚、接近 macOS 原生表达。
+- 用户可见文案使用 `.xcstrings` 本地化。App/Core 文案放在 `Sources/Resources/Localization`，PluginKit 文案放在 `Sources/MacToolsPluginKit/Resources`，插件文案放在 `Plugins/<PluginName>/Resources`。插件 `plugin.json` 保留 `displayName`/`summary` 作为 fallback，并为插件市场和未加载插件展示提供 `localizedMetadata`。
+- 新插件应尽量提供多语言，至少覆盖面板文案、设置文案、权限说明和插件元数据。
 - 优先复用 Apple 原生框架；新增系统 framework、私有 include path、bundle 内辅助可执行文件时，在插件自己的 `project.yml` 中声明最小差异。需要单独签名的 bundle 资源可执行文件应写入 `plugin.json.package.signPaths`。
 
 ## 测试

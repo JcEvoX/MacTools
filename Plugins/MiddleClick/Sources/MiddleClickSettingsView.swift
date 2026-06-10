@@ -3,6 +3,7 @@ import MacToolsPluginKit
 
 struct MiddleClickSettingsView: View {
     let selectedCount: Int
+    let localization: PluginLocalization
     let onCountChange: (Int) -> Void
 
     private enum Icon {
@@ -12,7 +13,7 @@ struct MiddleClickSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            Label("设置", systemImage: "gearshape")
+            Label(localization.string("settings.section.title", defaultValue: "设置"), systemImage: "gearshape")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
                 .foregroundStyle(.secondary)
 
@@ -22,11 +23,14 @@ struct MiddleClickSettingsView: View {
                         Image(systemName: Icon.title)
                             .pluginSettingsRowIconStyle()
 
-                        Text("手指数量")
+                        Text(localization.string("settings.fingerCount.title", defaultValue: "手指数量"))
                             .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                     }
 
-                    Text("用指定数量的手指在触控板上轻点，将模拟鼠标中键点击")
+                    Text(localization.string(
+                        "settings.fingerCount.description",
+                        defaultValue: "用指定数量的手指在触控板上轻点，将模拟鼠标中键点击"
+                    ))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                 }
@@ -37,6 +41,7 @@ struct MiddleClickSettingsView: View {
                             count: count,
                             isSelected: selectedCount == count,
                             iconSystemName: Icon.fingerCount,
+                            localization: localization,
                             action: {
                                 onCountChange(count)
                             }
@@ -55,6 +60,7 @@ private struct FingerCountButton: View {
     let count: Int
     let isSelected: Bool
     let iconSystemName: String
+    let localization: PluginLocalization
     let action: () -> Void
 
     var body: some View {
@@ -63,7 +69,7 @@ private struct FingerCountButton: View {
                 Image(systemName: iconSystemName)
                     .pluginSettingsRowIconStyle(isSelected ? Color.accentColor : Color.primary)
 
-                Text("\(count)指")
+                Text(localization.format("settings.fingerCount.optionFormat", defaultValue: "%d指", count))
                     .font(PluginSettingsTheme.Typography.secondaryLabel.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
@@ -93,7 +99,10 @@ private struct FingerCountButton: View {
 }
 
 #Preview {
-    MiddleClickSettingsView(selectedCount: 3) { _ in }
+    MiddleClickSettingsView(
+        selectedCount: 3,
+        localization: PluginLocalization(bundle: .main)
+    ) { _ in }
         .frame(width: 400)
         .padding(24)
 }

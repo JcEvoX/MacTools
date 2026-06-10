@@ -1,12 +1,21 @@
 import ApplicationServices
 import Foundation
+import MacToolsPluginKit
 
 struct AccessibilitySelectedTextCapture: SelectedTextCapturing {
     let strategyID: SelectedTextCaptureStrategyID = .accessibility
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     func capture(context: SelectedTextCaptureContext) async -> SelectedTextCaptureResult {
         guard AccessibilityCheck.isTrusted() else {
-            return failure(context: context, reason: "需要辅助功能授权")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.permissionRequired", defaultValue: "需要辅助功能授权")
+            )
         }
 
         let systemWideElement = AXUIElementCreateSystemWide()
@@ -19,7 +28,10 @@ struct AccessibilitySelectedTextCapture: SelectedTextCapturing {
         guard focusedStatus == .success,
               let focusedElementValue = focusedValue,
               CFGetTypeID(focusedElementValue) == AXUIElementGetTypeID() else {
-            return failure(context: context, reason: "未找到选中文本")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.missingSelection", defaultValue: "未找到选中文本")
+            )
         }
 
         let focusedElement = focusedElementValue as! AXUIElement
@@ -46,7 +58,10 @@ struct AccessibilitySelectedTextCapture: SelectedTextCapturing {
             )
         }
 
-        return failure(context: context, reason: "未找到选中文本")
+        return failure(
+            context: context,
+            reason: localization.string("capture.error.missingSelection", defaultValue: "未找到选中文本")
+        )
     }
 
     private func failure(context: SelectedTextCaptureContext, reason: String) -> SelectedTextCaptureResult {

@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct LaunchControlScanResult: Sendable {
     let items: [LaunchControlItem]
@@ -15,15 +16,18 @@ struct LaunchControlScanner: @unchecked Sendable {
     private let fileManager: FileManager
     private let runner: any LaunchControlCommandRunning
     private let userIDProvider: @Sendable () -> uid_t
+    private let localization: PluginLocalization
 
     init(
         fileManager: FileManager = .default,
         runner: any LaunchControlCommandRunning = ProcessLaunchControlCommandRunner(),
-        userIDProvider: @escaping @Sendable () -> uid_t = { getuid() }
+        userIDProvider: @escaping @Sendable () -> uid_t = { getuid() },
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.fileManager = fileManager
         self.runner = runner
         self.userIDProvider = userIDProvider
+        self.localization = localization
     }
 
     func scan(progress: @escaping @Sendable (LaunchControlScanEvent) -> Void = { _ in }) -> LaunchControlScanResult {
@@ -31,13 +35,13 @@ struct LaunchControlScanner: @unchecked Sendable {
         let userDomain = "gui/\(userID)"
         let directories = launchDirectories(userDomain: userDomain)
         var warnings: [String] = []
-        progress(.message("读取 launchctl 禁用状态"))
+        progress(.message(localization.string("scanner.progress.disabledState", defaultValue: "读取 launchctl 禁用状态")))
         let disabledLabelsByDomain = loadDisabledLabels(domains: Set(directories.map(\.domain)))
         // Fetch the whole user GUI domain in ONE `launchctl list` instead of one
         // `launchctl print gui/<uid>/<label>` per item — the Status column is the
         // last exit status and the PID column the running pid, so the data is
         // equivalent. System-domain daemons are unaffected (handled per item below).
-        progress(.message("读取 launchctl 运行状态"))
+        progress(.message(localization.string("scanner.progress.runningState", defaultValue: "读取 launchctl 运行状态")))
         let userDomainStatuses = Self.parseLaunchctlList(
             (try? runner.runLaunchctl(arguments: ["list"]))?.combinedOutput ?? ""
         )
@@ -50,14 +54,18 @@ struct LaunchControlScanner: @unchecked Sendable {
                 includingPropertiesForKeys: [.isRegularFileKey],
                 options: [.skipsHiddenFiles]
             ) else {
-                progress(.message("跳过不可读取目录：\(directory.url.path)"))
+                progress(.message(localization.format(
+                    "scanner.progress.skipUnreadableDirectory",
+                    defaultValue: "跳过不可读取目录：%@",
+                    directory.url.path
+                )))
                 continue
             }
 
             for plistURL in plistURLs where plistURL.pathExtension == "plist" {
                 progress(.file(plistURL.path))
                 do {
-                    let summary = try Self.parsePlist(at: plistURL)
+                    let summary = try Self.parsePlist(at: plistURL, localization: localization)
                     let label = summary.label.isEmpty
                         ? plistURL.deletingPathExtension().lastPathComponent
                         : summary.label
@@ -110,7 +118,11 @@ struct LaunchControlScanner: @unchecked Sendable {
                     progress(.found(item))
                 } catch {
                     warnings.append("\(plistURL.path): \(error.localizedDescription)")
-                    progress(.message("解析失败：\(plistURL.lastPathComponent)"))
+                    progress(.message(localization.format(
+                        "scanner.progress.parseFailed",
+                        defaultValue: "解析失败：%@",
+                        plistURL.lastPathComponent
+                    )))
                 }
             }
         }
@@ -132,7 +144,10 @@ struct LaunchControlScanner: @unchecked Sendable {
         )
     }
 
-    static func parsePlist(at url: URL) throws -> LaunchControlPlistSummary {
+    static func parsePlist(
+        at url: URL,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) throws -> LaunchControlPlistSummary {
         let data = try Data(contentsOf: url)
         let propertyList = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         guard let dictionary = propertyList as? [String: Any] else {
@@ -149,7 +164,7 @@ struct LaunchControlScanner: @unchecked Sendable {
             label: label,
             programArguments: programArguments,
             runAtLoad: dictionary["RunAtLoad"] as? Bool ?? false,
-            keepAliveDescription: describe(dictionary["KeepAlive"]),
+            keepAliveDescription: describe(dictionary["KeepAlive"], localization: localization),
             startInterval: dictionary["StartInterval"] as? Int,
             startCalendarDescription: describeStartCalendar(dictionary["StartCalendarInterval"]),
             rawPlist: rawPlist
@@ -356,17 +371,22 @@ struct LaunchControlScanner: @unchecked Sendable {
         }
     }
 
-    private static func describe(_ value: Any?) -> String? {
+    private static func describe(
+        _ value: Any?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String? {
         switch value {
         case let bool as Bool:
-            return bool ? "持续保活" : nil
+            return bool ? localization.string("scanner.keepAlive.always", defaultValue: "持续保活") : nil
         case let dictionary as [String: Any]:
             let keys = dictionary.keys.sorted()
-            return keys.isEmpty ? "自定义条件" : keys.joined(separator: ", ")
+            return keys.isEmpty
+                ? localization.string("scanner.keepAlive.custom", defaultValue: "自定义条件")
+                : keys.joined(separator: ", ")
         case let string as String:
             return string
         case .some:
-            return "自定义条件"
+            return localization.string("scanner.keepAlive.custom", defaultValue: "自定义条件")
         case .none:
             return nil
         }

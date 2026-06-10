@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import SwiftUI
 
 /// The launcher content: a focused search field over a horizontally **paged** app grid
@@ -34,6 +35,7 @@ struct LaunchpadGridView: View {
     var isCompact: Bool = false
     /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
     var hiddenAppIDs: Set<String> = []
+    var localization: PluginLocalization = PluginLocalization(bundle: .main)
     var onActivate: (LaunchpadAppItem) -> Void
     var onReveal: (LaunchpadAppItem) -> Void
     var onHide: (LaunchpadAppItem) -> Void
@@ -181,6 +183,7 @@ struct LaunchpadGridView: View {
     private var searchBar: some View {
         LaunchpadSearchField(
             text: $searchText,
+            localization: localization,
             onMove: handleMove,
             onLaunch: activateSelection,
             onCancel: handleCancel
@@ -200,7 +203,11 @@ struct LaunchpadGridView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 42, weight: .regular))
                     .foregroundStyle(.secondary)
-                Text(searchText.isEmpty ? "未找到应用" : "无匹配应用")
+                Text(
+                    searchText.isEmpty
+                        ? localization.string("grid.empty.noApps", defaultValue: "未找到应用")
+                        : localization.string("grid.empty.noMatches", defaultValue: "无匹配应用")
+                )
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -251,6 +258,7 @@ struct LaunchpadGridView: View {
             selectedID: selectedID,
             isCompact: isCompact,
             interactionEnabled: openFolder == nil,    // exactly matches overlay visibility
+            localization: localization,
             iconProvider: { catalog.icon(for: $0) },
             onActivate: activateCell,
             onReveal: onReveal,
@@ -337,7 +345,7 @@ struct LaunchpadGridView: View {
         guard isLayoutEditable, targetID != draggedID else { return }
         layoutStore.captureVisibleOrder(rootApps(of: order))
         let folderID = UUID().uuidString
-        layoutStore.makeFolder(target: targetID, dragged: draggedID, name: "未命名", id: folderID)
+        layoutStore.makeFolder(target: targetID, dragged: draggedID, name: folderDefaultName, id: folderID)
         relocateSelection(to: folderID)
     }
 
@@ -363,7 +371,7 @@ struct LaunchpadGridView: View {
             relocateSelection(to: appID)
         case .makeFolder(let targetAppID):
             let newID = UUID().uuidString
-            layoutStore.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID, name: "未命名", id: newID)
+            layoutStore.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID, name: folderDefaultName, id: newID)
             relocateSelection(to: newID)
         case .addToFolder(let destFolderID):
             layoutStore.ejectIntoFolder(source: folderID, app: appID, destination: destFolderID)
@@ -398,6 +406,11 @@ struct LaunchpadGridView: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Name a freshly-stacked folder gets (persisted, so resolved in the user's language at creation).
+    private var folderDefaultName: String {
+        localization.string("folder.defaultName", defaultValue: "未命名")
+    }
+
     private func pageIndicator(current: Int) -> some View {
         HStack(spacing: 9) {
             ForEach(0..<pageCount, id: \.self) { page in
@@ -408,7 +421,9 @@ struct LaunchpadGridView: View {
                     // Mirror the cell fix: `.onTapGesture` is mouse-only, so VoiceOver /
                     // AX press needs an explicit action to actually change page.
                     .accessibilityAction { goToPage(page) }
-                    .accessibilityLabel("第 \(page + 1) 页")
+                    .accessibilityLabel(
+                        localization.format("grid.page.accessibilityLabel", defaultValue: "第 %d 页", page + 1)
+                    )
                     .accessibilityAddTraits(.isButton)
             }
         }
@@ -646,6 +661,7 @@ struct LaunchpadGridView: View {
             selectedID: nil,
             isCompact: isCompact,
             metrics: metrics,
+            localization: localization,
             iconProvider: { catalog.icon(for: $0) },
             onActivate: { cell in
                 if case .app(let appItem) = cell {

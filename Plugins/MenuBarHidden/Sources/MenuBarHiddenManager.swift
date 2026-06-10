@@ -33,6 +33,7 @@ final class MenuBarHiddenManager: ObservableObject {
     private let alwaysHiddenDivider: MenuBarHiddenDivider
     private let enumerator: MenuBarHiddenItemEnumerator
     private let events: MenuBarHiddenEventSynthesis
+    private let localization: PluginLocalization
     private let permissionProvider: () -> MenuBarHiddenPermissionsStatus
 
     private struct PendingClickRequest {
@@ -66,6 +67,7 @@ final class MenuBarHiddenManager: ObservableObject {
 
     init(
         store: MenuBarHiddenStore,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         permissionProvider: @escaping () -> MenuBarHiddenPermissionsStatus = {
             MenuBarHiddenPermissionsStatus(
                 hasAccessibility: AXIsProcessTrusted(),
@@ -79,6 +81,7 @@ final class MenuBarHiddenManager: ObservableObject {
         self.enumerator = MenuBarHiddenItemEnumerator()
         self.events = MenuBarHiddenEventSynthesis()
         self.iconCache = MenuBarHiddenIconCache()
+        self.localization = localization
         self.permissionProvider = permissionProvider
 
         divider.onFrameChange = { [weak self] in
@@ -465,6 +468,13 @@ final class MenuBarHiddenManager: ObservableObject {
         return ids
     }
 
+    private func localizedDescription(for error: Error) -> String {
+        if let eventError = error as? MenuBarHiddenEventError {
+            return eventError.localizedDescription(localization: localization)
+        }
+        return error.localizedDescription
+    }
+
     // MARK: - Move
 
     private func performMove(
@@ -498,7 +508,7 @@ final class MenuBarHiddenManager: ObservableObject {
         do {
             try await events.move(item: liveItem, to: target)
         } catch {
-            MenuBarHiddenLog.plugin.error("performMove failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("performMove failed: \(self.localizedDescription(for: error))")
             return false
         }
 
@@ -823,7 +833,7 @@ final class MenuBarHiddenManager: ObservableObject {
         do {
             try await events.move(item: resolution.item, to: showTarget)
         } catch {
-            MenuBarHiddenLog.plugin.error("temporary show failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("temporary show failed: \(self.localizedDescription(for: error))")
             return
         }
 
@@ -850,7 +860,7 @@ final class MenuBarHiddenManager: ObservableObject {
                 baselineWindowIDs: baselineWindowIDs
             )
         } catch {
-            MenuBarHiddenLog.plugin.error("click failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("click failed: \(self.localizedDescription(for: error))")
         }
 
         rebuildSnapshot()
@@ -892,7 +902,7 @@ final class MenuBarHiddenManager: ObservableObject {
             )
             return true
         } catch {
-            MenuBarHiddenLog.plugin.error("click failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("click failed: \(self.localizedDescription(for: error))")
             return false
         }
     }
@@ -1316,7 +1326,7 @@ final class MenuBarHiddenManager: ObservableObject {
             return .retryLater
         } catch {
             context.rehideAttempts += 1
-            MenuBarHiddenLog.plugin.error("temporary rehide failed: \(error.localizedDescription)")
+            MenuBarHiddenLog.plugin.error("temporary rehide failed: \(self.localizedDescription(for: error))")
             return .retryLater
         }
     }
@@ -1777,7 +1787,7 @@ final class MenuBarHiddenManager: ObservableObject {
                         try await self.events.move(item: controlItem, to: target)
                     } catch {
                         MenuBarHiddenLog.plugin.error(
-                            "always-hidden divider recovery failed: \(error.localizedDescription)"
+                            "always-hidden divider recovery failed: \(self.localizedDescription(for: error))"
                         )
                     }
 

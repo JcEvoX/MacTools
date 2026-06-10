@@ -2,7 +2,17 @@
   "id": "ip-overview",
   "displayName": "IP 检测",
   "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
-  "version": "1.0.8",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "IP 检测",
+      "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要"
+    },
+    "en": {
+      "displayName": "IP Check",
+      "summary": "View public IPv4, IPv6, local IP, and location summaries."
+    }
+  },
+  "version": "1.0.9",
   "minHostVersion": "1.0.10",
   "pluginKitVersion": 2,
   "bundleRelativePath": "IPOverview.bundle",

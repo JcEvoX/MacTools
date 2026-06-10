@@ -63,7 +63,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
         }
         let clamped = max(BatteryChargeLimits.minimumPercent, min(BatteryChargeLimits.maximumPercent, limitPercent))
         if !runHelper(path: path, args: ["inhibit", "\(clamped)"]) {
-            return .writeFailed("无法停止充电")
+            return .writeFailed(.inhibitCharging)
         }
         return nil
     }
@@ -76,7 +76,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
         case .failure(let e): return e
         }
         if !runHelper(path: path, args: ["resume"]) {
-            return .writeFailed("无法恢复充电")
+            return .writeFailed(.resumeCharging)
         }
         return nil
     }
@@ -89,7 +89,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
         case .failure(let e): return e
         }
         if !runHelper(path: path, args: ["discharge", on ? "on" : "off"]) {
-            return .writeFailed("无法切换放电模式")
+            return .writeFailed(.toggleDischarge)
         }
         return nil
     }
@@ -116,7 +116,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
             return .failure(err)
         }
         guard let installed = installedHelperPath(matching: bundledHelperURL) else {
-            return .failure(.helperInstallFailed("安装后仍无法找到组件"))
+            return .failure(.helperInstallFailed(.missingAfterInstall))
         }
         return .success(installed)
     }
@@ -198,7 +198,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
         let script = "do shell script \"\(appleScriptEscaped(command))\" with administrator privileges"
         var appleScriptError: NSDictionary?
         guard let scriptObject = NSAppleScript(source: script) else {
-            return .helperInstallFailed("无法创建授权脚本")
+            return .helperInstallFailed(.authorizationScriptUnavailable)
         }
 
         _ = scriptObject.executeAndReturnError(&appleScriptError)
@@ -206,7 +206,7 @@ final class BatteryChargeLimitWriter: BatteryChargeLimitWriting {
             let message = appleScriptError["NSAppleScriptErrorMessage"] as? String
                 ?? appleScriptError.description
             BatteryChargeLimitLog.writer.error("Battery SMC helper install failed: \(message, privacy: .public)")
-            return .helperInstallFailed(message)
+            return .helperInstallFailed(.systemMessage(message))
         }
 
         resolvedHelperPath = nil

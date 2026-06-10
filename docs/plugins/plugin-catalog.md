@@ -20,6 +20,16 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
       "id": "com.ggbond.mactools.demo",
       "displayName": "Demo",
       "summary": "示例插件",
+      "localizedMetadata": {
+        "zh-Hans": {
+          "displayName": "示例",
+          "summary": "示例插件"
+        },
+        "en": {
+          "displayName": "Demo",
+          "summary": "Demo plugin"
+        }
+      },
       "version": "1.0.0",
       "minimumHostVersion": "0.15.2",
       "pluginKitVersion": 2,
@@ -46,6 +56,8 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   }
 }
 ```
+
+`localizedMetadata` is copied from each plugin manifest and is used by the marketplace before the plugin bundle is loaded. `displayName` and `summary` remain required fallbacks for older hosts and incomplete translations.
 
 Release catalogs must include an Ed25519 signature. Debug local catalogs may omit `signature`, but they still go through package checksum, manifest, staging, and same-team code signature validation.
 
@@ -115,7 +127,7 @@ make run MACTOOLS_PLUGIN_CATALOG_URL=file:///path/to/catalog.dev.json
 For Debug runs, the catalog URL scheme selects the verification mode. A `file://` URL uses the local development catalog policy, where signatures are optional. An `https://` URL uses the production catalog policy, where the catalog signature is required:
 
 ```bash
-make run MACTOOLS_PLUGIN_CATALOG_URL=https://ggbond268.github.io/MacTools/plugins/catalog.json
+make run MACTOOLS_PLUGIN_CATALOG_URL=https://mactools.ggbond.app/plugins/catalog.json
 ```
 
 The app copies the package into its own staging and installed directories. Uninstall deletes only the installed copy under MacTools application support; it never deletes the plugin source directory or the local build directory.

@@ -6,8 +6,9 @@ import MacToolsPluginKit
 /// `LaunchpadPreferences`.
 struct LaunchpadSettingsView: View {
     @ObservedObject var preferences: LaunchpadPreferences
-    /// Observed so the "排序" group appears / disappears as the custom layout is created or reset.
+    /// Observed so the sorting group appears / disappears as the custom layout is created or reset.
     @ObservedObject var layoutStore: LaunchpadLayoutStore
+    let localization: PluginLocalization
 
     private var isAutoColumns: Binding<Bool> {
         Binding(
@@ -30,9 +31,20 @@ struct LaunchpadSettingsView: View {
     @ViewBuilder
     private var sortSection: some View {
         if layoutStore.layout != nil {
-            section(title: "排序", icon: "arrow.up.arrow.down") {
-                row(title: "自定义排序", description: "已手动调整过应用顺序") {
-                    Button("恢复字母序") { layoutStore.resetToAlphabetical() }
+            section(
+                title: localization.string("settings.sorting.title", defaultValue: "排序"),
+                icon: "arrow.up.arrow.down"
+            ) {
+                row(
+                    title: localization.string("settings.sorting.customOrder.title", defaultValue: "自定义排序"),
+                    description: localization.string(
+                        "settings.sorting.customOrder.description",
+                        defaultValue: "已手动调整过应用顺序"
+                    )
+                ) {
+                    Button(localization.string("settings.sorting.restoreAlphabetical", defaultValue: "恢复字母序")) {
+                        layoutStore.resetToAlphabetical()
+                    }
                         .controlSize(.small)
                 }
             }
@@ -55,7 +67,7 @@ struct LaunchpadSettingsView: View {
     private var hiddenSection: some View {
         if !preferences.hiddenAppIDs.isEmpty {
             let ids = sortedHiddenIDs
-            section(title: "隐藏的应用", icon: "eye.slash") {
+            section(title: localization.string("settings.hiddenApps.title", defaultValue: "隐藏的应用"), icon: "eye.slash") {
                 VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
                     ForEach(ids, id: \.self) { id in
                         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
@@ -64,7 +76,9 @@ struct LaunchpadSettingsView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-                            Button("恢复") { preferences.unhide(id) }
+                            Button(localization.string("settings.hiddenApps.restore", defaultValue: "恢复")) {
+                                preferences.unhide(id)
+                            }
                                 .controlSize(.small)
                         }
                         if id != ids.last { Divider() }
@@ -72,7 +86,9 @@ struct LaunchpadSettingsView: View {
                     Divider()
                     HStack {
                         Spacer()
-                        Button("全部恢复") { preferences.unhideAll() }
+                        Button(localization.string("settings.hiddenApps.restoreAll", defaultValue: "全部恢复")) {
+                            preferences.unhideAll()
+                        }
                             .controlSize(.small)
                     }
                 }
@@ -81,17 +97,23 @@ struct LaunchpadSettingsView: View {
     }
 
     private var windowSection: some View {
-        section(title: "窗口", icon: "macwindow") {
+        section(title: localization.string("settings.window.title", defaultValue: "窗口"), icon: "macwindow") {
             VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
                 row(
-                    title: "唤出方式",
+                    title: localization.string("settings.window.mode.title", defaultValue: "唤出方式"),
                     description: preferences.windowMode == .fullscreen
-                        ? "铺满当前屏幕，点击空白处关闭"
-                        : "屏幕中央的浮窗，点击窗外关闭"
+                        ? localization.string(
+                            "settings.window.mode.fullscreenDescription",
+                            defaultValue: "铺满当前屏幕，点击空白处关闭"
+                        )
+                        : localization.string(
+                            "settings.window.mode.compactDescription",
+                            defaultValue: "屏幕中央的浮窗，点击窗外关闭"
+                        )
                 ) {
                     Picker("", selection: $preferences.windowMode) {
                         ForEach(LaunchpadPreferences.WindowMode.allCases) { mode in
-                            Text(mode.label).tag(mode)
+                            Text(mode.label(localization: localization)).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -99,10 +121,16 @@ struct LaunchpadSettingsView: View {
                     .frame(width: 168)
                 }
                 Divider()
-                row(title: "热区唤起", description: "光标停在所选屏幕角落即唤出启动台") {
+                row(
+                    title: localization.string("settings.hotCorner.title", defaultValue: "热区唤起"),
+                    description: localization.string(
+                        "settings.hotCorner.description",
+                        defaultValue: "光标停在所选屏幕角落即唤出启动台"
+                    )
+                ) {
                     Picker("", selection: $preferences.hotCorner) {
                         ForEach(LaunchpadPreferences.HotCorner.allCases) { corner in
-                            Text(corner.label).tag(corner)
+                            Text(corner.label(localization: localization)).tag(corner)
                         }
                     }
                     .labelsHidden()
@@ -113,21 +141,39 @@ struct LaunchpadSettingsView: View {
     }
 
     private var gridSection: some View {
-        section(title: "网格", icon: "square.grid.3x3") {
+        section(title: localization.string("settings.grid.title", defaultValue: "网格"), icon: "square.grid.3x3") {
             VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
-                row(title: "自动列数", description: "按窗口宽度自动排布") {
+                row(
+                    title: localization.string("settings.grid.autoColumns.title", defaultValue: "自动列数"),
+                    description: localization.string(
+                        "settings.grid.autoColumns.description",
+                        defaultValue: "按窗口宽度自动排布"
+                    )
+                ) {
                     Toggle("", isOn: isAutoColumns)
                         .toggleStyle(.switch)
                         .labelsHidden()
                 }
                 if preferences.columns != LaunchpadPreferences.autoColumns {
                     Divider()
-                    row(title: "每行图标", description: "固定每行的应用数量") {
+                    row(
+                        title: localization.string("settings.grid.columns.title", defaultValue: "每行图标"),
+                        description: localization.string(
+                            "settings.grid.columns.description",
+                            defaultValue: "固定每行的应用数量"
+                        )
+                    ) {
                         Stepper(
                             value: $preferences.columns,
                             in: LaunchpadPreferences.minColumns...LaunchpadPreferences.maxColumns
                         ) {
-                            Text("\(preferences.columns) 个")
+                            Text(
+                                localization.format(
+                                    "settings.grid.columns.value",
+                                    defaultValue: "%d 个",
+                                    preferences.columns
+                                )
+                            )
                                 .font(PluginSettingsTheme.Typography.monospacedValue)
                                 .frame(width: 40, alignment: .trailing)
                         }

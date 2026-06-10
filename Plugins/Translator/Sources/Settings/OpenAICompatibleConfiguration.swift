@@ -4,11 +4,18 @@ import MacToolsPluginKit
 struct OpenAICompatibleConfiguration: Equatable, Sendable {
     static let defaultBaseURL = "https://api.openai.com"
     static let defaultModel = "gpt-5.4-mini"
-    static let defaultPromptTemplate = """
-    请将下面的文本从 {{source_language}} 翻译为 {{target_language}}，只返回译文。
+    static var defaultPromptTemplate: String {
+        defaultPromptTemplate()
+    }
 
-    {{text}}
-    """
+    static func defaultPromptTemplate(
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
+        localization.string(
+            "settings.defaultPromptTemplate",
+            defaultValue: "请将下面的文本从 {{source_language}} 翻译为 {{target_language}}，只返回译文。\n\n{{text}}"
+        )
+    }
 
     var baseURL: String
     var model: String
@@ -33,11 +40,15 @@ struct OpenAICompatibleConfiguration: Equatable, Sendable {
     }
 
     @MainActor
-    init(storage: PluginStorage) {
+    init(
+        storage: PluginStorage,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.init(
             baseURL: storage.string(forKey: TranslatorConstants.StorageKey.openAIBaseURL) ?? Self.defaultBaseURL,
             model: storage.string(forKey: TranslatorConstants.StorageKey.openAIModel) ?? Self.defaultModel,
-            promptTemplate: storage.string(forKey: TranslatorConstants.StorageKey.openAIPromptTemplate) ?? Self.defaultPromptTemplate
+            promptTemplate: storage.string(forKey: TranslatorConstants.StorageKey.openAIPromptTemplate)
+                ?? Self.defaultPromptTemplate(localization: localization)
         )
     }
 
@@ -138,15 +149,22 @@ enum OpenAICompatibleConfigurationError: Error, Equatable, Sendable {
 
 extension OpenAICompatibleConfigurationError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .missingTextPlaceholder:
-            return "提示词必须包含 {{text}}。"
+            return localization.string(
+                "openAIConfiguration.error.missingTextPlaceholder",
+                defaultValue: "提示词必须包含 {{text}}。"
+            )
         case .blankBaseURL:
-            return "Base URL 不能为空。"
+            return localization.string("openAIConfiguration.error.blankBaseURL", defaultValue: "Base URL 不能为空。")
         case .invalidBaseURL:
-            return "Base URL 无效。"
+            return localization.string("openAIConfiguration.error.invalidBaseURL", defaultValue: "Base URL 无效。")
         case .blankModel:
-            return "模型不能为空。"
+            return localization.string("openAIConfiguration.error.blankModel", defaultValue: "模型不能为空。")
         }
     }
 }

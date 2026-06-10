@@ -3,6 +3,7 @@ import CoreBluetooth
 import IOBluetooth
 import IOKit
 import IOKit.ps
+import MacToolsPluginKit
 
 protocol DeviceBatterySampling: Sendable {
     func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem]
@@ -12,19 +13,34 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static let bluetoothPowerLogCache = DeviceBatteryBluetoothPowerLogCache()
     private static let bluetoothPowerLogLookback = "1m"
     private static let bluetoothPowerLogTimeout: TimeInterval = 1.5
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
+        let localization = localization
         let baseSample = await Task.detached(priority: .utility) {
             var items: [DeviceBatteryItem] = []
-            items.append(contentsOf: Self.collectInternalBattery(referenceDate: referenceDate))
+            items.append(contentsOf: Self.collectInternalBattery(referenceDate: referenceDate, localization: localization))
             let bluetoothData = Self.collectBluetoothProfile()
-            items.append(contentsOf: Self.collectBluetoothDevices(from: bluetoothData, referenceDate: referenceDate))
+            items.append(contentsOf: Self.collectBluetoothDevices(
+                from: bluetoothData,
+                referenceDate: referenceDate,
+                localization: localization
+            ))
             items.append(contentsOf: Self.collectBluetoothPowerLogDevices(
                 from: bluetoothData,
                 existingItems: items,
-                referenceDate: referenceDate
+                referenceDate: referenceDate,
+                localization: localization
             ))
-            items.append(contentsOf: Self.collectMagicAccessoryDevices(from: bluetoothData, referenceDate: referenceDate))
+            items.append(contentsOf: Self.collectMagicAccessoryDevices(
+                from: bluetoothData,
+                referenceDate: referenceDate,
+                localization: localization
+            ))
             return DeviceBatteryBaseSample(
                 items: Self.deduplicated(items),
                 bluetoothBatteryTargets: Self.bluetoothBatteryTargets(from: bluetoothData)
@@ -33,12 +49,16 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
         let bluetoothBatteryItems = await DeviceBatteryBLEBatteryReader.collectBatteryDevices(
             targets: baseSample.bluetoothBatteryTargets,
-            referenceDate: referenceDate
+            referenceDate: referenceDate,
+            localization: localization
         )
         return Self.deduplicated(baseSample.items + bluetoothBatteryItems)
     }
 
-    private static func collectInternalBattery(referenceDate: Date) -> [DeviceBatteryItem] {
+    private static func collectInternalBattery(
+        referenceDate: Date,
+        localization: PluginLocalization
+    ) -> [DeviceBatteryItem] {
         guard
             let powerSourcesInfo = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
             let powerSources = IOPSCopyPowerSourcesList(powerSourcesInfo)?.takeRetainedValue() as? [CFTypeRef],
@@ -78,7 +98,10 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             isCharged: isCharged,
             powerSource: powerSource
         )
-        let name = internalBatteryDisplayName(rawName: description[kIOPSNameKey] as? String)
+        let name = internalBatteryDisplayName(
+            rawName: description[kIOPSNameKey] as? String,
+            localization: localization
+        )
 
         return [
             DeviceBatteryItem(
@@ -92,7 +115,11 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 source: "IOPowerSources",
                 lastUpdated: referenceDate,
                 isConnected: true,
-                detail: internalBatteryDetail(description: description, chargeState: chargeState),
+                detail: internalBatteryDetail(
+                    description: description,
+                    chargeState: chargeState,
+                    localization: localization
+                ),
                 componentIdentity: nil
             )
         ]
@@ -118,17 +145,27 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func internalBatteryDetail(
         description: [String: Any],
-        chargeState: DeviceBatteryChargeState
+        chargeState: DeviceBatteryChargeState,
+        localization: PluginLocalization
     ) -> String {
         let timeKey = chargeState == .charging ? kIOPSTimeToFullChargeKey : kIOPSTimeToEmptyKey
         guard let minutes = description[timeKey] as? Int, minutes > 0 else {
-            return chargeState.title
+            return chargeState.title(localization: localization)
         }
 
-        return "\(chargeState.title) \(minutes / 60)小时\(minutes % 60)分"
+        return localization.format(
+            "batteryDetail.remainingTime",
+            defaultValue: "%@ %d小时%d分",
+            chargeState.title(localization: localization),
+            minutes / 60,
+            minutes % 60
+        )
     }
 
-    private static func internalBatteryDisplayName(rawName: String?) -> String {
+    private static func internalBatteryDisplayName(
+        rawName: String?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
         let cleanedName = rawName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lowercasedName = cleanedName.lowercased()
         let isSystemIdentifier = cleanedName.isEmpty
@@ -141,7 +178,9 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         }
 
         let hostName = Host.current().localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return hostName.isEmpty ? "Mac 电池" : hostName
+        return hostName.isEmpty
+            ? localization.string("deviceName.internalBattery", defaultValue: "Mac 电池")
+            : hostName
     }
 
     private static func collectBluetoothProfile() -> BluetoothProfile {
@@ -252,7 +291,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static func collectBluetoothPowerLogDevices(
         from profile: BluetoothProfile,
         existingItems: [DeviceBatteryItem],
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
         let targets = bluetoothBatteryTargets(from: profile).filter { target in
             needsBluetoothPowerLogFallback(target: target, existingItems: existingItems)
@@ -277,7 +317,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             items.append(contentsOf: bluetoothPowerLogItems(
                 from: componentReadings,
                 targets: componentTargets,
-                referenceDate: referenceDate
+                referenceDate: referenceDate,
+                localization: localization
             ))
         }
 
@@ -290,7 +331,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             let regularItems = bluetoothPowerLogItems(
                 from: regularReadings,
                 targets: regularTargets,
-                referenceDate: referenceDate
+                referenceDate: referenceDate,
+                localization: localization
             )
             if !regularItems.isEmpty {
                 items.append(contentsOf: regularItems)
@@ -301,7 +343,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                         referenceDate: referenceDate
                     ),
                     targets: regularTargets,
-                    referenceDate: referenceDate
+                    referenceDate: referenceDate,
+                    localization: localization
                 ))
             }
         }
@@ -435,7 +478,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static func bluetoothPowerLogItems(
         from readings: [DeviceBatteryBluetoothPowerLogReading],
         targets: [BluetoothBatteryTarget],
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
         readings.compactMap { reading in
             guard let target = matchingBluetoothPowerLogTarget(reading, in: targets) else {
@@ -444,12 +488,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
             return DeviceBatteryItem(
                 id: powerLogItemID(reading: reading, target: target),
-                name: powerLogItemName(reading: reading, target: target),
+                name: powerLogItemName(reading: reading, target: target, localization: localization),
                 model: target.model,
                 kind: reading.component == nil ? target.kind : .airPodsPart,
                 level: reading.level,
                 chargeState: reading.chargeState,
-                parentName: powerLogParentName(reading: reading, target: target),
+                parentName: powerLogParentName(reading: reading, target: target, localization: localization),
                 source: "BluetoothPowerLog",
                 lastUpdated: referenceDate,
                 isConnected: target.isConnected,
@@ -485,13 +529,19 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func powerLogItemName(
         reading: DeviceBatteryBluetoothPowerLogReading,
-        target: BluetoothBatteryTarget
+        target: BluetoothBatteryTarget,
+        localization: PluginLocalization
     ) -> String {
         guard let component = reading.component else {
             return target.name
         }
 
-        return "\(target.name) \(component.title)"
+        return localization.format(
+            "deviceName.withPart",
+            defaultValue: "%@ %@",
+            target.name,
+            component.title(localization: localization)
+        )
     }
 
     private static func powerLogItemID(
@@ -508,7 +558,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func powerLogParentName(
         reading: DeviceBatteryBluetoothPowerLogReading,
-        target: BluetoothBatteryTarget
+        target: BluetoothBatteryTarget,
+        localization: PluginLocalization
     ) -> String? {
         switch reading.component {
         case nil:
@@ -516,7 +567,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         case .chargingCase:
             return target.name
         case .left, .right:
-            return "\(target.name) 充电盒"
+            return localization.format(
+                "deviceName.withPart",
+                defaultValue: "%@ %@",
+                target.name,
+                DeviceBatteryBluetoothPowerLogComponent.chargingCase.title(localization: localization)
+            )
         }
     }
 
@@ -556,11 +612,13 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func collectBluetoothDevices(
         from profile: BluetoothProfile,
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
         var items = collectBluetoothProfileBatteryItems(
             from: profile,
-            referenceDate: referenceDate
+            referenceDate: referenceDate,
+            localization: localization
         )
         items.append(contentsOf: collectIOBluetoothBattery(from: profile, referenceDate: referenceDate))
         return items
@@ -568,7 +626,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func collectBluetoothProfileBatteryItems(
         from profile: BluetoothProfile,
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) -> [DeviceBatteryItem] {
         var items: [DeviceBatteryItem] = []
 
@@ -590,9 +649,14 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 componentRole: hasBluetoothComponentBatteryFields(device.info) ? .aggregate : nil,
                 referenceDate: referenceDate
             )
+            let caseName = bluetoothPartName(
+                deviceName: device.name,
+                component: .chargingCase,
+                localization: localization
+            )
             appendBluetoothLevel(
                 to: &items,
-                name: "\(device.name) 充电盒",
+                name: caseName,
                 suffix: "case",
                 fieldName: "device_batteryLevelCase",
                 device: device,
@@ -605,33 +669,46 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             )
             appendBluetoothLevel(
                 to: &items,
-                name: "\(device.name) 左耳",
+                name: bluetoothPartName(deviceName: device.name, component: .left, localization: localization),
                 suffix: "left",
                 fieldName: "device_batteryLevelLeft",
                 device: device,
                 id: parentID,
                 kind: .airPodsPart,
                 model: model,
-                parentName: "\(device.name) 充电盒",
+                parentName: caseName,
                 componentRole: .left,
                 referenceDate: referenceDate
             )
             appendBluetoothLevel(
                 to: &items,
-                name: "\(device.name) 右耳",
+                name: bluetoothPartName(deviceName: device.name, component: .right, localization: localization),
                 suffix: "right",
                 fieldName: "device_batteryLevelRight",
                 device: device,
                 id: parentID,
                 kind: .airPodsPart,
                 model: model,
-                parentName: "\(device.name) 充电盒",
+                parentName: caseName,
                 componentRole: .right,
                 referenceDate: referenceDate
             )
         }
 
         return DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items)
+    }
+
+    private static func bluetoothPartName(
+        deviceName: String,
+        component: DeviceBatteryBluetoothPowerLogComponent,
+        localization: PluginLocalization
+    ) -> String {
+        localization.format(
+            "deviceName.withPart",
+            defaultValue: "%@ %@",
+            deviceName,
+            component.title(localization: localization)
+        )
     }
 
     private static func appendBluetoothLevel(
@@ -721,7 +798,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
 
     private static func collectMagicAccessoryDevices(
         from profile: BluetoothProfile,
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
         let classes = [
             "AppleDeviceManagementHIDEventService",
@@ -734,7 +812,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             collectIORegistryBatteryDevices(
                 matchingService: serviceClass,
                 profile: profile,
-                referenceDate: referenceDate
+                referenceDate: referenceDate,
+                localization: localization
             )
         }
     }
@@ -742,7 +821,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static func collectIORegistryBatteryDevices(
         matchingService serviceClass: String,
         profile: BluetoothProfile,
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
         var iterator = io_iterator_t()
         let result = IOServiceGetMatchingServices(
@@ -767,7 +847,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 object: object,
                 serviceClass: serviceClass,
                 profile: profile,
-                referenceDate: referenceDate
+                referenceDate: referenceDate,
+                localization: localization
             ) else {
                 continue
             }
@@ -782,7 +863,8 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         object: io_object_t,
         serviceClass: String,
         profile: BluetoothProfile,
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) -> DeviceBatteryItem? {
         guard let level = intProperty("BatteryPercent", object: object),
               (0...100).contains(level)
@@ -800,7 +882,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         let matchedProfileDevice = profile.connectedDevices.first { profileDevice in
             normalizedIdentifier(profileDevice.info["device_address"]) == address
         }
-        let name = firstNonEmpty(matchedProfileDevice?.name, productName, serviceClass)
+        let name = firstNonEmpty(
+            matchedProfileDevice?.name,
+            productName,
+            serviceClass,
+            localization: localization
+        )
         let statusFlags = intProperty("BatteryStatusFlags", object: object)
         let chargeState: DeviceBatteryChargeState = statusFlags == 4 ? .normal : (statusFlags ?? 0) > 0 ? .charging : .normal
         let kind = inferredMagicKind(productName: productName, profileDevice: matchedProfileDevice)
@@ -971,7 +1058,7 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     private static func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
         var bestByNameAndKind: [String: DeviceBatteryItem] = [:]
         for item in DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items) {
-            let key = "\(item.kind.title)-\(item.name.lowercased())-\(item.parentName ?? "")"
+            let key = "\(item.kind)-\(item.name.lowercased())-\(item.parentName ?? "")"
             if let existing = bestByNameAndKind[key] {
                 bestByNameAndKind[key] = preferredItem(existing, item)
             } else {
@@ -1056,14 +1143,17 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         return nil
     }
 
-    private static func firstNonEmpty(_ values: String?...) -> String {
+    private static func firstNonEmpty(
+        _ values: String?...,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
         for value in values {
             if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return value
             }
         }
 
-        return "蓝牙设备"
+        return localization.string("deviceName.bluetoothFallback", defaultValue: "蓝牙设备")
     }
 
     private static func intProperty(_ key: String, object: io_object_t) -> Int? {
@@ -1311,14 +1401,14 @@ enum DeviceBatteryBluetoothPowerLogComponent: String, Sendable {
     case right
     case chargingCase
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .left:
-            return "左耳"
+            return localization.string("component.left", defaultValue: "左耳")
         case .right:
-            return "右耳"
+            return localization.string("component.right", defaultValue: "右耳")
         case .chargingCase:
-            return "充电盒"
+            return localization.string("component.chargingCase", defaultValue: "充电盒")
         }
     }
 
@@ -1487,6 +1577,7 @@ private final class DeviceBatteryBLEBatteryReader: NSObject, @preconcurrency CBC
 
     private let targetsByName: [String: BluetoothBatteryTarget]
     private let referenceDate: Date
+    private let localization: PluginLocalization
     private var centralManager: CBCentralManager?
     private var continuations: [CheckedContinuation<[DeviceBatteryItem], Never>] = []
     private var peripheralsByID: [UUID: CBPeripheral] = [:]
@@ -1498,7 +1589,8 @@ private final class DeviceBatteryBLEBatteryReader: NSObject, @preconcurrency CBC
 
     static func collectBatteryDevices(
         targets: [BluetoothBatteryTarget],
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) async -> [DeviceBatteryItem] {
         let eligibleTargets = targets.filter { target in
             target.isConnected && (target.kind == .bluetooth || target.kind == .magicAccessory)
@@ -1509,19 +1601,22 @@ private final class DeviceBatteryBLEBatteryReader: NSObject, @preconcurrency CBC
 
         let reader = DeviceBatteryBLEBatteryReader(
             targets: eligibleTargets,
-            referenceDate: referenceDate
+            referenceDate: referenceDate,
+            localization: localization
         )
         return await reader.collect()
     }
 
     init(
         targets: [BluetoothBatteryTarget],
-        referenceDate: Date
+        referenceDate: Date,
+        localization: PluginLocalization
     ) {
         self.targetsByName = Dictionary(
             uniqueKeysWithValues: targets.map { ($0.name.lowercased(), $0) }
         )
         self.referenceDate = referenceDate
+        self.localization = localization
         super.init()
     }
 

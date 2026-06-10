@@ -5,6 +5,10 @@ import SwiftUI
 struct MacToolsApp: App {
     @NSApplicationDelegateAdaptor(MacToolsAppDelegate.self) private var appDelegate
 
+    init() {
+        AppLanguagePreference.applyStoredPreference()
+    }
+
     var body: some Scene {
         Settings {
             EmptyView()

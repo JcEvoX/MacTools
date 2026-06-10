@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import IOKit
 import IOKit.ps
+import MacToolsPluginKit
 import SystemConfiguration
 
 protocol SystemStatusSampling: Sendable {
@@ -12,6 +13,7 @@ protocol SystemStatusSampling: Sendable {
 }
 
 actor SystemStatusSampler: SystemStatusSampling {
+    private let localization: PluginLocalization
     private var previousCPUTicks: SystemStatusCPUTicks?
     private var previousCPUPowerEnergy: SystemStatusPowerEnergySample?
     private var cachedCPUTemperature: Double?
@@ -20,6 +22,10 @@ actor SystemStatusSampler: SystemStatusSampling {
     private lazy var cpuPowerReader = SystemStatusCPUPowerReader()
     private var previousNetworkCounter: SystemStatusNetworkCounter?
     private var previousNetworkDate: Date?
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     func collectFast(referenceDate: Date) async -> SystemStatusFastSample {
         let cpu = await collectCPU(referenceDate: referenceDate)
@@ -106,7 +112,7 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     private func collectNetwork(referenceDate: Date) -> SystemStatusNetworkSnapshot {
-        guard let currentCounter = Self.currentNetworkCounter() else {
+        guard let currentCounter = currentNetworkCounter() else {
             previousNetworkCounter = nil
             previousNetworkDate = referenceDate
             return SystemStatusNetworkSnapshot(
@@ -549,21 +555,21 @@ actor SystemStatusSampler: SystemStatusSampling {
         return nil
     }
 
-    private static func currentNetworkCounter() -> SystemStatusNetworkCounter? {
-        let counters = readNetworkCounters()
+    private func currentNetworkCounter() -> SystemStatusNetworkCounter? {
+        let counters = Self.readNetworkCounters()
         guard !counters.isEmpty else {
             return nil
         }
 
         if
-            let primaryInterface = primaryInterfaceName(),
+            let primaryInterface = Self.primaryInterfaceName(),
             let primaryCounter = counters[primaryInterface]
         {
             return primaryCounter
         }
 
         let candidates = counters.values
-            .filter { $0.isUp && !isNoiseInterface($0.key) }
+            .filter { $0.isUp && !Self.isNoiseInterface($0.key) }
             .sorted { lhs, rhs in
                 if lhs.receivedBytes + lhs.sentBytes == rhs.receivedBytes + rhs.sentBytes {
                     return lhs.key < rhs.key
@@ -640,7 +646,7 @@ actor SystemStatusSampler: SystemStatusSampling {
         })
     }
 
-    private static func aggregateNetworkCounters(_ counters: [SystemStatusNetworkCounter]) -> SystemStatusNetworkCounter {
+    private func aggregateNetworkCounters(_ counters: [SystemStatusNetworkCounter]) -> SystemStatusNetworkCounter {
         guard counters.count > 1 else {
             return counters[0]
         }
@@ -652,7 +658,7 @@ actor SystemStatusSampler: SystemStatusSampling {
 
         return SystemStatusNetworkCounter(
             key: "aggregate:\(sortedKeys.joined(separator: ","))",
-            displayName: "多接口",
+            displayName: localization.string("network.interface.multiple", defaultValue: "多接口"),
             receivedBytes: receivedBytes,
             sentBytes: sentBytes,
             ipAddress: ipAddress,

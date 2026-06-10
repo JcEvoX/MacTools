@@ -5,7 +5,7 @@ struct PluginFilterBarView: View {
     @Binding var searchText: String
     @Binding var selectedFilter: PluginCategoryFilter
     let countsByFilter: [PluginCategoryFilter: Int]
-    var searchPrompt: String = "搜索插件名称或简介"
+    var searchPrompt: String = AppL10n.plugins("plugin.filter.searchPrompt", defaultValue: "搜索插件名称或简介")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -36,7 +36,7 @@ struct PluginFilterBarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除搜索")
+                .help(AppL10n.plugins("plugin.filter.clearSearch", defaultValue: "清除搜索"))
             }
         }
         .padding(.horizontal, 10)

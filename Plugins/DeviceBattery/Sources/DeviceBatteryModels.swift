@@ -1,24 +1,25 @@
 import Foundation
+import MacToolsPluginKit
 
 enum DeviceBatteryLayoutMode: String, CaseIterable, Equatable {
     case grid
     case list
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .grid:
-            return "列表"
+            return localization.string("layout.grid.title", defaultValue: "列表")
         case .list:
-            return "圆环"
+            return localization.string("layout.list.title", defaultValue: "圆环")
         }
     }
 
-    var subtitle: String {
+    func subtitle(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .grid:
-            return "按设备逐行显示"
+            return localization.string("layout.grid.subtitle", defaultValue: "按设备逐行显示")
         case .list:
-            return "多设备圆环"
+            return localization.string("layout.list.subtitle", defaultValue: "多设备圆环")
         }
     }
 
@@ -32,20 +33,20 @@ enum DeviceBatteryChargeState: Equatable, Sendable {
     case plugged
     case invalid
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .unknown:
-            return "未知"
+            return localization.string("chargeState.unknown", defaultValue: "未知")
         case .normal:
-            return "正常"
+            return localization.string("chargeState.normal", defaultValue: "正常")
         case .charging:
-            return "充电中"
+            return localization.string("chargeState.charging", defaultValue: "充电中")
         case .charged:
-            return "已充满"
+            return localization.string("chargeState.charged", defaultValue: "已充满")
         case .plugged:
-            return "外接电源"
+            return localization.string("chargeState.plugged", defaultValue: "外接电源")
         case .invalid:
-            return "电量无效"
+            return localization.string("chargeState.invalid", defaultValue: "电量无效")
         }
     }
 
@@ -84,20 +85,20 @@ enum DeviceBatteryKind: Equatable, Sendable {
         }
     }
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .internalBattery:
             return "Mac"
         case .bluetooth:
-            return "蓝牙"
+            return localization.string("deviceKind.bluetooth", defaultValue: "蓝牙")
         case .magicAccessory:
-            return "Apple 外设"
+            return localization.string("deviceKind.magicAccessory", defaultValue: "Apple 外设")
         case .rapooMouse:
-            return "雷柏鼠标"
+            return localization.string("deviceKind.rapooMouse", defaultValue: "雷柏鼠标")
         case .airPodsPart:
-            return "耳机"
+            return localization.string("deviceKind.airPodsPart", defaultValue: "耳机")
         case .other:
-            return "设备"
+            return localization.string("deviceKind.other", defaultValue: "设备")
         }
     }
 }
@@ -259,30 +260,42 @@ struct DeviceBatterySnapshot: Equatable, Sendable {
         }.count
     }
 
-    var subtitle: String {
+    func subtitle(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch accessState {
         case .idle:
-            return "等待检测"
+            return localization.string("snapshot.subtitle.idle", defaultValue: "等待检测")
         case .scanning:
-            return "正在读取设备电量"
+            return localization.string("snapshot.subtitle.scanning", defaultValue: "正在读取设备电量")
         case .ready:
             if lowBatteryCount > 0 {
-                return "\(visibleItems.count) 台设备，\(lowBatteryCount) 台低电量"
+                return localization.format(
+                    "snapshot.subtitle.readyWithLowBattery",
+                    defaultValue: "%d 台设备，%d 台低电量",
+                    visibleItems.count,
+                    lowBatteryCount
+                )
             }
-            return "\(visibleItems.count) 台设备"
+            return localization.format(
+                "snapshot.subtitle.ready",
+                defaultValue: "%d 台设备",
+                visibleItems.count
+            )
         case .noDevices:
-            return "未检测到可显示电量"
+            return localization.string("snapshot.subtitle.noDevices", defaultValue: "未检测到可显示电量")
         case .permissionDenied:
-            return "需要输入监控权限"
+            return localization.string("snapshot.subtitle.permissionDenied", defaultValue: "需要输入监控权限")
         case let .failed(message):
             return message
         }
     }
 
-    var errorMessage: String? {
+    func errorMessage(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String? {
         switch accessState {
         case .permissionDenied:
-            return "无法访问雷柏 HID 接口，请在系统设置中允许 MacTools 使用输入监控。"
+            return localization.string(
+                "snapshot.error.permissionDenied",
+                defaultValue: "无法访问雷柏 HID 接口，请在系统设置中允许 MacTools 使用输入监控。"
+            )
         case let .failed(message):
             return message
         case .idle, .scanning, .ready, .noDevices:
@@ -334,9 +347,12 @@ enum DeviceBatteryFormatter {
         return "\(min(max(level, 0), 100))%"
     }
 
-    static func time(_ date: Date?) -> String {
+    static func time(
+        _ date: Date?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
         guard let date else {
-            return "未更新"
+            return localization.string("time.notUpdated", defaultValue: "未更新")
         }
 
         return timeFormatter.string(from: date)

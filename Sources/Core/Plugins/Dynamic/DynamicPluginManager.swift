@@ -52,50 +52,55 @@ struct PluginManagementItem: Identifiable, Equatable {
     var statusText: String {
         switch state {
         case .available:
-            return "可安装"
+            return AppL10n.plugins("plugin.status.available", defaultValue: "可安装")
         case .localDevelopment:
-            return "本地开发"
+            return AppL10n.plugins("plugin.status.localDevelopment", defaultValue: "本地开发")
         case .enabled, .disabled:
-            return "已安装"
+            return AppL10n.plugins("plugin.status.installed", defaultValue: "已安装")
         case .updateAvailable:
-            return "可更新"
+            return AppL10n.plugins("plugin.status.updateAvailable", defaultValue: "可更新")
         case .restartRequired:
-            return "需重启"
+            return AppL10n.plugins("plugin.status.restartRequired", defaultValue: "需重启")
         case .failed:
-            return "加载失败"
+            return AppL10n.plugins("plugin.status.failed", defaultValue: "加载失败")
         case .incompatible:
-            return "不兼容"
+            return AppL10n.plugins("plugin.status.incompatible", defaultValue: "不兼容")
         case .revoked:
-            return "已撤回"
+            return AppL10n.plugins("plugin.status.revoked", defaultValue: "已撤回")
         }
     }
 
     var detailText: String {
         switch state {
         case .available:
-            return summary ?? "可以安装此插件。"
+            return summary ?? AppL10n.plugins("plugin.detail.available", defaultValue: "可以安装此插件。")
         case .localDevelopment:
-            return summary ?? "来自本地开发插件列表。"
+            return summary ?? AppL10n.plugins("plugin.detail.localDevelopment", defaultValue: "来自本地开发插件列表。")
         case .enabled:
             if requiresRestartToFullyUnload {
-                return "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+                return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
             }
 
             return packageURL?.path ?? summary ?? ""
         case .disabled:
             if requiresRestartToFullyUnload {
-                return "已移出界面，重启后彻底释放已加载代码。"
+                return AppL10n.plugins("plugin.detail.restartRequiredAfterRemoval", defaultValue: "已移出界面，重启后彻底释放已加载代码。")
             }
 
             return packageURL?.path ?? summary ?? ""
         case let .updateAvailable(installedVersion, catalogVersion):
-            return "已安装 \(installedVersion)，可更新到 \(catalogVersion)。"
+            return AppL10n.pluginsFormat(
+                "plugin.detail.updateAvailableFormat",
+                defaultValue: "已安装 %@，可更新到 %@。",
+                installedVersion,
+                catalogVersion
+            )
         case .restartRequired:
-            return "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
         case let .failed(reason), let .incompatible(reason):
             return reason
         case let .revoked(reason):
-            return reason ?? "此版本已被撤回。"
+            return reason ?? AppL10n.plugins("plugin.detail.revoked", defaultValue: "此版本已被撤回。")
         }
     }
 
@@ -495,8 +500,8 @@ final class DynamicPluginManager: ObservableObject {
                 items.append(
                     PluginManagementItem(
                         id: entry.id,
-                        title: entry.displayName,
-                        summary: entry.summary,
+                        title: entry.localizedDisplayName,
+                        summary: entry.localizedSummary,
                         version: entry.version,
                         state: catalogSnapshot?.isLocalDevelopment == true ? .localDevelopment : .available,
                         packageURL: nil,
@@ -560,8 +565,8 @@ final class DynamicPluginManager: ObservableObject {
 
         return PluginManagementItem(
             id: record.id,
-            title: catalogEntry?.displayName ?? record.manifest.displayName,
-            summary: catalogEntry?.summary,
+            title: catalogEntry?.localizedDisplayName ?? record.manifest.localizedDisplayName,
+            summary: catalogEntry?.localizedSummary ?? record.manifest.localizedSummary,
             version: catalogEntry?.version ?? record.manifest.version,
             state: state,
             packageURL: record.packageURL,
@@ -573,7 +578,7 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     private func catalogEntrySort(_ lhs: PluginCatalogEntry, _ rhs: PluginCatalogEntry) -> Bool {
-        lhs.displayName.localizedCompare(rhs.displayName) == .orderedAscending
+        lhs.localizedDisplayName.localizedCompare(rhs.localizedDisplayName) == .orderedAscending
     }
 
     private func managementItemSort(_ lhs: PluginManagementItem, _ rhs: PluginManagementItem) -> Bool {

@@ -512,7 +512,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
-            accessibilityDescription: "拖拽调整顺序"
+            accessibilityDescription: AppL10n.plugins(
+                "plugin.management.reorderAccessibility",
+                defaultValue: "拖拽调整顺序"
+            )
         )
         handleImageView.contentTintColor = .secondaryLabelColor
         handleImageView.symbolConfiguration = .init(pointSize: 13, weight: .semibold)
@@ -583,11 +586,11 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
     switch presentation {
     case .featurePanel:
-        return "操作面板"
+        return AppL10n.plugins("plugin.presentation.featurePanel", defaultValue: "操作面板")
     case .componentPanel:
-        return "组件"
+        return AppL10n.plugins("plugin.presentation.componentPanel", defaultValue: "组件")
     case .featureAndComponentPanel:
-        return "操作面板与组件"
+        return AppL10n.plugins("plugin.presentation.featureAndComponentPanel", defaultValue: "操作面板与组件")
     }
 }
 

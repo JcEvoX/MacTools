@@ -2,7 +2,17 @@
   "id": "calendar",
   "displayName": "日历",
   "summary": "查看日期、节假日和系统日程",
-  "version": "1.0.5",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "日历",
+      "summary": "查看日期、节假日和系统日程"
+    },
+    "en": {
+      "displayName": "Calendar",
+      "summary": "View dates, holidays, and calendar events."
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Calendar.bundle",

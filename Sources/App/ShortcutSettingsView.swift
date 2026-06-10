@@ -17,10 +17,13 @@ struct ShortcutSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("键盘快捷键", systemImage: "command")
+                    Label(AppL10n.settings("shortcuts.title", defaultValue: "键盘快捷键"), systemImage: "command")
                         .font(PluginSettingsTheme.Typography.pageTitle)
 
-                    Text("为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。")
+                    Text(AppL10n.settings(
+                        "shortcuts.description",
+                        defaultValue: "为常用动作配置全局快捷键。编辑后立即生效，必要项不可删除。"
+                    ))
                         .font(PluginSettingsTheme.Typography.pageDescription)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -163,7 +166,7 @@ private struct ShortcutSettingsStandardRow: View {
                         .help(item.title)
 
                     if item.isRequired {
-                        ShortcutStatusBadge(text: "必填")
+                        ShortcutStatusBadge(text: AppL10n.settings("shortcuts.required", defaultValue: "必填"))
                     }
                 }
 
@@ -348,7 +351,7 @@ private struct ShortcutBindingControl: View {
                 if shouldShowReset {
                     ShortcutInlineActionButton(
                         systemName: "arrow.counterclockwise",
-                        helpText: "重置为默认快捷键",
+                        helpText: AppL10n.settings("shortcuts.resetHelp", defaultValue: "重置为默认快捷键"),
                         action: onReset
                     )
                 }
@@ -356,7 +359,7 @@ private struct ShortcutBindingControl: View {
                 if item.canClear {
                     ShortcutInlineActionButton(
                         systemName: "xmark.circle.fill",
-                        helpText: "清除快捷键",
+                        helpText: AppL10n.settings("shortcuts.clearHelp", defaultValue: "清除快捷键"),
                         action: onClear
                     )
                 }

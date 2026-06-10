@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import Foundation
 import SwiftUI
@@ -19,6 +20,8 @@ private struct TranslatorPluginProvider: PluginProvider {
     }
 }
 
+typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) -> any ScreenshotRegionCapturing
+
 @MainActor
 final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
     private enum APIKeyState: Equatable {
@@ -28,14 +31,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         case error(String)
     }
 
-    let metadata = PluginMetadata(
-        id: TranslatorConstants.pluginID,
-        title: "翻译",
-        iconName: "text.bubble",
-        iconTint: Color(nsColor: .systemBlue),
-        order: 57,
-        defaultDescription: "划词快捷键翻译"
-    )
+    let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
         controlStyle: .switch,
@@ -50,15 +46,25 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private let storage: PluginStorage
     private let accessibilityTrustProvider: () -> Bool
     private let accessibilityTrustRequester: (Bool) -> Bool
+    private let screenRecordingPermissionProvider: () -> Bool
     private let selectTranslationStarter: (() -> Void)?
+    private let screenshotTranslationStarter: (() -> Void)?
     private let secretStore: any TranslatorSecretStoring
     private let languagePreferenceStore: LanguagePreferenceStore
     private let panelController: any TranslatorPanelControlling
     private let selectedTextCapturePipeline: SelectedTextCapturePipeline
+    private let screenshotRegionCapturer: (any ScreenshotRegionCapturing)?
+    private let screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory
+    private let ocrTextRecognizer: (any OCRTextRecognizing)?
     private let translationProviderFactoryOverride: TranslatorProviderFactory?
+    private let providerProfileStore: TranslatorProviderProfileStore
+    private let localization: PluginLocalization
     private var providerConfiguration: OpenAICompatibleConfiguration
+    private var providerProfiles: [TranslatorProviderProfile]
     private var languagePair: TranslatorLanguagePair
     private var cachedAPIKey: String?
+    private var cachedAPIKeys: [String: String]
+    private var didLoadProfileAPIKeys: Set<String>
     private var didLoadAPIKey = false
     private var apiKeyState: APIKeyState
     private var coordinator: TranslatorCoordinator?
@@ -67,27 +73,57 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: TranslatorConstants.pluginID),
         accessibilityTrustProvider: @escaping () -> Bool = AccessibilityCheck.isTrusted,
         accessibilityTrustRequester: @escaping (Bool) -> Bool = AccessibilityCheck.requestTrust,
+        screenRecordingPermissionProvider: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
         selectTranslationStarter: (() -> Void)? = nil,
+        screenshotTranslationStarter: (() -> Void)? = nil,
         secretStore: any TranslatorSecretStoring = OpenAICompatibleSecretStore(),
-        panelController: any TranslatorPanelControlling = TranslatorPanelController(),
-        selectedTextCapturePipeline: SelectedTextCapturePipeline = .live(),
-        translationProviderFactoryOverride: TranslatorProviderFactory? = nil
+        panelController: (any TranslatorPanelControlling)? = nil,
+        selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
+        screenshotRegionCapturer: (any ScreenshotRegionCapturing)? = nil,
+        screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory? = nil,
+        ocrTextRecognizer: (any OCRTextRecognizing)? = nil,
+        translationProviderFactoryOverride: TranslatorProviderFactory? = nil,
+        localization: PluginLocalization? = nil
     ) {
+        let localization = localization ?? PluginLocalization(bundle: context.resourceBundle)
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: TranslatorConstants.pluginID,
+            title: localization.string("metadata.title", defaultValue: "翻译"),
+            iconName: "text.bubble",
+            iconTint: Color(nsColor: .systemBlue),
+            order: 57,
+            defaultDescription: localization.string("metadata.description", defaultValue: "划词与截图快捷键翻译")
+        )
         self.storage = context.storage
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.accessibilityTrustRequester = accessibilityTrustRequester
+        self.screenRecordingPermissionProvider = screenRecordingPermissionProvider
         self.selectTranslationStarter = selectTranslationStarter
+        self.screenshotTranslationStarter = screenshotTranslationStarter
         self.secretStore = secretStore
-        self.panelController = panelController
-        self.selectedTextCapturePipeline = selectedTextCapturePipeline
+        self.panelController = panelController ?? TranslatorPanelController(localization: localization)
+        self.selectedTextCapturePipeline = selectedTextCapturePipeline ?? .live(localization: localization)
+        self.screenshotRegionCapturer = screenshotRegionCapturer
+        self.screenshotRegionCapturerFactory = screenshotRegionCapturerFactory ?? { permissionProvider in
+            ScreenshotRegionCapturer(screenRecordingPermissionProvider: permissionProvider)
+        }
+        self.ocrTextRecognizer = ocrTextRecognizer
         self.translationProviderFactoryOverride = translationProviderFactoryOverride
+        let providerProfileStore = TranslatorProviderProfileStore(storage: context.storage, localization: localization)
+        let providerProfiles = providerProfileStore.loadProfiles()
+        self.providerProfileStore = providerProfileStore
+        self.providerProfiles = providerProfiles
         let languagePreferenceStore = LanguagePreferenceStore(storage: context.storage)
         self.languagePreferenceStore = languagePreferenceStore
-        self.providerConfiguration = OpenAICompatibleConfiguration(storage: context.storage)
+        self.providerConfiguration = providerProfiles.first?.configuration
+            ?? OpenAICompatibleConfiguration(storage: context.storage, localization: localization)
         self.languagePair = languagePreferenceStore.loadPair()
         self.cachedAPIKey = nil
+        self.cachedAPIKeys = [:]
+        self.didLoadProfileAPIKeys = []
         self.apiKeyState = .unknown
-        panelController.onAction = { [weak self] action in
+        self.panelController.onAction = { [weak self] action in
             self?.handlePanelAction(action)
         }
     }
@@ -109,14 +145,20 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             PluginPermissionRequirement(
                 id: TranslatorConstants.PermissionID.accessibility,
                 kind: .accessibility,
-                title: "辅助功能授权",
-                description: "划词翻译需要读取当前选中文本。"
+                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能授权"),
+                description: localization.string("permission.accessibility.description", defaultValue: "划词翻译需要读取当前选中文本。")
             ),
             PluginPermissionRequirement(
                 id: TranslatorConstants.PermissionID.automation,
                 kind: .automation,
-                title: "自动化授权",
-                description: "浏览器划词可能需要允许 MacTools 控制当前浏览器。"
+                title: localization.string("permission.automation.title", defaultValue: "自动化授权"),
+                description: localization.string("permission.automation.description", defaultValue: "浏览器划词可能需要允许 MacTools 控制当前浏览器。")
+            ),
+            PluginPermissionRequirement(
+                id: TranslatorConstants.PermissionID.screenRecording,
+                kind: .screenRecording,
+                title: localization.string("permission.screenRecording.title", defaultValue: "屏幕录制授权"),
+                description: localization.string("permission.screenRecording.description", defaultValue: "截图翻译需要读取框选区域的屏幕内容。")
             ),
         ]
     }
@@ -127,16 +169,22 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         [
             PluginShortcutDefinition(
                 id: TranslatorConstants.ShortcutID.selectTranslation,
-                title: "划词翻译",
-                description: "翻译当前选中的文本。",
+                title: localization.string("shortcut.selectTranslation.title", defaultValue: "划词翻译"),
+                description: localization.string("shortcut.selectTranslation.description", defaultValue: "翻译当前选中的文本。"),
                 actionID: TranslatorConstants.ActionID.selectTranslation,
                 scope: .global,
-                defaultBinding: ShortcutBinding(
-                    keyCode: UInt16(kVK_ANSI_D),
-                    modifiers: [.option]
-                ),
+                defaultBinding: TranslatorConstants.Defaults.selectTranslationShortcut,
                 isRequired: false
-            )
+            ),
+            PluginShortcutDefinition(
+                id: TranslatorConstants.ShortcutID.screenshotTranslation,
+                title: localization.string("shortcut.screenshotTranslation.title", defaultValue: "截图翻译"),
+                description: localization.string("shortcut.screenshotTranslation.description", defaultValue: "框选截图区域并翻译识别出的文字。"),
+                actionID: TranslatorConstants.ActionID.screenshotTranslation,
+                scope: .global,
+                defaultBinding: TranslatorConstants.Defaults.screenshotTranslationShortcut,
+                isRequired: false
+            ),
         ]
     }
 
@@ -144,14 +192,24 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         PluginConfiguration(description: metadata.defaultDescription, prefersFullHeight: false) { [weak self] _ in
             if let self {
                 TranslatorSettingsView(
-                    configuration: self.providerConfiguration,
-                    apiKey: self.cachedAPIKey ?? "",
+                    profiles: self.providerProfiles,
+                    apiKeys: self.cachedAPIKeys,
                     languagePair: self.languagePair,
-                    onSave: { [weak self] configuration, apiKey, languagePair in
-                        self?.saveConfiguration(configuration, apiKey: apiKey, languagePair: languagePair)
+                    localization: self.localization,
+                    onSave: { [weak self] profiles, apiKeys, languagePair in
+                        self?.saveConfiguration(
+                            profiles: profiles,
+                            apiKeys: apiKeys,
+                            languagePair: languagePair
+                        )
                     },
-                    onRestoreDefaults: {
-                        OpenAICompatibleConfiguration()
+                    onMakeNewProfile: { [weak self] profiles in
+                        self?.providerProfileStore.makeNewProfile(existingProfiles: profiles)
+                            ?? TranslatorProviderProfile(
+                                name: self?.localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译")
+                                    ?? "OpenAI",
+                                isEnabled: false
+                            )
                     }
                 )
             } else {
@@ -175,15 +233,34 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             let isGranted = accessibilityTrustProvider()
             return PluginPermissionState(
                 isGranted: isGranted,
-                footnote: isGranted ? nil : "前往系统设置 → 隐私与安全性 → 辅助功能，授权 MacTools。"
+                footnote: isGranted
+                    ? nil
+                    : localization.string(
+                        "permission.accessibility.footnote",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 辅助功能，授权 MacTools。"
+                    )
             )
         case TranslatorConstants.PermissionID.automation:
             return PluginPermissionState(
                 isGranted: true,
-                footnote: "macOS 会在首次控制浏览器时请求自动化授权。",
-                statusText: "按需确认",
+                footnote: localization.string(
+                    "permission.automation.footnote",
+                    defaultValue: "macOS 会在首次控制浏览器时请求自动化授权。"
+                ),
+                statusText: localization.string("permission.automation.status", defaultValue: "按需确认"),
                 statusSystemImage: "sparkles",
                 statusTone: .neutral
+            )
+        case TranslatorConstants.PermissionID.screenRecording:
+            let isGranted = screenRecordingPermissionProvider()
+            return PluginPermissionState(
+                isGranted: isGranted,
+                footnote: isGranted
+                    ? nil
+                    : localization.string(
+                        "permission.screenRecording.footnote",
+                        defaultValue: "前往系统设置 → 隐私与安全性 → 屏幕录制，授权 MacTools。"
+                    )
             )
         default:
             return PluginPermissionState(isGranted: true, footnote: nil)
@@ -197,6 +274,11 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
             onStateChange?()
         case TranslatorConstants.PermissionID.automation:
             requestPermissionGuidance?(TranslatorConstants.PermissionID.automation)
+            onStateChange?()
+        case TranslatorConstants.PermissionID.screenRecording:
+            NSWorkspace.shared.open(
+                URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
+            )
             onStateChange?()
         default:
             return
@@ -219,20 +301,32 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     }
 
     func handleShortcutAction(id: String) {
-        guard id == TranslatorConstants.ActionID.selectTranslation,
-              isShortcutEnabled
-        else {
+        guard isShortcutEnabled else {
             return
         }
 
-        if let selectTranslationStarter {
-            selectTranslationStarter()
+        switch id {
+        case TranslatorConstants.ActionID.selectTranslation:
+            if let selectTranslationStarter {
+                selectTranslationStarter()
+                return
+            }
+
+            let coordinator = coordinator ?? makeCoordinator()
+            self.coordinator = coordinator
+            coordinator.startSelectTranslation()
+        case TranslatorConstants.ActionID.screenshotTranslation:
+            if let screenshotTranslationStarter {
+                screenshotTranslationStarter()
+                return
+            }
+
+            let coordinator = coordinator ?? makeCoordinator()
+            self.coordinator = coordinator
+            coordinator.startScreenshotTranslation()
+        default:
             return
         }
-
-        let coordinator = coordinator ?? makeCoordinator()
-        self.coordinator = coordinator
-        coordinator.startSelectTranslation()
     }
 
     private var isShortcutEnabled: Bool {
@@ -244,16 +338,26 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     }
 
     private var panelSubtitle: String {
-        if !isShortcutEnabled { return "快捷键已暂停" }
-        if !accessibilityTrustProvider() { return "启用前需要辅助功能授权" }
-        if providerConfiguration.validationError != nil { return "需要配置 OpenAI" }
+        if !isShortcutEnabled {
+            return localization.string("panel.subtitle.shortcutPaused", defaultValue: "快捷键已暂停")
+        }
+        if !accessibilityTrustProvider() {
+            return localization.string("panel.subtitle.permissionRequired", defaultValue: "启用前需要辅助功能授权")
+        }
+        if enabledValidProfiles.isEmpty {
+            return localization.string("panel.subtitle.needsProvider", defaultValue: "需要配置翻译服务")
+        }
 
         switch apiKeyState {
         case .missing, .error:
-            return "需要配置 OpenAI"
+            return localization.string("panel.subtitle.needsProvider", defaultValue: "需要配置翻译服务")
         case .unknown, .present:
-            return "按 ⌥D 翻译选中文本"
+            return localization.string("panel.subtitle.ready", defaultValue: "按 ⌥D 划词，⌥S 截图")
         }
+    }
+
+    private var enabledValidProfiles: [TranslatorProviderProfile] {
+        providerProfiles.filter { $0.isEnabled && $0.validationError == nil }
     }
 
     private var hasKnownAPIKey: Bool {
@@ -272,33 +376,101 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         apiKey: String,
         languagePair: TranslatorLanguagePair
     ) -> String? {
+        let profile = TranslatorProviderProfile(
+            id: TranslatorProviderProfile.defaultID,
+            name: TranslatorProviderProfile.defaultName,
+            isEnabled: true,
+            baseURL: configuration.baseURL,
+            model: configuration.model,
+            promptTemplate: configuration.promptTemplate
+        )
+        return saveConfiguration(
+            profiles: [profile],
+            apiKeys: [profile.id: apiKey],
+            languagePair: languagePair
+        )
+    }
+
+    func saveConfiguration(
+        profiles: [TranslatorProviderProfile],
+        apiKeys: [String: String],
+        languagePair: TranslatorLanguagePair
+    ) -> String? {
         guard languagePair.first != languagePair.second else {
-            return "两种偏好语言不能相同。"
+            return localization.string("settings.error.sameLanguages", defaultValue: "两种偏好语言不能相同。")
         }
 
-        if let validationError = configuration.validationError {
-            return validationError.localizedDescription
+        guard profiles.contains(where: \.isEnabled) else {
+            return localization.string("settings.error.noEnabledProvider", defaultValue: "至少启用一个翻译服务。")
+        }
+
+        for profile in profiles where profile.isEnabled {
+            if let validationError = profile.validationError {
+                let title = profile.normalizedName.isEmpty
+                    ? localization.string("settings.provider.fallbackName", defaultValue: "翻译服务")
+                    : profile.normalizedName
+                return localization.format(
+                    "settings.error.providerValidationFormat",
+                    defaultValue: "%@：%@",
+                    title,
+                    validationError.errorDescription(localization: localization)
+                )
+            }
         }
 
         do {
-            if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
-                try secretStore.saveAPIKey(normalizedAPIKey)
-                cachedAPIKey = normalizedAPIKey
-                didLoadAPIKey = true
-                apiKeyState = .present
-            } else if hasKnownAPIKey {
-                cachedAPIKey = nil
-                didLoadAPIKey = false
-                apiKeyState = .present
-            } else {
-                apiKeyState = .missing
-                onStateChange?()
-                return "API Key 不能为空。"
+            // 保存前先算出被移除的 profile（旧 providerProfiles 此时仍为持久化中的值）。
+            let retainedProfileIDs = Set(profiles.map(\.id))
+            let removedProfileIDs = providerProfiles
+                .map(\.id)
+                .filter { !retainedProfileIDs.contains($0) }
+
+            for profile in profiles where profile.isEnabled {
+                let apiKey = apiKeys[profile.id]
+                if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
+                    try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id)
+                    cachedAPIKeys[profile.id] = normalizedAPIKey
+                    didLoadProfileAPIKeys.insert(profile.id)
+                } else if try secretStore.containsAPIKey(forProfileID: profile.id) {
+                    cachedAPIKeys.removeValue(forKey: profile.id)
+                    didLoadProfileAPIKeys.remove(profile.id)
+                } else if profile.id == TranslatorProviderProfile.defaultID, hasKnownAPIKey {
+                    cachedAPIKeys.removeValue(forKey: profile.id)
+                    didLoadProfileAPIKeys.remove(profile.id)
+                } else {
+                    apiKeyState = .missing
+                    onStateChange?()
+                    if profiles.count == 1, profile.id == TranslatorProviderProfile.defaultID {
+                        return localization.string("settings.error.blankAPIKey", defaultValue: "API Key 不能为空。")
+                    }
+                    return localization.format(
+                        "settings.error.providerBlankAPIKeyFormat",
+                        defaultValue: "%@：API Key 不能为空。",
+                        profile.normalizedName.isEmpty
+                            ? localization.string("settings.provider.fallbackName", defaultValue: "翻译服务")
+                            : profile.normalizedName
+                    )
+                }
             }
-            configuration.save(to: storage)
+
+            // 清理已删除 profile 残留的 Keychain 凭据与缓存。
+            for removedID in removedProfileIDs {
+                try secretStore.deleteAPIKey(forProfileID: removedID)
+                cachedAPIKeys.removeValue(forKey: removedID)
+                didLoadProfileAPIKeys.remove(removedID)
+            }
+
+            try providerProfileStore.saveProfiles(profiles)
             languagePreferenceStore.savePair(languagePair)
-            providerConfiguration = configuration
+            providerProfiles = providerProfileStore.loadProfiles()
+            providerConfiguration = providerProfiles.first?.configuration
+                ?? OpenAICompatibleConfiguration(
+                    promptTemplate: OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
+                )
             self.languagePair = languagePair
+            cachedAPIKey = cachedAPIKeys[TranslatorProviderProfile.defaultID]
+            didLoadAPIKey = didLoadProfileAPIKeys.contains(TranslatorProviderProfile.defaultID)
+            apiKeyState = .present
             if let coordinator {
                 coordinator.close()
             } else {
@@ -335,31 +507,110 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     private func makeCoordinator() -> TranslatorCoordinator {
         TranslatorCoordinator(
             selectedTextCapturePipeline: selectedTextCapturePipeline,
+            screenshotRegionCapturer: screenshotRegionCapturer
+                ?? screenshotRegionCapturerFactory(screenRecordingPermissionProvider),
+            ocrTextRecognizer: ocrTextRecognizer ?? VisionOCRTextRecognizer(),
             languagePreferenceStore: LanguagePreferenceStore(storage: storage),
             providerFactory: translationProviderFactoryOverride ?? { [weak self] in
                 guard let self else {
-                    return .missing(message: "请先配置 OpenAI")
+                    return .missing(
+                        message: PluginLocalization(bundle: .main).string(
+                            "panelError.missingProvider",
+                            defaultValue: "请先启用翻译服务"
+                        )
+                    )
                 }
 
-                guard self.providerConfiguration.validationError == nil else {
-                    return .missing(message: "请先配置 OpenAI")
+                let resolvedProviders = self.resolvedTranslationProviders()
+                guard !resolvedProviders.isEmpty else {
+                    return .missing(message: self.localization.string("panelError.missingProvider", defaultValue: "请先启用翻译服务"))
                 }
 
-                self.loadCachedAPIKeyIfNeeded()
-                guard let trimmedKey = Self.normalizedAPIKey(self.cachedAPIKey) else {
-                    return .missing(message: "请先配置 OpenAI")
+                return .providers(resolvedProviders)
+            },
+            panelController: panelController,
+            localization: localization
+        )
+    }
+
+    private func resolvedTranslationProviders() -> [ResolvedTranslationProvider] {
+        // 在解析前捕获状态：loadAPIKey 会通过 updateLegacyAPIKeyCacheIfNeeded 提前改写 apiKeyState，
+        // 故比较基准须取解析开始前的值，否则会漏发状态变化通知。
+        let previousState = apiKeyState
+        let resolved = providerProfiles.filter(\.isEnabled).map { profile -> ResolvedTranslationProvider in
+            if let validationError = profile.validationError {
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName.isEmpty
+                        ? localization.string("settings.provider.fallbackName", defaultValue: "翻译服务")
+                        : profile.normalizedName,
+                    errorMessage: validationError.errorDescription(localization: localization)
+                )
+            }
+
+            do {
+                let apiKey = try loadAPIKey(for: profile.id)
+                guard let trimmedKey = Self.normalizedAPIKey(apiKey) else {
+                    return ResolvedTranslationProvider(
+                        id: profile.id,
+                        title: profile.normalizedName,
+                        errorMessage: localization.string("panelError.missingAPIKey", defaultValue: "请配置 API Key")
+                    )
                 }
 
-                return .provider(
-                    OpenAITranslationProviderAdapter(
-                        client: OpenAICompatibleClient(),
-                        configuration: self.providerConfiguration,
-                        apiKey: trimmedKey
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName,
+                    provider: OpenAITranslationProviderAdapter(
+                        client: OpenAICompatibleClient(localization: localization),
+                        configuration: profile.configuration,
+                        apiKey: trimmedKey,
+                        providerTitle: profile.normalizedName
                     )
                 )
-            },
-            panelController: panelController
-        )
+            } catch {
+                return ResolvedTranslationProvider(
+                    id: profile.id,
+                    title: profile.normalizedName,
+                    errorMessage: userFacingMessage(for: error)
+                )
+            }
+        }
+
+        updateAPIKeyState(forResolvedProviders: resolved, previousState: previousState)
+        return resolved
+    }
+
+    /// 在解析完所有启用 profile 后聚合整体密钥状态：只要存在一个可用 provider 即视为可用，
+    /// 避免单个缺失密钥的 profile 把整体状态拉成 missing。
+    private func updateAPIKeyState(
+        forResolvedProviders resolved: [ResolvedTranslationProvider],
+        previousState: APIKeyState
+    ) {
+        guard !resolved.isEmpty else { return }
+        apiKeyState = resolved.contains { $0.provider != nil } ? .present : .missing
+        if apiKeyState != previousState {
+            onStateChange?()
+        }
+    }
+
+    private func userFacingMessage(for error: Error) -> String {
+        if let error = error as? OpenAICompatibleClientError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? OpenAICompatibleConfigurationError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? TranslationPromptRendererError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? OpenAICompatibleSecretStoreError {
+            return error.errorDescription(localization: localization)
+        }
+        if let error = error as? TranslatorProviderProfileValidationError {
+            return error.errorDescription(localization: localization)
+        }
+        return error.localizedDescription
     }
 
     private static func hasNonEmptyAPIKey(_ apiKey: String?) -> Bool {
@@ -393,5 +644,44 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         if apiKeyState != previousState {
             onStateChange?()
         }
+    }
+
+    private func loadAPIKey(for profileID: String) throws -> String? {
+        if didLoadProfileAPIKeys.contains(profileID) {
+            return cachedAPIKeys[profileID]
+        }
+
+        let profileKey = try secretStore.loadAPIKey(forProfileID: profileID)
+        if Self.hasNonEmptyAPIKey(profileKey) {
+            cachedAPIKeys[profileID] = profileKey
+            didLoadProfileAPIKeys.insert(profileID)
+            updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: profileKey)
+            return profileKey
+        }
+
+        if profileID == TranslatorProviderProfile.defaultID {
+            let legacyKey = try secretStore.loadAPIKey()
+            if Self.hasNonEmptyAPIKey(legacyKey) {
+                cachedAPIKeys[profileID] = legacyKey
+                didLoadProfileAPIKeys.insert(profileID)
+                updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: legacyKey)
+                return legacyKey
+            }
+        }
+
+        cachedAPIKeys.removeValue(forKey: profileID)
+        didLoadProfileAPIKeys.insert(profileID)
+        updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: nil)
+        return nil
+    }
+
+    private func updateLegacyAPIKeyCacheIfNeeded(profileID: String, apiKey: String?) {
+        guard profileID == TranslatorProviderProfile.defaultID else {
+            return
+        }
+
+        cachedAPIKey = apiKey
+        didLoadAPIKey = true
+        apiKeyState = Self.hasNonEmptyAPIKey(apiKey) ? .present : .missing
     }
 }

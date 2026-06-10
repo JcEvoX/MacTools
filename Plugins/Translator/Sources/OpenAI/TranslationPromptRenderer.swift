@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 struct TranslationPromptRenderer: Sendable {
     let template: String
@@ -29,9 +30,16 @@ enum TranslationPromptRendererError: Error, Equatable, Sendable {
 
 extension TranslationPromptRendererError: LocalizedError {
     var errorDescription: String? {
+        errorDescription()
+    }
+
+    func errorDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .missingTextPlaceholder:
-            return "提示词必须包含 {{text}}。"
+            return localization.string(
+                "translationPrompt.error.missingTextPlaceholder",
+                defaultValue: "提示词必须包含 {{text}}。"
+            )
         }
     }
 }

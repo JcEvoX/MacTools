@@ -2,7 +2,17 @@
   "id": "disk-clean",
   "displayName": "磁盘清理",
   "summary": "缓存、开发者缓存和浏览器缓存清理",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "磁盘清理",
+      "summary": "缓存、开发者缓存和浏览器缓存清理"
+    },
+    "en": {
+      "displayName": "Disk Cleanup",
+      "summary": "Clean caches, developer caches, and browser caches."
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DiskClean.bundle",

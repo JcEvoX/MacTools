@@ -2,7 +2,17 @@
   "id": "display-resolution",
   "displayName": "显示器分辨率",
   "summary": "查看并切换每个显示器的分辨率",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "显示器分辨率",
+      "summary": "查看并切换每个显示器的分辨率"
+    },
+    "en": {
+      "displayName": "Display Resolution",
+      "summary": "View and switch resolutions for each display."
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayResolution.bundle",

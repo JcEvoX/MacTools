@@ -2,7 +2,17 @@
   "id": "auto-hide-menu-bar",
   "displayName": "自动隐藏菜单栏",
   "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间",
-  "version": "1.0.3",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "自动隐藏菜单栏",
+      "summary": "自动隐藏菜单栏，提供更完整的屏幕显示空间"
+    },
+    "en": {
+      "displayName": "Auto-hide Menu Bar",
+      "summary": "Hide the menu bar automatically for more screen space."
+    }
+  },
+  "version": "1.0.4",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AutoHideMenuBar.bundle",

@@ -1,4 +1,5 @@
 import SwiftUI
+import MacToolsPluginKit
 
 struct IPOverviewComponentView: View {
     private enum Layout {
@@ -7,6 +8,7 @@ struct IPOverviewComponentView: View {
     }
 
     @ObservedObject var viewModel: IPOverviewViewModel
+    let localization: PluginLocalization
     let startsInDetails: Bool
     let showsBackButton: Bool
     @State private var customName = ""
@@ -15,10 +17,12 @@ struct IPOverviewComponentView: View {
 
     init(
         viewModel: IPOverviewViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         startsInDetails: Bool = false,
         showsBackButton: Bool = true
     ) {
         self.viewModel = viewModel
+        self.localization = localization
         self.startsInDetails = startsInDetails
         self.showsBackButton = showsBackButton
     }
@@ -52,10 +56,13 @@ struct IPOverviewComponentView: View {
                         .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("IP 检测")
+                        Text(localization.string("component.title", defaultValue: "IP 检测"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        Text(viewModel.snapshot.preferredGeoInfo?.locationText ?? "公网、归属地与连通性")
+                        Text(viewModel.snapshot.preferredGeoInfo?.locationText ?? localization.string(
+                            "landing.subtitle",
+                            defaultValue: "公网、归属地与连通性"
+                        ))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -75,9 +82,20 @@ struct IPOverviewComponentView: View {
                 }
 
                 HStack(alignment: .top, spacing: 8) {
-                    landingMetric(title: "IPv4", value: viewModel.snapshot.publicIPv4?.ip ?? "检测中")
-                    landingMetric(title: "IPv6", value: viewModel.snapshot.publicIPv6?.ip ?? "未检测到")
-                    landingMetric(title: "本地", value: viewModel.snapshot.localAddresses.first?.address ?? "等待")
+                    landingMetric(
+                        title: "IPv4",
+                        value: viewModel.snapshot.publicIPv4?.ip
+                            ?? localization.string("common.checking", defaultValue: "检测中")
+                    )
+                    landingMetric(
+                        title: "IPv6",
+                        value: viewModel.snapshot.publicIPv6?.ip ?? notDetectedText
+                    )
+                    landingMetric(
+                        title: localization.string("landing.local", defaultValue: "本地"),
+                        value: viewModel.snapshot.localAddresses.first?.address
+                            ?? localization.string("common.waiting", defaultValue: "等待")
+                    )
                 }
             }
             .padding(10)
@@ -93,8 +111,16 @@ struct IPOverviewComponentView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
-                    ipCard(index: 1, title: "IP 来源: IPCheck.ing IPv4", result: viewModel.snapshot.publicIPv4)
-                    ipCard(index: 2, title: "IP 来源: IPCheck.ing IPv6", result: viewModel.snapshot.publicIPv6)
+                    ipCard(
+                        index: 1,
+                        title: localization.string("ipCard.ipv4.title", defaultValue: "IP 来源: IPCheck.ing IPv4"),
+                        result: viewModel.snapshot.publicIPv4
+                    )
+                    ipCard(
+                        index: 2,
+                        title: localization.string("ipCard.ipv6.title", defaultValue: "IP 来源: IPCheck.ing IPv6"),
+                        result: viewModel.snapshot.publicIPv6
+                    )
                     localAddressSection
                     connectivitySection
                     webRTCLeakSection
@@ -119,10 +145,10 @@ struct IPOverviewComponentView: View {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-                .help("返回概览")
+                .help(localization.string("detail.back.help", defaultValue: "返回概览"))
             }
 
-            Text("IP 详情")
+            Text(localization.string("detail.title", defaultValue: "IP 详情"))
                 .font(.headline)
 
             Spacer(minLength: 8)
@@ -139,16 +165,16 @@ struct IPOverviewComponentView: View {
             }
             .buttonStyle(.borderless)
             .disabled(viewModel.isRefreshingAll)
-            .help("刷新全部检测")
+            .help(localization.string("detail.refresh.help", defaultValue: "刷新全部检测"))
 
             Button {
-                viewModel.copy(viewModel.snapshot.reportText)
+                viewModel.copy(viewModel.snapshot.reportText(localization: localization))
             } label: {
                 Image(systemName: "doc.on.doc")
             }
             .buttonStyle(.borderless)
             .disabled(viewModel.snapshot.lastUpdated == nil)
-            .help("复制完整检测结果")
+            .help(localization.string("detail.copyReport.help", defaultValue: "复制完整检测结果"))
         }
     }
 
@@ -210,7 +236,7 @@ struct IPOverviewComponentView: View {
                                 .foregroundStyle(.secondary)
                             Text("ASN")
                                 .foregroundStyle(.secondary)
-                            Text(geoInfo.asn ?? "未知")
+                            Text(geoInfo.asn ?? unknownText)
                                 .font(.system(.body, design: .monospaced))
                             Spacer(minLength: 6)
                             Button {
@@ -223,7 +249,7 @@ struct IPOverviewComponentView: View {
                         }
                         .font(.caption)
                     } else {
-                        Text("归属地信息获取中或不可用")
+                        Text(localization.string("ipCard.geoUnavailable", defaultValue: "归属地信息获取中或不可用"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -234,7 +260,11 @@ struct IPOverviewComponentView: View {
                     Image(systemName: "exclamationmark.circle")
                         .font(.system(size: 44))
                         .foregroundStyle(.secondary)
-                    Text("获取失败或不存在 \(index == 2 ? "IPv6" : "IPv4") 地址")
+                    Text(localization.format(
+                        "ipCard.failed",
+                        defaultValue: "获取失败或不存在 %@ 地址",
+                        index == 2 ? "IPv6" : "IPv4"
+                    ))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -251,9 +281,9 @@ struct IPOverviewComponentView: View {
 
     private func geoGrid(_ geoInfo: IPOverviewGeoInfo) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            locationValue(geoInfo.countryDisplayText ?? "未知", icon: "mappin")
-            locationValue(geoInfo.region ?? "未知", icon: "house")
-            locationValue(geoInfo.city ?? "未知", icon: "arrow.turn.down.right")
+            locationValue(geoInfo.countryDisplayText ?? unknownText, icon: "mappin")
+            locationValue(geoInfo.region ?? unknownText, icon: "house")
+            locationValue(geoInfo.city ?? unknownText, icon: "arrow.turn.down.right")
         }
     }
 
@@ -272,12 +302,28 @@ struct IPOverviewComponentView: View {
     private func networkGrid(_ geoInfo: IPOverviewGeoInfo) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
             GridRow {
-                infoCell(icon: "server.rack", title: "网络", value: geoInfo.organization ?? geoInfo.isp ?? "未知")
-                infoCell(icon: "chart.bar", title: "类型", value: geoInfo.networkType.rawValue)
+                infoCell(
+                    icon: "server.rack",
+                    title: localization.string("info.network", defaultValue: "网络"),
+                    value: geoInfo.organization ?? geoInfo.isp ?? unknownText
+                )
+                infoCell(
+                    icon: "chart.bar",
+                    title: localization.string("info.type", defaultValue: "类型"),
+                    value: geoInfo.networkType.title(localization: localization)
+                )
             }
             GridRow {
-                infoCell(icon: "shield", title: "代理", value: geoInfo.proxyText)
-                infoCell(icon: "clock", title: "时区", value: geoInfo.timezone ?? "未知")
+                infoCell(
+                    icon: "shield",
+                    title: localization.string("info.proxy", defaultValue: "代理"),
+                    value: geoInfo.proxyText(localization: localization)
+                )
+                infoCell(
+                    icon: "clock",
+                    title: localization.string("info.timezone", defaultValue: "时区"),
+                    value: geoInfo.timezone ?? unknownText
+                )
             }
         }
     }
@@ -297,10 +343,10 @@ struct IPOverviewComponentView: View {
 
     private var localAddressSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(title: "本地局域网 IP", icon: "wifi.router")
+            sectionHeader(title: localization.string("local.title", defaultValue: "本地局域网 IP"), icon: "wifi.router")
 
             if viewModel.snapshot.localAddresses.isEmpty {
-                Text("未检测到可用本地地址")
+                Text(localization.string("local.empty", defaultValue: "未检测到可用本地地址"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -329,7 +375,10 @@ struct IPOverviewComponentView: View {
     private var connectivitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                sectionHeader(title: "网络连通性", icon: "point.3.connected.trianglepath.dotted")
+                sectionHeader(
+                    title: localization.string("connectivity.title", defaultValue: "网络连通性"),
+                    icon: "point.3.connected.trianglepath.dotted"
+                )
                 Spacer(minLength: 4)
                 Button {
                     viewModel.checkConnectivity()
@@ -338,7 +387,7 @@ struct IPOverviewComponentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isCheckingConnectivity)
-                .help("刷新连通性")
+                .help(localization.string("connectivity.refresh.help", defaultValue: "刷新连通性"))
             }
 
             LazyVGrid(columns: [
@@ -358,9 +407,12 @@ struct IPOverviewComponentView: View {
 
     private var webRTCLeakSection: some View {
         leakSection(
-            title: "WebRTC 泄露测试",
+            title: localization.string("webrtc.title", defaultValue: "WebRTC 泄露测试"),
             icon: "network.badge.shield.half.filled",
-            note: "WebRTC 往往通过 UDP 直连进行建立，如果测试返回了真实 IP，则意味着你的代理设置没有覆盖这些连接。除了检测你连接 WebRTC 时所使用的 IP，我们还会检测你的 NAT 类型。然而，NAT 类型的检测并不是 100% 准确的，仅供参考。",
+            note: localization.string(
+                "webrtc.note",
+                defaultValue: "WebRTC 往往通过 UDP 直连进行建立，如果测试返回了真实 IP，则意味着你的代理设置没有覆盖这些连接。除了检测你连接 WebRTC 时所使用的 IP，我们还会检测你的 NAT 类型。然而，NAT 类型的检测并不是 100% 准确的，仅供参考。"
+            ),
             isRunning: viewModel.isCheckingWebRTC,
             action: { viewModel.checkWebRTCLeak() },
             results: viewModel.webRTCResults,
@@ -370,9 +422,12 @@ struct IPOverviewComponentView: View {
 
     private var dnsLeakSection: some View {
         leakSection(
-            title: "DNS 泄漏测试",
+            title: localization.string("dns.title", defaultValue: "DNS 泄漏测试"),
             icon: "octagon.fill",
-            note: "DNS 泄露（DNS Leaks）的意思是，当你挂上 VPN/代理后，你解析域名时，依然通过当地的运营商进行解析，这时就有 DNS 泄露的风险。\n\n泄露测试的方法是通过访问新生成的域名，检测你是通过哪个地区的 DNS 出口进行解析，如果返回的出口区域和你当地的运营商区域相同，则有 DNS 泄露风险，你可能需要修改 VPN/代理设置。",
+            note: localization.string(
+                "dns.note",
+                defaultValue: "DNS 泄露（DNS Leaks）的意思是，当你挂上 VPN/代理后，你解析域名时，依然通过当地的运营商进行解析，这时就有 DNS 泄露的风险。\n\n泄露测试的方法是通过访问新生成的域名，检测你是通过哪个地区的 DNS 出口进行解析，如果返回的出口区域和你当地的运营商区域相同，则有 DNS 泄露风险，你可能需要修改 VPN/代理设置。"
+            ),
             isRunning: viewModel.isCheckingDNSLeak,
             action: { viewModel.checkDNSLeak() },
             results: viewModel.dnsLeakResults,
@@ -452,19 +507,19 @@ struct IPOverviewComponentView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 10) {
                     if showsNAT {
-                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
+                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? unknownText)
                     }
-                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
-                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                    leakInfoLine(title: localization.string("leak.network", defaultValue: "网络"), value: leakEndpoint(result.status)?.organization ?? unknownText)
+                    leakInfoLine(title: localization.string("leak.exitRegion", defaultValue: "出口地区"), value: leakEndpoint(result.status)?.countryDisplayText ?? unknownText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 5) {
                     if showsNAT {
-                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? "未知")
+                        leakInfoLine(title: "NAT", value: leakEndpoint(result.status)?.natType ?? unknownText)
                     }
-                    leakInfoLine(title: "网络", value: leakEndpoint(result.status)?.organization ?? "未知")
-                    leakInfoLine(title: "出口地区", value: leakEndpoint(result.status)?.countryDisplayText ?? "未知")
+                    leakInfoLine(title: localization.string("leak.network", defaultValue: "网络"), value: leakEndpoint(result.status)?.organization ?? unknownText)
+                    leakInfoLine(title: localization.string("leak.exitRegion", defaultValue: "出口地区"), value: leakEndpoint(result.status)?.countryDisplayText ?? unknownText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -524,7 +579,7 @@ struct IPOverviewComponentView: View {
     private var customTargetForm: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                TextField("名称", text: $customName)
+                TextField(localization.string("customTarget.name.placeholder", defaultValue: "名称"), text: $customName)
                     .textFieldStyle(.roundedBorder)
                 TextField("https://example.com", text: $customURL)
                     .textFieldStyle(.roundedBorder)
@@ -548,7 +603,10 @@ struct IPOverviewComponentView: View {
     private var privacyFooter: some View {
         HStack(spacing: 6) {
             Image(systemName: "lock.shield")
-            Text("公网、归属地和连通性检测会请求外部服务；本地地址仅在本机读取。")
+            Text(localization.string(
+                "privacy.footer",
+                defaultValue: "公网、归属地和连通性检测会请求外部服务；本地地址仅在本机读取。"
+            ))
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
@@ -603,13 +661,13 @@ struct IPOverviewComponentView: View {
     private func connectivityText(_ status: IPOverviewConnectivityResult.Status) -> String {
         switch status {
         case .waiting:
-            return "等待检测"
+            return localization.string("status.waiting", defaultValue: "等待检测")
         case .checking:
-            return "检测中"
+            return localization.string("status.checking", defaultValue: "检测中")
         case .reachable(let milliseconds):
             return "\(milliseconds) ms"
         case .unreachable:
-            return "不可达"
+            return localization.string("connectivity.unreachable", defaultValue: "不可达")
         }
     }
 
@@ -637,13 +695,21 @@ struct IPOverviewComponentView: View {
     private func leakPrimaryText(_ status: IPOverviewLeakTestResult.Status) -> String {
         switch status {
         case .waiting:
-            return "等待检测"
+            return localization.string("status.waiting", defaultValue: "等待检测")
         case .checking:
-            return "检测中"
+            return localization.string("status.checking", defaultValue: "检测中")
         case .success(let endpoint):
             return endpoint.ip
         case .failure:
-            return "获取失败"
+            return localization.string("leak.failed", defaultValue: "获取失败")
         }
+    }
+
+    private var unknownText: String {
+        localization.string("common.unknown", defaultValue: "未知")
+    }
+
+    private var notDetectedText: String {
+        localization.string("common.notDetected", defaultValue: "未检测到")
     }
 }

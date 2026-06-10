@@ -7,6 +7,12 @@ final class ActivityBarController: ObservableObject {
     static let pluginID = ActivityBarConstants.pluginID
     static let defaultSocketPath = ActivityBarConstants.defaultSocketPath
 
+    enum HookInstallState: Equatable {
+        case notInstalled
+        case installed(timestamp: String)
+        case failed
+    }
+
     private enum StorageKey {
         static let isTrackingEnabled = "activity-bar.tracking.enabled"
         static let hooksInstalledAt = "activity-bar.hooks.installed-at"
@@ -14,8 +20,9 @@ final class ActivityBarController: ObservableObject {
 
     @Published private(set) var isTrackingEnabled: Bool
     @Published private(set) var lastErrorMessage: String?
-    @Published private(set) var hookStatusMessage: String?
+    @Published private(set) var hookInstallState: HookInstallState = .notInstalled
 
+    let localization: PluginLocalization
     let inputStats: ActivityBarStatsStore
     let codingStats: ActivityBarCodingSessionStore
 
@@ -32,7 +39,8 @@ final class ActivityBarController: ObservableObject {
         socketServer: (any ActivityBarSocketServing)? = nil,
         inputStats: ActivityBarStatsStore? = nil,
         codingStats: ActivityBarCodingSessionStore? = nil,
-        hookInstallerPaths: ActivityBarHookInstallerPaths? = nil
+        hookInstallerPaths: ActivityBarHookInstallerPaths? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         let resolvedInputStats = inputStats ?? ActivityBarStatsStore(storage: context.storage)
         let resolvedCodingStats = codingStats ?? ActivityBarCodingSessionStore(storage: context.storage)
@@ -47,6 +55,7 @@ final class ActivityBarController: ObservableObject {
         }
 
         storage = context.storage
+        self.localization = localization
         self.inputStats = resolvedInputStats
         self.codingStats = resolvedCodingStats
         self.inputMonitor = resolvedInputMonitor
@@ -63,7 +72,18 @@ final class ActivityBarController: ObservableObject {
         }
 
         if let installedAt = context.storage.string(forKey: StorageKey.hooksInstalledAt) {
-            hookStatusMessage = "已安装：\(installedAt)"
+            hookInstallState = .installed(timestamp: installedAt)
+        }
+    }
+
+    var hookStatusMessage: String? {
+        switch hookInstallState {
+        case .notInstalled:
+            return nil
+        case .installed(let timestamp):
+            return localization.format("hook.status.installedWithDate", defaultValue: "已安装：%@", timestamp)
+        case .failed:
+            return localization.string("hook.status.installFailed", defaultValue: "安装失败")
         }
     }
 
@@ -85,30 +105,44 @@ final class ActivityBarController: ObservableObject {
         }
 
         if isTrackingEnabled {
-            return "今日 \(ActivityBarFormatting.count(todayInputStats.totalInputs)) 次输入"
+            return localization.format(
+                "panel.subtitle.todayInputs",
+                defaultValue: "今日 %@ 次输入",
+                ActivityBarFormatting.count(todayInputStats.totalInputs)
+            )
         }
 
-        return "统计输入与 AI 编程活动"
+        return localization.string("panel.subtitle.default", defaultValue: "统计输入与 AI 编程活动")
     }
 
     var componentSubtitle: String {
         if isTrackingEnabled {
-            return "\(ActivityBarFormatting.count(todayInputStats.totalInputs)) 次输入"
+            return localization.format(
+                "component.subtitle.inputs",
+                defaultValue: "%@ 次输入",
+                ActivityBarFormatting.count(todayInputStats.totalInputs)
+            )
         }
-        return "未开启"
+        return localization.string("component.subtitle.disabled", defaultValue: "未开启")
     }
 
     var inputMonitoringFootnote: String? {
         switch inputMonitor.status {
         case .inputMonitoringDenied:
-            return "键盘、鼠标和滚动统计需要在系统设置中允许 MacTools 进行输入监控。前台应用使用时长仍可记录。"
+            return localization.string(
+                "settings.inputMonitoring.footnote",
+                defaultValue: "键盘、鼠标和滚动统计需要在系统设置中允许 MacTools 进行输入监控。前台应用使用时长仍可记录。"
+            )
         case .idle, .running:
             return nil
         }
     }
 
     var hookInstallFootnote: String {
-        "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；脚本只在本机通过 Unix socket 发送活动事件。"
+        localization.string(
+            "settings.aiHooks.footnote",
+            defaultValue: "点击后会写入 Claude Code、Cursor 和 Codex 的 hook 配置；脚本只在本机通过 Unix socket 发送活动事件。"
+        )
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -162,14 +196,18 @@ final class ActivityBarController: ObservableObject {
             let summary = try installer.install()
             let timestamp = Self.installTimestamp()
             storage.set(timestamp, forKey: StorageKey.hooksInstalledAt)
-            hookStatusMessage = "已安装：\(timestamp)"
+            hookInstallState = .installed(timestamp: timestamp)
             lastErrorMessage = nil
             ActivityBarLog.hooks.info(
                 "Activity bar hooks installed in \(summary.scriptDirectory.path, privacy: .public)"
             )
         } catch {
-            lastErrorMessage = "Hook 安装失败：\(error.localizedDescription)"
-            hookStatusMessage = "安装失败"
+            lastErrorMessage = localization.format(
+                "error.hook.installFailed",
+                defaultValue: "Hook 安装失败：%@",
+                localizedDescription(for: error)
+            )
+            hookInstallState = .failed
             ActivityBarLog.hooks.error("Activity bar hook installation failed: \(error.localizedDescription, privacy: .public)")
         }
 
@@ -187,7 +225,11 @@ final class ActivityBarController: ObservableObject {
         do {
             try socketServer.start()
         } catch {
-            lastErrorMessage = "AI 活动监听启动失败：\(error.localizedDescription)"
+            lastErrorMessage = localization.format(
+                "error.socket.startFailed",
+                defaultValue: "AI 活动监听启动失败：%@",
+                localizedDescription(for: error)
+            )
             ActivityBarLog.socket.error("Activity bar socket start failed: \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -209,6 +251,16 @@ final class ActivityBarController: ObservableObject {
     private func notifyChange() {
         objectWillChange.send()
         onStateChange?()
+    }
+
+    private func localizedDescription(for error: Error) -> String {
+        if let hookError = error as? ActivityBarHookInstallerError {
+            return hookError.localizedDescription(localization: localization)
+        }
+        if let socketError = error as? ActivityBarSocketError {
+            return socketError.localizedDescription(localization: localization)
+        }
+        return error.localizedDescription
     }
 
     private static func installTimestamp() -> String {

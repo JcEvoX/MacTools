@@ -88,7 +88,17 @@ final class PluginPackageStoreTests: XCTestCase {
 
         let record = try XCTUnwrap(store.installedRecords().first)
 
-        XCTAssertEqual(record.state, .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。"))
+        XCTAssertEqual(
+            record.state,
+            .incompatible(
+                AppL10n.pluginsFormat(
+                    "plugin.error.store.installedSDKIncompatibleFormat",
+                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                    1,
+                    PluginPackageManifestLoader.supportedPluginKitVersion
+                )
+            )
+        )
     }
 
     func testUninstallDeletesPackageAndCanRemoveStorage() throws {

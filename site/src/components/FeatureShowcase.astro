@@ -1,0 +1,56 @@
+---
+const highlights = [
+  {
+    title: "显示器和桌面",
+    titleEn: "Display and desktop",
+    body: "亮度、分辨率、夜览、外接屏回退链路和菜单栏空间管理集中处理。",
+    bodyEn: "Brightness, resolution, Night Shift, fallback routes, and desktop space controls stay close.",
+  },
+  {
+    title: "清理和维护",
+    titleEn: "Cleanup and maintenance",
+    body: "磁盘缓存、Xcode 派生数据、废纸篓和损坏应用修复都有明确的安全边界。",
+    bodyEn: "Disk caches, Xcode data, Trash, and damaged app fixes run with explicit safety boundaries.",
+  },
+  {
+    title: "启动和自动化",
+    titleEn: "Launch and automate",
+    body: "启动台、App 快捷键、剪贴板、锁屏和常用系统动作使用全局快捷键触发。",
+    bodyEn: "Launch apps, run shortcuts, clear clipboard, lock the screen, and trigger common actions fast.",
+  },
+  {
+    title: "插件化扩展",
+    titleEn: "Plugin extension",
+    body: "插件包、在线 catalog、权限卡片和设置页由宿主统一管理。",
+    bodyEn: "Plugin packages, online catalogs, permissions, shortcuts, and settings share one host system.",
+  },
+];
+---
+
+<section class="showcase" id="features" aria-labelledby="features-title">
+  <div class="section-heading">
+    <h2 id="features-title">
+      <span data-i18n-zh>系统工具，统一入口。</span>
+      <span data-i18n-en>System utilities, one entry point.</span>
+    </h2>
+    <p>
+      <span data-i18n-zh>菜单栏快速执行，组件面板持续查看，设置页管理权限、快捷键和插件。</span>
+      <span data-i18n-en>Run actions from the menu bar, monitor state in components, and manage permissions, shortcuts, and plugins in settings.</span>
+    </p>
+  </div>
+
+  <div class="feature-strip" aria-label="核心能力">
+    {highlights.map((item) => (
+      <article>
+        <h3>
+          <span data-i18n-zh>{item.title}</span>
+          <span data-i18n-en>{item.titleEn}</span>
+        </h3>
+        <p>
+          <span data-i18n-zh>{item.body}</span>
+          <span data-i18n-en>{item.bodyEn}</span>
+        </p>
+      </article>
+    ))}
+  </div>
+</section>

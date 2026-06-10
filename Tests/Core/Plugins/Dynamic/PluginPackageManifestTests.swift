@@ -87,13 +87,24 @@ final class PluginPackageManifestTests: XCTestCase {
           "capabilities": { "primaryPanel": true, "componentPanel": false, "configuration": false },
           "permissions": [],
           "category": "display",
-          "releaseChannel": "beta"
+          "releaseChannel": "beta",
+          "localizedMetadata": {
+            "en": {
+              "displayName": "Demo",
+              "summary": "Demo plugin"
+            },
+            "zh-Hans": {
+              "displayName": "示例",
+              "summary": "示例插件"
+            }
+          }
         }
         """.data(using: .utf8)!
 
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertEqual(manifest.category, "display")
         XCTAssertEqual(manifest.releaseChannel, "beta")
+        XCTAssertEqual(manifest.localizedMetadata?["en"]?.summary, "Demo plugin")
     }
 
     func testManifestDecodesWithoutCategoryAndReleaseChannelGracefully() throws {
@@ -114,5 +125,57 @@ final class PluginPackageManifestTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginPackageManifest.self, from: json)
         XCTAssertNil(manifest.category)
         XCTAssertNil(manifest.releaseChannel)
+    }
+
+    func testLocalizedMetadataMatchesPreferredLanguageAndFallbacks() {
+        let metadata = [
+            "en": PluginLocalizedMetadata(displayName: "Calendar", summary: "Events"),
+            "zh-Hans": PluginLocalizedMetadata(displayName: "日历", summary: "日程"),
+            "zh-Hant": PluginLocalizedMetadata(displayName: "行事曆", summary: "事件")
+        ]
+
+        XCTAssertEqual(
+            PluginLocalizationMatcher.localizedMetadata(
+                from: metadata,
+                preferredLanguages: ["en-US"]
+            )?.displayName,
+            "Calendar"
+        )
+        XCTAssertEqual(
+            PluginLocalizationMatcher.localizedMetadata(
+                from: metadata,
+                preferredLanguages: ["zh-HK"]
+            )?.displayName,
+            "行事曆"
+        )
+        XCTAssertEqual(
+            PluginLocalizationMatcher.localizedMetadata(
+                from: metadata,
+                preferredLanguages: ["fr-FR"]
+            )?.displayName,
+            "Calendar"
+        )
+    }
+
+    func testLocalizedMetadataUsesAppleLanguagesOverrideBeforeSystemLanguages() throws {
+        let metadata = [
+            "en": PluginLocalizedMetadata(displayName: "Calendar", summary: "Events"),
+            "zh-Hans": PluginLocalizedMetadata(displayName: "日历", summary: "日程")
+        ]
+        let suiteName = "PluginLocalizationMatcherTests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        userDefaults.set(["en"], forKey: "AppleLanguages")
+
+        XCTAssertEqual(
+            PluginLocalizationMatcher.localizedMetadata(
+                from: metadata,
+                userDefaults: userDefaults
+            )?.displayName,
+            "Calendar"
+        )
     }
 }

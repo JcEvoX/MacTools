@@ -1,0 +1,482 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "metadata.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean Mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清洁模式"
+          }
+        }
+      }
+    },
+    "metadata.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Black out the screen and temporarily block keyboard input."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕全黑并临时禁用键盘输入"
+          }
+        }
+      }
+    },
+    "permission.accessibility.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辅助功能授权"
+          }
+        }
+      }
+    },
+    "permission.accessibility.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility permission is required for Clean Mode."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辅助功能权限是清洁模式运行所需的必要权限。"
+          }
+        }
+      }
+    },
+    "shortcut.exit.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit Clean Mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出清洁模式"
+          }
+        }
+      }
+    },
+    "shortcut.exit.description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restores input and closes the black screen overlay while Clean Mode is active."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清洁模式启用时用于恢复输入和关闭黑屏覆盖的快捷键。"
+          }
+        }
+      }
+    },
+    "shortcut.exit.settingsGroupTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit Shortcut"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出快捷键"
+          }
+        }
+      }
+    },
+    "shortcut.exit.settingsGroupDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restores input and closes the black screen overlay while Clean Mode is active."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清洁模式启用时恢复输入并关闭黑屏覆盖。"
+          }
+        }
+      }
+    },
+    "shortcut.exit.settingsControlTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出"
+          }
+        }
+      }
+    },
+    "panel.subtitle.enabledExitFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On. Press %@ to exit."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已启用，使用 %@ 退出"
+          }
+        }
+      }
+    },
+    "panel.subtitle.needsAccessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires Accessibility permission"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用前需要辅助功能授权"
+          }
+        }
+      }
+    },
+    "error.accessibilityRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean Mode requires Accessibility permission. Grant it in Settings first."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清洁模式需要辅助功能权限，请先前往设置完成授权。"
+          }
+        }
+      }
+    },
+    "error.accessibilityRevokedEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility permission was revoked. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辅助功能授权已失效，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "error.invalidExitShortcut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set a valid exit shortcut for this feature first."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在功能中设置有效的退出快捷键。"
+          }
+        }
+      }
+    },
+    "overlay.exit.keyboardFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press %@ to exit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按 %@ 退出"
+          }
+        }
+      }
+    },
+    "overlay.exit.rightMouseFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or hold right mouse button for %ds"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "或长按鼠标右键 %ds 退出"
+          }
+        }
+      }
+    },
+    "session.error.eventTapUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to create the input interceptor. Confirm Accessibility permission is granted."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建输入拦截器，请确认已授予辅助功能权限。"
+          }
+        }
+      }
+    },
+    "session.error.runLoopSourceUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to initialize the input interceptor run loop."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法初始化输入拦截运行循环。"
+          }
+        }
+      }
+    },
+    "session.error.missingScreens": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No available screens detected. Clean Mode cannot start."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未检测到可用屏幕，无法进入清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.overlayWindowCreationFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to create the screen overlay. Clean Mode was canceled."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法创建屏幕覆盖窗口，已取消进入清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.idleLockPreventionFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to prevent idle lock. Clean Mode was canceled."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法启用防空闲锁屏保护，已取消进入清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.overlayWindowUnexpectedlyClosed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Clean Mode overlay closed unexpectedly. System input has been restored."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清洁模式覆盖窗口意外关闭，已恢复系统输入。"
+          }
+        }
+      }
+    },
+    "session.error.workspaceInactiveEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current session was locked or switched out. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前会话已锁定或切出，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.screensDidSleepEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The screen went to sleep. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "屏幕已进入睡眠，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.systemWillSleepEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system is about to sleep. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统即将进入睡眠，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.eventTapTimeoutEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input interception failed to restart. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入拦截重启失败，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.eventTapUserInputEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input interception was disabled by the system and could not recover. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入拦截被系统停用且无法恢复，已自动退出清洁模式。"
+          }
+        }
+      }
+    },
+    "session.error.eventTapRepeatedlyDisabledEmergencyExit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input interception was disabled repeatedly. Clean Mode has exited."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入拦截被系统连续停用，已自动退出清洁模式。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

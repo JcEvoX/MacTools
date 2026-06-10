@@ -12,37 +12,48 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.metadata.id, "translator")
         XCTAssertEqual(plugin.metadata.title, "翻译")
-        XCTAssertEqual(plugin.metadata.defaultDescription, "划词快捷键翻译")
+        XCTAssertEqual(plugin.metadata.defaultDescription, "划词与截图快捷键翻译")
         XCTAssertNotNil(plugin.primaryPanel)
         XCTAssertNotNil(plugin.configuration)
     }
 
-    func testShortcutDefinitionUsesOptionD() throws {
+    func testShortcutDefinitionsIncludeSelectAndScreenshotTranslation() throws {
         let plugin = makePlugin()
-        let definition = try XCTUnwrap(plugin.shortcutDefinitions.first)
+        let definitions = plugin.shortcutDefinitions
+        let select = try XCTUnwrap(definitions.first { $0.id == "translator.select-translation" })
+        let screenshot = try XCTUnwrap(definitions.first { $0.id == "translator.screenshot-translation" })
 
-        XCTAssertEqual(definition.id, "translator.select-translation")
-        XCTAssertEqual(definition.title, "划词翻译")
-        XCTAssertEqual(definition.description, "翻译当前选中的文本。")
-        XCTAssertEqual(definition.actionID, "select-translation")
-        XCTAssertEqual(definition.scope, .global)
-        XCTAssertEqual(definition.defaultBinding?.keyCode, UInt16(kVK_ANSI_D))
-        XCTAssertEqual(definition.defaultBinding?.modifiers, [.option])
-        XCTAssertFalse(definition.isRequired)
+        XCTAssertEqual(definitions.count, 2)
+        XCTAssertEqual(select.title, "划词翻译")
+        XCTAssertEqual(select.description, "翻译当前选中的文本。")
+        XCTAssertEqual(select.actionID, "select-translation")
+        XCTAssertEqual(select.scope, .global)
+        XCTAssertEqual(select.defaultBinding?.keyCode, UInt16(kVK_ANSI_D))
+        XCTAssertEqual(select.defaultBinding?.modifiers, [.option])
+        XCTAssertFalse(select.isRequired)
+
+        XCTAssertEqual(screenshot.title, "截图翻译")
+        XCTAssertEqual(screenshot.description, "框选截图区域并翻译识别出的文字。")
+        XCTAssertEqual(screenshot.actionID, "screenshot-translation")
+        XCTAssertEqual(screenshot.scope, .global)
+        XCTAssertEqual(screenshot.defaultBinding?.keyCode, UInt16(kVK_ANSI_S))
+        XCTAssertEqual(screenshot.defaultBinding?.modifiers, [.option])
+        XCTAssertFalse(screenshot.isRequired)
     }
 
-    func testDeclaresAccessibilityAndAutomationPermissions() {
+    func testDeclaresAccessibilityAutomationAndScreenRecordingPermissions() {
         let plugin = makePlugin()
         let requirements = plugin.permissionRequirements
 
-        XCTAssertEqual(requirements.map(\.id), ["accessibility", "automation"])
-        XCTAssertEqual(requirements.map(\.kind), [.accessibility, .automation])
-        XCTAssertEqual(requirements.map(\.title), ["辅助功能授权", "自动化授权"])
+        XCTAssertEqual(requirements.map(\.id), ["accessibility", "automation", "screen-recording"])
+        XCTAssertEqual(requirements.map(\.kind), [.accessibility, .automation, .screenRecording])
+        XCTAssertEqual(requirements.map(\.title), ["辅助功能授权", "自动化授权", "屏幕录制授权"])
         XCTAssertEqual(
             requirements.map(\.description),
             [
                 "划词翻译需要读取当前选中文本。",
                 "浏览器划词可能需要允许 MacTools 控制当前浏览器。",
+                "截图翻译需要读取框选区域的屏幕内容。",
             ]
         )
     }
@@ -106,7 +117,7 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(state.isVisible)
         XCTAssertTrue(state.isEnabled)
         XCTAssertTrue(state.isOn)
-        XCTAssertEqual(state.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(state.subtitle, "需要配置翻译服务")
     }
 
     func testPrimaryPanelDoesNotClaimOpenAIIsMissingBeforeAPIKeyStateIsKnown() {
@@ -116,7 +127,7 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertEqual(secretStore.loadCount, 0)
         XCTAssertEqual(secretStore.containsCount, 0)
-        XCTAssertEqual(state.subtitle, "按 ⌥D 翻译选中文本")
+        XCTAssertEqual(state.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
     func testPrimaryPanelShowsAccessibilitySubtitleBeforeOpenAISetupWhenPermissionIsMissing() {
@@ -147,7 +158,7 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testShortcutNotifiesHostWhenLazyAPIKeyLoadFindsMissingKey() async {
@@ -176,7 +187,7 @@ final class TranslatorPluginTests: XCTestCase {
         await capture.waitUntilCompleted()
 
         XCTAssertEqual(notificationCount, 1)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置 OpenAI")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "需要配置翻译服务")
     }
 
     func testPanelControllerClampsRestoredFrameIntoVisibleScreen() throws {
@@ -187,10 +198,13 @@ final class TranslatorPluginTests: XCTestCase {
         let controller = TranslatorPanelController()
         controller.show(snapshot: .idle)
         let panel = try XCTUnwrap(translatorPanel())
-        let visibleFrame = try XCTUnwrap((panel.screen ?? NSScreen.main)?.visibleFrame)
+        let allVisibleFrames = NSScreen.screens.map(\.visibleFrame)
+        let visibleFrameUnion = allVisibleFrames.reduce(NSRect.null) { partialResult, frame in
+            partialResult.union(frame)
+        }
         let offscreenFrame = NSRect(
-            x: visibleFrame.maxX + 1_000,
-            y: visibleFrame.maxY + 1_000,
+            x: visibleFrameUnion.maxX + 1_000,
+            y: visibleFrameUnion.maxY + 1_000,
             width: panel.frame.width,
             height: panel.frame.height
         )
@@ -199,10 +213,11 @@ final class TranslatorPluginTests: XCTestCase {
         controller.close()
         controller.show(snapshot: .idle)
 
-        XCTAssertGreaterThanOrEqual(panel.frame.minX, visibleFrame.minX)
-        XCTAssertLessThanOrEqual(panel.frame.maxX, visibleFrame.maxX)
-        XCTAssertGreaterThanOrEqual(panel.frame.minY, visibleFrame.minY)
-        XCTAssertLessThanOrEqual(panel.frame.maxY, visibleFrame.maxY)
+        let restoredVisibleFrame = try XCTUnwrap((panel.screen ?? NSScreen.main)?.visibleFrame)
+        XCTAssertGreaterThanOrEqual(panel.frame.minX, restoredVisibleFrame.minX)
+        XCTAssertLessThanOrEqual(panel.frame.maxX, restoredVisibleFrame.maxX)
+        XCTAssertGreaterThanOrEqual(panel.frame.minY, restoredVisibleFrame.minY)
+        XCTAssertLessThanOrEqual(panel.frame.maxY, restoredVisibleFrame.maxY)
     }
 
     func testConfigurationViewDoesNotLoadAPIKeyFromKeychain() throws {
@@ -244,7 +259,8 @@ final class TranslatorPluginTests: XCTestCase {
         capture.resume()
         await capture.waitUntilCompleted()
 
-        XCTAssertEqual(secretStore.loadCount, 1)
+        // 默认 profile 未命中 profile 密钥时回退读取 legacy 单密钥，故加载两次存储项。
+        XCTAssertEqual(secretStore.loadCount, 2)
     }
 
     func testSavingBlankAPIKeyWithoutExistingKeyReturnsConfigurationError() {
@@ -283,9 +299,67 @@ final class TranslatorPluginTests: XCTestCase {
 
         XCTAssertNil(message)
         XCTAssertEqual(secretStore.loadCount, 0)
-        XCTAssertEqual(secretStore.containsCount, 1)
+        // 先检查 profile 密钥是否存在，未命中再回退检查 legacy 单密钥，故存在性检查两次。
+        XCTAssertEqual(secretStore.containsCount, 2)
         XCTAssertEqual(secretStore.saveCount, 0)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 翻译选中文本")
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 划词，⌥S 截图")
+    }
+
+    func testSavingProfilesDeletesKeychainEntriesForRemovedProfiles() {
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        let plugin = makePlugin(secretStore: secretStore)
+        let first = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let second = TranslatorProviderProfile(id: "second", name: "Second")
+        let languagePair = TranslatorLanguagePair(first: .english, second: .simplifiedChinese)
+
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first, second],
+            apiKeys: [first.id: "sk-1", second.id: "sk-2"],
+            languagePair: languagePair
+        ))
+
+        // 第二次保存移除了 second，应清理它残留的 Keychain 凭据。
+        XCTAssertNil(plugin.saveConfiguration(
+            profiles: [first],
+            apiKeys: [first.id: "sk-1"],
+            languagePair: languagePair
+        ))
+
+        XCTAssertEqual(secretStore.deletedProfileIDs, ["second"])
+    }
+
+    func testAPIKeyStatePresentWhenOneEnabledProfileHealthyAndAnotherMissesKey() async {
+        let storage = TranslatorInMemoryPluginStorage()
+        let healthy = TranslatorProviderProfile(id: "openai", name: "OpenAI")
+        let missing = TranslatorProviderProfile(id: "second", name: "Second")
+        try? TranslatorProviderProfileStore(storage: storage).saveProfiles([healthy, missing])
+
+        let secretStore = CountingTranslatorSecretStore(apiKey: nil)
+        // 仅 healthy profile 有可用密钥，missing profile 缺密钥。
+        try? secretStore.saveAPIKey("sk-1", forProfileID: healthy.id)
+
+        let capture = DeferredSelectedTextCapture(
+            result: SelectedTextCaptureResult(
+                text: "hello",
+                strategyID: .accessibility,
+                isEditable: false,
+                sourceApplicationBundleID: "com.example.app",
+                failureReason: nil
+            )
+        )
+        let plugin = makePlugin(
+            storage: storage,
+            secretStore: secretStore,
+            selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: [capture])
+        )
+
+        plugin.handleShortcutAction(id: "select-translation")
+        await capture.waitUntilStarted()
+        capture.resume()
+        await capture.waitUntilCompleted()
+
+        // 存在一个可用 provider，整体状态应保持可用，而非被缺密钥的 profile 拉成 missing。
+        XCTAssertEqual(plugin.primaryPanelState.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
@@ -315,6 +389,41 @@ final class TranslatorPluginTests: XCTestCase {
         plugin.handleShortcutAction(id: "select-translation")
 
         XCTAssertTrue(storage.bool(forKey: "handler.invoked"))
+    }
+
+    func testShortcutActionStartsScreenshotTranslationWhenEnabled() {
+        let storage = TranslatorInMemoryPluginStorage()
+        let plugin = makePlugin(storage: storage, screenshotTranslationStarter: {
+            storage.set(true, forKey: "screenshot.invoked")
+        })
+
+        plugin.handleShortcutAction(id: "screenshot-translation")
+
+        XCTAssertTrue(storage.bool(forKey: "screenshot.invoked"))
+    }
+
+    func testScreenshotShortcutUsesPluginScreenRecordingPermissionProvider() async {
+        let storage = TranslatorInMemoryPluginStorage()
+        let screenshotCapturer = RecordingPluginScreenshotRegionCapturer(
+            permissionProvider: { true },
+            result: .failure(.cancelled)
+        )
+        let plugin = makePlugin(
+            storage: storage,
+            screenRecordingPermissionProvider: { false },
+            screenshotRegionCapturerFactory: { permissionProvider in
+                screenshotCapturer.permissionProvider = permissionProvider
+                return screenshotCapturer
+            },
+            translationProviderFactoryOverride: {
+                .provider(RecordingTranslationProvider(resultText: "unused"))
+            }
+        )
+
+        plugin.handleShortcutAction(id: "screenshot-translation")
+        await screenshotCapturer.waitUntilCaptureCount(1)
+
+        XCTAssertEqual(screenshotCapturer.permissionChecks, [false])
     }
 
     func testShortcutActionDoesNotStartSelectTranslationWhenDisabled() {
@@ -532,10 +641,13 @@ final class TranslatorPluginTests: XCTestCase {
         storage: TranslatorInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
         accessibilityTrustRequester: @escaping (Bool) -> Bool = { _ in true },
+        screenRecordingPermissionProvider: @escaping () -> Bool = { true },
         selectTranslationStarter: (() -> Void)? = nil,
+        screenshotTranslationStarter: (() -> Void)? = nil,
         secretStore: (any TranslatorSecretStoring)? = nil,
         panelController: (any TranslatorPanelControlling)? = nil,
         selectedTextCapturePipeline: SelectedTextCapturePipeline? = nil,
+        screenshotRegionCapturerFactory: ScreenshotRegionCapturerFactory? = nil,
         translationProviderFactoryOverride: TranslatorProviderFactory? = nil
     ) -> TranslatorPlugin {
         let storage = storage ?? TranslatorInMemoryPluginStorage()
@@ -544,10 +656,13 @@ final class TranslatorPluginTests: XCTestCase {
             context: PluginRuntimeContext(pluginID: "translator", storage: storage),
             accessibilityTrustProvider: accessibilityTrustProvider,
             accessibilityTrustRequester: accessibilityTrustRequester,
+            screenRecordingPermissionProvider: screenRecordingPermissionProvider,
             selectTranslationStarter: selectTranslationStarter,
+            screenshotTranslationStarter: screenshotTranslationStarter,
             secretStore: secretStore ?? OpenAICompatibleSecretStore(service: uniqueTestKeychainService()),
             panelController: panelController ?? TranslatorPanelController(),
             selectedTextCapturePipeline: selectedTextCapturePipeline ?? .live(),
+            screenshotRegionCapturerFactory: screenshotRegionCapturerFactory,
             translationProviderFactoryOverride: translationProviderFactoryOverride
         )
     }
@@ -571,9 +686,11 @@ final class TranslatorPluginTests: XCTestCase {
 
 private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unchecked Sendable {
     private var apiKey: String?
+    private var profileAPIKeys: [String: String] = [:]
     private(set) var loadCount = 0
     private(set) var containsCount = 0
     private(set) var saveCount = 0
+    private(set) var deletedProfileIDs: [String] = []
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -584,9 +701,19 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         return apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool {
+        containsCount += 1
+        return profileAPIKeys[profileID]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     func loadAPIKey() throws -> String? {
         loadCount += 1
         return apiKey
+    }
+
+    func loadAPIKey(forProfileID profileID: String) throws -> String? {
+        loadCount += 1
+        return profileAPIKeys[profileID]
     }
 
     func saveAPIKey(_ apiKey: String) throws {
@@ -594,8 +721,56 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
         self.apiKey = apiKey
     }
 
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        saveCount += 1
+        profileAPIKeys[profileID] = apiKey
+    }
+
     func deleteAPIKey() throws {
         apiKey = nil
+    }
+
+    func deleteAPIKey(forProfileID profileID: String) throws {
+        deletedProfileIDs.append(profileID)
+        profileAPIKeys.removeValue(forKey: profileID)
+    }
+}
+
+@MainActor
+private final class RecordingPluginScreenshotRegionCapturer: ScreenshotRegionCapturing {
+    var permissionProvider: () -> Bool
+    var result: ScreenshotCaptureResult
+    private(set) var permissionChecks: [Bool] = []
+    private(set) var captureCount = 0
+    private var captureCountWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    init(
+        permissionProvider: @escaping () -> Bool,
+        result: ScreenshotCaptureResult
+    ) {
+        self.permissionProvider = permissionProvider
+        self.result = result
+    }
+
+    func captureRegion() async -> ScreenshotCaptureResult {
+        captureCount += 1
+        permissionChecks.append(permissionProvider())
+        resumeCaptureCountWaiters()
+        return result
+    }
+
+    func waitUntilCaptureCount(_ expectedCount: Int) async {
+        if captureCount >= expectedCount { return }
+
+        await withCheckedContinuation { continuation in
+            captureCountWaiters.append((expectedCount, continuation))
+        }
+    }
+
+    private func resumeCaptureCountWaiters() {
+        let matching = captureCountWaiters.filter { captureCount >= $0.0 }
+        captureCountWaiters.removeAll { captureCount >= $0.0 }
+        matching.forEach { $0.1.resume() }
     }
 }
 

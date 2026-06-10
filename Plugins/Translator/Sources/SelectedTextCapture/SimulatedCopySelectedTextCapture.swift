@@ -2,13 +2,22 @@ import AppKit
 import ApplicationServices
 import Carbon
 import Foundation
+import MacToolsPluginKit
 
 struct SimulatedCopySelectedTextCapture: SelectedTextCapturing {
     let strategyID: SelectedTextCaptureStrategyID = .simulatedCopy
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+    }
 
     func capture(context: SelectedTextCaptureContext) async -> SelectedTextCaptureResult {
         guard AccessibilityCheck.isTrusted() else {
-            return failure(context: context, reason: "需要辅助功能授权")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.permissionRequired", defaultValue: "需要辅助功能授权")
+            )
         }
 
         // 触发快捷键（如 ⌥D）时用户可能仍按住修饰键，若此时注入 ⌘C，
@@ -22,19 +31,31 @@ struct SimulatedCopySelectedTextCapture: SelectedTextCapturing {
         let clearedChangeCount = pasteboard.changeCount
         guard sendCommandC() else {
             guard snapshot.restore(to: pasteboard) else {
-                return failure(context: context, reason: "无法恢复剪贴板")
+                return failure(
+                    context: context,
+                    reason: localization.string("capture.error.restorePasteboardFailed", defaultValue: "无法恢复剪贴板")
+                )
             }
-            return failure(context: context, reason: "模拟复制失败")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.simulatedCopyFailed", defaultValue: "模拟复制失败")
+            )
         }
 
         await waitForPasteboardChange(from: clearedChangeCount, in: pasteboard)
         let text = pasteboard.string(forType: .string)
         guard snapshot.restore(to: pasteboard) else {
-            return failure(context: context, reason: "无法恢复剪贴板")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.restorePasteboardFailed", defaultValue: "无法恢复剪贴板")
+            )
         }
 
         guard let text, !text.isEmpty else {
-            return failure(context: context, reason: "未找到选中文本")
+            return failure(
+                context: context,
+                reason: localization.string("capture.error.missingSelection", defaultValue: "未找到选中文本")
+            )
         }
 
         return SelectedTextCaptureResult(

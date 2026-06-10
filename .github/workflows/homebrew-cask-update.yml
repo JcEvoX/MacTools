@@ -1,11 +1,6 @@
 name: Homebrew Cask Update
 
 on:
-  workflow_run:
-    workflows:
-      - Release
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       version:

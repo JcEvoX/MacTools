@@ -2,7 +2,17 @@
   "id": "battery-charge-limit",
   "displayName": "电池充电上限",
   "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "电池充电上限",
+      "summary": "设置电池充电上限，达到上限后停止充电；不自动恢复，由用户决定何时继续充电"
+    },
+    "en": {
+      "displayName": "Battery Charge Limit",
+      "summary": "Set a battery charge limit and stop charging when it is reached; charging resumes only when you choose."
+    }
+  },
+  "version": "1.0.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "BatteryChargeLimit.bundle",

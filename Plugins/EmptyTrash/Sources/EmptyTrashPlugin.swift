@@ -5,41 +5,53 @@ import MacToolsPluginKit
 
 public final class EmptyTrashPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        EmptyTrashPluginProvider()
+        EmptyTrashPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct EmptyTrashPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [EmptyTrashPlugin()]
+        [EmptyTrashPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
-    let metadata = PluginMetadata(
-        id: "empty-trash",
-        title: "清空废纸篓",
-        iconName: "trash",
-        iconTint: Color(nsColor: .systemGray),
-        order: 93,
-        defaultDescription: "清空废纸篓中的所有项目"
-    )
+    let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .keepPresented,
-        buttonTitle: "清空"
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
+    private let localization: PluginLocalization
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EmptyTrashPlugin")
     private var itemCount: Int = 0
     private var isEmptying = false
     private var lastErrorMessage: String?
+
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "empty-trash",
+            title: localization.string("metadata.title", defaultValue: "清空废纸篓"),
+            iconName: "trash",
+            iconTint: Color(nsColor: .systemGray),
+            order: 93,
+            defaultDescription: localization.string(
+                "metadata.description",
+                defaultValue: "清空废纸篓中的所有项目"
+            )
+        )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .keepPresented,
+            buttonTitle: localization.string("panel.button.empty", defaultValue: "清空")
+        )
+    }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
@@ -100,9 +112,13 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     private var subtitle: String {
-        if isEmptying { return "清空中..." }
-        if itemCount == 0 { return "废纸篓为空" }
-        return "\(itemCount) 个项目"
+        if isEmptying {
+            return localization.string("panel.subtitle.emptying", defaultValue: "清空中...")
+        }
+        if itemCount == 0 {
+            return localization.string("panel.subtitle.empty", defaultValue: "废纸篓为空")
+        }
+        return localization.format("panel.subtitle.countFormat", defaultValue: "%d 个项目", itemCount)
     }
 
     @MainActor
@@ -114,7 +130,7 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
         Task {
             do {
-                try await Self.emptyTrashViaAppleScript()
+                try await self.emptyTrashViaAppleScript()
                 await MainActor.run {
                     self.isEmptying = false
                     self.itemCount = 0
@@ -142,14 +158,18 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }.value
     }
 
-    private static func emptyTrashViaAppleScript() async throws {
+    private func emptyTrashViaAppleScript() async throws {
         let script = "tell application \"Finder\" to empty trash"
+        let errorMessage = localization.string(
+            "error.emptyFailed",
+            defaultValue: "清空废纸篓失败，请检查“自动操作”权限"
+        )
         try await Task.detached(priority: .userInitiated) {
              if runOsascriptStandalone(script) == nil {
                 throw NSError(
                     domain: "EmptyTrashPlugin",
                     code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "清空废纸篓失败，请检查“自动操作”权限"]
+                    userInfo: [NSLocalizedDescriptionKey: errorMessage]
                 )
             }
         }.value

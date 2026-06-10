@@ -41,7 +41,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<false/>
 	<key>SUFeedURL</key>
-	<string>https://ggbond268.github.io/MacTools/appcast.xml</string>
+	<string>https://mactools.ggbond.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 	<key>UTImportedTypeDeclarations</key>

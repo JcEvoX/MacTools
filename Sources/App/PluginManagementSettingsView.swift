@@ -17,9 +17,12 @@ struct PluginManagementSettingsView: View {
 
             if pluginHost.pluginManagementItems.isEmpty {
                 ContentUnavailableView(
-                    "暂无插件",
+                    AppL10n.plugins("plugin.marketplace.empty.title", defaultValue: "暂无插件"),
                     systemImage: "shippingbox",
-                    description: Text("刷新插件列表后，可以在这里安装、更新和卸载。")
+                    description: Text(AppL10n.plugins(
+                        "plugin.marketplace.empty.description",
+                        defaultValue: "刷新插件列表后，可以在这里安装、更新和卸载。"
+                    ))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -31,9 +34,9 @@ struct PluginManagementSettingsView: View {
 
                 if filteredItems.isEmpty {
                     ContentUnavailableView(
-                        "未找到匹配的插件",
+                        AppL10n.plugins("plugin.filter.empty.title", defaultValue: "未找到匹配的插件"),
                         systemImage: "magnifyingglass",
-                        description: Text("尝试调整关键字或切换分类。")
+                        description: Text(AppL10n.plugins("plugin.filter.empty.description", defaultValue: "尝试调整关键字或切换分类。"))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -69,7 +72,7 @@ struct PluginManagementSettingsView: View {
             await pluginHost.refreshPluginCatalog()
         }
         .alert(
-            "插件操作失败",
+            AppL10n.plugins("plugin.marketplace.operationFailed.title", defaultValue: "插件操作失败"),
             isPresented: Binding(
                 get: { alertMessage != nil },
                 set: { isPresented in
@@ -79,7 +82,7 @@ struct PluginManagementSettingsView: View {
                 }
             )
         ) {
-            Button("好", role: .cancel) {}
+            Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
         }
@@ -101,7 +104,7 @@ struct PluginManagementSettingsView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("市场")
+                Text(AppL10n.plugins("plugin.marketplace.title", defaultValue: "市场"))
                     .font(PluginSettingsTheme.Typography.pageTitle)
 
                 HStack(spacing: 8) {
@@ -131,8 +134,8 @@ struct PluginManagementSettingsView: View {
                     }
                 } label: {
                     PluginManagementActionLabel(
-                        title: "全部更新",
-                        busyTitle: "更新中",
+                        title: AppL10n.plugins("plugin.marketplace.updateAll", defaultValue: "全部更新"),
+                        busyTitle: AppL10n.plugins("plugin.marketplace.updating", defaultValue: "更新中"),
                         isBusy: activeOperationID == "catalog.updateAll",
                         width: 74
                     )
@@ -146,7 +149,7 @@ struct PluginManagementSettingsView: View {
                     await pluginHost.refreshPluginCatalog()
                 }
             } label: {
-                Label("刷新列表", systemImage: "arrow.clockwise")
+                Label(AppL10n.plugins("plugin.marketplace.refresh", defaultValue: "刷新列表"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
             .disabled(activeOperationID != nil || pluginHost.pluginCatalogStatus.isRefreshing)
@@ -308,7 +311,7 @@ private struct PluginManagementRow: View {
                 .truncationMode(.middle)
 
             if item.requiresRelaunchAction {
-                Button("立即重启", action: onRelaunch)
+                Button(AppL10n.plugins("plugin.marketplace.relaunchNow", defaultValue: "立即重启"), action: onRelaunch)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .buttonStyle(.link)
                     .disabled(isInteractionDisabled)
@@ -321,8 +324,8 @@ private struct PluginManagementRow: View {
         if item.canInstall {
             Button(action: onInstall) {
                 PluginManagementActionLabel(
-                    title: "安装",
-                    busyTitle: "安装中",
+                    title: AppL10n.plugins("plugin.marketplace.install", defaultValue: "安装"),
+                    busyTitle: AppL10n.plugins("plugin.marketplace.installing", defaultValue: "安装中"),
                     isBusy: isBusy,
                     width: actionButtonLabelWidth
                 )
@@ -334,8 +337,8 @@ private struct PluginManagementRow: View {
         if item.canUpdate {
             Button(action: onUpdate) {
                 PluginManagementActionLabel(
-                    title: "更新",
-                    busyTitle: "更新中",
+                    title: AppL10n.plugins("plugin.marketplace.update", defaultValue: "更新"),
+                    busyTitle: AppL10n.plugins("plugin.marketplace.updating", defaultValue: "更新中"),
                     isBusy: isBusy,
                     width: actionButtonLabelWidth
                 )
@@ -346,7 +349,7 @@ private struct PluginManagementRow: View {
 
         if item.canUninstall {
             Button(role: .destructive, action: onUninstall) {
-                Text("卸载")
+                Text(AppL10n.plugins("plugin.marketplace.uninstall", defaultValue: "卸载"))
                     .frame(width: actionButtonLabelWidth)
             }
             .buttonStyle(.bordered)

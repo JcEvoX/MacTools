@@ -2,7 +2,17 @@
   "id": "clipboard-clear",
   "displayName": "清空剪贴板",
   "summary": "一键清空当前剪贴板内容",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "清空剪贴板",
+      "summary": "一键清空当前剪贴板内容"
+    },
+    "en": {
+      "displayName": "Clear Clipboard",
+      "summary": "Clear the current clipboard contents with one click."
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "ClipboardClear.bundle",
