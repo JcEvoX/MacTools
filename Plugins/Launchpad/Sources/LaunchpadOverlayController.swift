@@ -18,17 +18,19 @@ private final class DismissHandlerTokens {
     var keyMonitor: Any?
     var screenObserver: NSObjectProtocol?
     var resignObserver: NSObjectProtocol?
+    var resignKeyObserver: NSObjectProtocol?
 
     func removeAll() {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
-        for observer in [screenObserver, resignObserver].compactMap({ $0 }) {
+        for observer in [screenObserver, resignObserver, resignKeyObserver].compactMap({ $0 }) {
             NotificationCenter.default.removeObserver(observer)
         }
         screenObserver = nil
         resignObserver = nil
+        resignKeyObserver = nil
     }
 
     deinit { removeAll() }
@@ -48,6 +50,13 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
 
     private let catalog = LaunchpadAppCatalog()
     private let preferences: LaunchpadPreferences
+    /// Custom-order layout shared with the grid as `@ObservedObject` so a reorder /
+    /// reset re-renders the open overlay (the grid does NOT observe `onStateChange`).
+    private let layoutStore: LaunchpadLayoutStore
+    /// Folder-eject handoff (the floating icon rides in its own child NSWindow). Controller-owned
+    /// so `close()` can abort an in-flight eject deterministically — that floating window is NOT
+    /// part of the overlay window and would survive it otherwise.
+    private let dragCoordinator = LaunchpadDragCoordinator()
     private let localization: PluginLocalization
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
@@ -60,9 +69,11 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
 
     init(
         preferences: LaunchpadPreferences,
+        layoutStore: LaunchpadLayoutStore,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.preferences = preferences
+        self.layoutStore = layoutStore
         self.localization = localization
         super.init()
     }
@@ -113,6 +124,8 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         win.setFrame(frame, display: true)
         let host = NSHostingView(rootView: LaunchpadGridView(
             catalog: catalog,
+            layoutStore: layoutStore,
+            dragCoordinator: dragCoordinator,
             columns: preferences.columns,
             isCompact: isCompact,
             hiddenAppIDs: preferences.hiddenAppIDs,
@@ -143,6 +156,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     func close(restoringFocus: Bool = true) {
         guard !isTearingDown, let win = window else { return }
         isTearingDown = true
+        // A folder eject may be mid-flight (mouse still down): drop its floating icon window
+        // before the overlay goes — it's a separate child window and would outlive us.
+        dragCoordinator.cancelEject()
         removeDismissHandlers()
         win.delegate = nil
         win.orderOut(nil)
@@ -246,6 +262,22 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
                 // back to the previously-frontmost app and fight their intent. Only the
                 // explicit Esc / background-click paths restore focus.
                 self.close(restoringFocus: false)
+            }
+        }
+        // Another window of *this* app took key focus (e.g. the Settings window opened, or the
+        // user clicked it behind a compact panel). The app stays active, so `didResignActive`
+        // never fires — dismiss here instead, but ONLY when an ordinary titled window takes key.
+        // Menus, IME candidate windows and alert panels aren't titled, so right-click menus and
+        // CJK composition won't close the launcher.
+        tokens.resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: session, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.window === session, !self.isTearingDown else { return }
+                if let key = NSApp.keyWindow, key !== session,
+                   !(key is NSPanel), key.styleMask.contains(.titled) {
+                    self.close(restoringFocus: false)
+                }
             }
         }
     }

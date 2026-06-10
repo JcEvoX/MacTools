@@ -49,6 +49,7 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     )
 
     private let preferences: LaunchpadPreferences
+    private let layoutStore: LaunchpadLayoutStore
     private let overlay: LaunchpadOverlayController
     private let localization: PluginLocalization
     private let hotCornerMonitor = LaunchpadHotCornerMonitor()
@@ -76,8 +77,16 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
             buttonTitle: localization.string("panel.button.open", defaultValue: "打开")
         )
         let preferences = LaunchpadPreferences(storage: context.storage)
+        // Same scoped storage as preferences; owned here so the layout (and its @Published
+        // changes) outlives individual overlay sessions and drives grid re-renders.
+        let layoutStore = LaunchpadLayoutStore(storage: context.storage)
         self.preferences = preferences
-        self.overlay = LaunchpadOverlayController(preferences: preferences, localization: localization)
+        self.layoutStore = layoutStore
+        self.overlay = LaunchpadOverlayController(
+            preferences: preferences,
+            layoutStore: layoutStore,
+            localization: localization
+        )
 
         hotCornerMonitor.onTrigger = { [weak self] in self?.openLaunchpad() }
         // Apply the saved corner now and whenever the user changes it in settings.
@@ -87,8 +96,8 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     var configuration: PluginConfiguration? {
-        PluginConfiguration(description: metadata.defaultDescription) { [preferences, localization] _ in
-            LaunchpadSettingsView(preferences: preferences, localization: localization)
+        PluginConfiguration(description: metadata.defaultDescription) { [preferences, layoutStore, localization] _ in
+            LaunchpadSettingsView(preferences: preferences, layoutStore: layoutStore, localization: localization)
         }
     }
 
@@ -135,6 +144,13 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private func openLaunchpad() {
         overlay.toggle()
+    }
+
+    func activate(context: PluginRuntimeContext) {
+        // Resume after a pause (插件隐藏/停用后重新启用): deactivate stopped the cursor poll but
+        // the corner preference kept its value, so the `$hotCorner` sink (fires on CHANGE) never
+        // re-arms it — re-apply explicitly here.
+        hotCornerMonitor.update(corner: preferences.hotCorner)
     }
 
     func deactivate(reason: PluginDeactivationReason) {

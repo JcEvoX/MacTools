@@ -6,34 +6,16 @@ import MacToolsPluginKit
 @MainActor
 final class LaunchpadPreferencesTests: XCTestCase {
 
-    /// In-memory `PluginStorage` so tests touch no real UserDefaults.
-    @MainActor
-    private final class FakeStorage: PluginStorage {
-        var values: [String: Any] = [:]
-        func object(forKey key: String) -> Any? { values[key] }
-        func data(forKey key: String) -> Data? { values[key] as? Data }
-        func string(forKey key: String) -> String? { values[key] as? String }
-        func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
-        func integer(forKey key: String) -> Int { values[key] as? Int ?? 0 }
-        func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
-        func set(_ value: Any?, forKey key: String) { values[key] = value }
-        func removeObject(forKey key: String) { values[key] = nil }
-        func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
-            if values[key] == nil, let legacy = values[legacyKey] {
-                values[key] = legacy
-                values[legacyKey] = nil
-            }
-        }
-    }
+    // Uses the shared `FakePluginStorage` fixture (Tests/FakePluginStorage.swift).
 
     func testDefaultsWhenStorageEmpty() {
-        let prefs = LaunchpadPreferences(storage: FakeStorage())
+        let prefs = LaunchpadPreferences(storage: FakePluginStorage())
         XCTAssertEqual(prefs.windowMode, .fullscreen)
         XCTAssertEqual(prefs.columns, LaunchpadPreferences.autoColumns)
     }
 
     func testLoadsPersistedValues() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         store.values["windowMode"] = "compact"
         store.values["columns"] = 6
         let prefs = LaunchpadPreferences(storage: store)
@@ -42,20 +24,20 @@ final class LaunchpadPreferencesTests: XCTestCase {
     }
 
     func testInvalidStoredColumnsClampedOnLoad() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         store.values["columns"] = 99            // out of 4...12 range
         XCTAssertEqual(LaunchpadPreferences(storage: store).columns, LaunchpadPreferences.maxColumns)
     }
 
     func testWindowModeWriteThrough() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         let prefs = LaunchpadPreferences(storage: store)
         prefs.windowMode = .compact
         XCTAssertEqual(store.values["windowMode"] as? String, "compact")
     }
 
     func testColumnsClampOnWritePersistsValidValue() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         let prefs = LaunchpadPreferences(storage: store)
         prefs.columns = 99                       // programmatic out-of-range set
         XCTAssertEqual(prefs.columns, LaunchpadPreferences.maxColumns)
@@ -66,7 +48,7 @@ final class LaunchpadPreferencesTests: XCTestCase {
     }
 
     func testAutoColumnsPreservedOnWrite() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         let prefs = LaunchpadPreferences(storage: store)
         prefs.columns = LaunchpadPreferences.autoColumns
         XCTAssertEqual(prefs.columns, LaunchpadPreferences.autoColumns)
@@ -81,7 +63,7 @@ final class LaunchpadPreferencesTests: XCTestCase {
     }
 
     func testHideUnhidePersists() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         let prefs = LaunchpadPreferences(storage: store)
         prefs.hide("/Applications/A.app")
         prefs.hide("/Applications/B.app")
@@ -94,14 +76,14 @@ final class LaunchpadPreferencesTests: XCTestCase {
     }
 
     func testHiddenLoadedFromStorage() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         store.values["hiddenAppIDs"] = ["/Applications/X.app", "/Applications/Y.app"]
         let prefs = LaunchpadPreferences(storage: store)
         XCTAssertEqual(prefs.hiddenAppIDs, ["/Applications/X.app", "/Applications/Y.app"])
     }
 
     func testUnhideAll() {
-        let store = FakeStorage()
+        let store = FakePluginStorage()
         let prefs = LaunchpadPreferences(storage: store)
         prefs.hide("/Applications/A.app")
         prefs.hide("/Applications/B.app")

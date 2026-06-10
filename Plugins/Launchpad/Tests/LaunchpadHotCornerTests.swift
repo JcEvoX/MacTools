@@ -47,4 +47,23 @@ final class LaunchpadHotCornerTests: XCTestCase {
         XCTAssertTrue(LaunchpadHotCornerMonitor.isInCorner(
             CGPoint(x: -2, y: 2), corner: .bottomRight, screenFrame: secondary, threshold: t))
     }
+
+    /// Pause/resume regression: deactivate stops the poll while the corner preference keeps its
+    /// value — re-applying the SAME corner must restart it (an equality guard once blocked this,
+    /// leaving the hot corner permanently dead after hide → re-show).
+    @MainActor
+    func testUpdateRestartsAfterStopEvenWithSameCorner() {
+        let monitor = LaunchpadHotCornerMonitor()
+        monitor.update(corner: .bottomLeft)
+        XCTAssertTrue(monitor.isMonitoring)
+
+        monitor.stop()                          // plugin deactivate（隐藏/停用）
+        XCTAssertFalse(monitor.isMonitoring)
+
+        monitor.update(corner: .bottomLeft)     // plugin activate（恢复）：同一角落也要重启
+        XCTAssertTrue(monitor.isMonitoring)
+
+        monitor.update(corner: .off)            // off 仍然完全停止
+        XCTAssertFalse(monitor.isMonitoring)
+    }
 }
