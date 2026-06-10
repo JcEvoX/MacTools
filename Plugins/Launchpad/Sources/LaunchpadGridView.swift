@@ -493,7 +493,10 @@ struct LaunchpadGridView: View {
         selectedIndex = min(target * perPage, filtered.count - 1)
     }
 
-    private var pageSnap: Animation { .spring(response: 0.34, dampingFraction: 0.86) }
+    private var pageSnap: Animation {
+        .spring(response: LaunchpadPageAnimation.snapResponse,
+                dampingFraction: LaunchpadPageAnimation.snapDamping)
+    }
 
     /// Follow-cursor paging: while dragging empty space the page tracks the cursor; on release
     /// it snaps to the adjacent page past a threshold, otherwise springs back.
