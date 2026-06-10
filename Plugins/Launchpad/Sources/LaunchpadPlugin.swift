@@ -124,6 +124,13 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
         overlay.toggle()
     }
 
+    func activate(context: PluginRuntimeContext) {
+        // Resume after a pause (插件隐藏/停用后重新启用): deactivate stopped the cursor poll but
+        // the corner preference kept its value, so the `$hotCorner` sink (fires on CHANGE) never
+        // re-arms it — re-apply explicitly here.
+        hotCornerMonitor.update(corner: preferences.hotCorner)
+    }
+
     func deactivate(reason: PluginDeactivationReason) {
         if reason.requiresStateCleanup {
             hotCornerMonitor.stop()      // stop the cursor poll; no runaway timer

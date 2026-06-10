@@ -19,11 +19,17 @@ final class LaunchpadHotCornerMonitor {
     private let pollInterval = Duration.milliseconds(120)
     private let dwellTicksRequired = 2          // ~240ms in-corner before firing
 
+    /// Idempotent: safe to call with an unchanged corner. That matters after a plugin
+    /// pause/resume cycle — `deactivate` stops the poll while the preference keeps its value,
+    /// so `activate` must be able to re-arm the SAME corner (an equality guard here once left
+    /// the hot corner permanently dead after hide → re-show).
     func update(corner: LaunchpadPreferences.HotCorner) {
-        guard corner != self.corner else { return }
         self.corner = corner
         corner == .off ? stop() : start()
     }
+
+    /// Whether the poll task is running. Exposed for tests.
+    var isMonitoring: Bool { pollTask != nil }
 
     func stop() {
         pollTask?.cancel()
