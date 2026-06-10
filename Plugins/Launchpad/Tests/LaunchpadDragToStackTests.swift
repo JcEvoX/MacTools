@@ -24,8 +24,10 @@ final class LaunchpadDragToStackTests: XCTestCase {
         _ items: [LaunchpadDisplayCell],
         _ rec: Recorder,
         allowFolderCreation: Bool = true,
+        allowsCustomOrderActions: Bool = true,
         coordinator: LaunchpadDragCoordinator? = nil,
-        folderContextID: String? = nil
+        folderContextID: String? = nil,
+        onActivate: @escaping (LaunchpadDisplayCell) -> Void = { _ in }
     ) -> LaunchpadGridContainerView {
         let grid = LaunchpadDragGrid(
             items: items,
@@ -33,7 +35,7 @@ final class LaunchpadDragToStackTests: XCTestCase {
             selectedID: nil,
             isCompact: false,
             iconProvider: { _ in NSImage() },
-            onActivate: { _ in },
+            onActivate: onActivate,
             onReveal: { _ in },
             onCopyPath: { _ in },
             onHide: { _ in },
@@ -49,6 +51,7 @@ final class LaunchpadDragToStackTests: XCTestCase {
             onPageScroll: { _, _ in },
             onDismiss: {},
             allowFolderCreation: allowFolderCreation,
+            allowsCustomOrderActions: allowsCustomOrderActions,
             coordinator: coordinator,
             folderContextID: folderContextID
         )
@@ -60,6 +63,13 @@ final class LaunchpadDragToStackTests: XCTestCase {
 
     private func centre(of cell: LaunchpadGridCellView) -> NSPoint {
         NSPoint(x: cell.frame.midX, y: cell.frame.midY)
+    }
+
+    /// Synthesized mouse event located in CONTAINER coordinates (the windowless harness treats
+    /// `locationInWindow` as root-view coordinates, matching the container-method tests above).
+    private func fakeMouse(_ type: NSEvent.EventType, at p: NSPoint) -> NSEvent {
+        NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0,
+                           windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
     }
 
     // MARK: - Arm + drop
@@ -278,6 +288,51 @@ final class LaunchpadDragToStackTests: XCTestCase {
         container.beginExternalDrag(appID: "/Apps/Ext.app")                  // must be a no-op
         container.updateExternalDrag(atWindowPoint: centre(of: cells[1]))
         XCTAssertNil(container.externalGapIndex, "有真拖拽时外部拖拽不生效")
+    }
+
+    // MARK: - Search mode (read-only projection)
+
+    func testSearchModeDragIsConsumedNotTreatedAsClick() {
+        let rec = Recorder()
+        var activated: [String] = []
+        let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B")
+        let container = makeContainer([.app(a), .app(b)], rec,
+                                      allowsCustomOrderActions: false,
+                                      onActivate: { activated.append($0.layoutID) })
+        let cell = container.cellViews[0]
+        let start = centre(of: cell)
+
+        cell.mouseDown(with: fakeMouse(.leftMouseDown, at: start))
+        cell.mouseDragged(with: fakeMouse(.leftMouseDragged, at: NSPoint(x: start.x + 40, y: start.y)))
+        XCTAssertFalse(container.hasActiveDrag, "搜索态不开始重排拖拽")
+        cell.mouseUp(with: fakeMouse(.leftMouseUp, at: NSPoint(x: start.x + 40, y: start.y)))
+        XCTAssertTrue(activated.isEmpty, "拖过阈值再松手是被取消的拖拽，不能当点击启动 app")
+
+        cell.mouseDown(with: fakeMouse(.leftMouseDown, at: start))
+        cell.mouseUp(with: fakeMouse(.leftMouseUp, at: start))
+        XCTAssertEqual(activated, [a.id], "纯点击仍然激活")
+    }
+
+    // MARK: - Row-capped (scrollable) folder eject
+
+    func testClippedFolderEjectsWhenLeavingVisibleViewport() {
+        let rec = Recorder()
+        let coord = LaunchpadDragCoordinator()
+        let apps = (0..<21).map { i in app("/Apps/App\(i).app", "A\(i)") }
+        let container = makeContainer(apps.map(LaunchpadDisplayCell.app), rec,
+                                      allowFolderCreation: false, coordinator: coord, folderContextID: "F1")
+        // Row-capped folder: a scroll view clips the ~404pt 3-row content to ~160pt.
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 900, height: 160))
+        scroll.documentView = container
+        container.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+        container.layout()
+        let cells = container.cellViews
+
+        container.beginDirectDrag(cells[0], atWindowPoint: .zero)
+        cells[0].setFrameOrigin(NSPoint(x: 60, y: 300))   // 完整内容范围内、但在可见视口下方（被裁切不可见）
+        container.endDirectDrag(atWindowPoint: NSPoint(x: 60, y: 300))
+        XCTAssertEqual(coord.pendingEject?.appID, apps[0].id, "被裁切的行不构成盲区：拖出可见区域即出夹")
+        XCTAssertEqual(coord.ejectToken, 1)
     }
 
     // MARK: - Aborting a carry (unmount / overlay close must not leak the floating window)

@@ -609,16 +609,17 @@ struct LaunchpadGridView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 
-            if rows > maxVisibleRows {
-                ScrollView(.vertical) {
-                    folderGrid(folder, cols: cols, metrics: metrics)
-                        .frame(width: gridW, height: gridH)
-                }
-                .frame(width: gridW, height: visibleH)
-            } else {
+            // ONE stable view identity for every folder size: an if/else here would swap SwiftUI
+            // branches when the row count crosses the cap — and a mid-carry eject SHRINKS the item
+            // count (the carried app is filtered out), so at the boundary the flip would dismantle
+            // the grid mid-drag and the unmount hook would instantly cancel the eject it serves.
+            // A ScrollView whose content fits is inert (scrolling disabled below the cap).
+            ScrollView(.vertical) {
                 folderGrid(folder, cols: cols, metrics: metrics)
                     .frame(width: gridW, height: gridH)
             }
+            .scrollDisabled(rows <= maxVisibleRows)
+            .frame(width: gridW, height: visibleH)
         }
         .padding(30)
         .frame(maxWidth: 760)

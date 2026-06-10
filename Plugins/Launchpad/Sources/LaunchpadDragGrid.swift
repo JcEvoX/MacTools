@@ -365,7 +365,15 @@ final class LaunchpadGridContainerView: NSView {
     /// The zone grows the slot union generously (most on top) to cover the panel's title + padding.
     private func draggedClearlyOutsideFolder(_ cell: LaunchpadGridCellView) -> Bool {
         let union = (0..<cells.count).map(slotRect).reduce(CGRect.null) { $0.union($1) }
-        let base = union.isNull ? bounds : union
+        var base = union.isNull ? bounds : union
+        // A row-capped folder scrolls: the content extends beyond the clip view, so measuring
+        // against the full slot union would leave a blind zone where the lifted icon is clipped
+        // invisible yet still counts as "inside" (a downward eject would be unreachable). Clamp
+        // to the portion the user can actually see.
+        if let scrollView = enclosingScrollView {
+            let clipped = base.intersection(scrollView.documentVisibleRect)
+            if !clipped.isEmpty { base = clipped }
+        }
         let region = CGRect(x: base.minX - 60, y: base.minY - 110,
                             width: base.width + 120, height: base.height + 170)
         return !region.contains(NSPoint(x: cell.frame.midX, y: cell.frame.midY))
@@ -994,15 +1002,16 @@ final class LaunchpadGridCellView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard let start = mouseDownPoint else { return }
         if !didDrag {
-            // Searching: read-only projection — never lift, so no make-way/merge cues whose
-            // drop would be silently discarded. The click (mouseUp) still activates.
-            guard container?.callbacks?.allowsCustomOrderActions != false else { return }
             let point = convert(event.locationInWindow, from: nil)
             guard hypot(point.x - start.x, point.y - start.y) > dragThreshold else { return }
             didDrag = true
+            // Searching: read-only projection — never lift, so no make-way/merge cues whose drop
+            // would be silently discarded. `didDrag` is STILL set so the gesture is consumed:
+            // mouseUp must treat a long drag as a cancelled drag, not as a click that launches.
+            guard container?.callbacks?.allowsCustomOrderActions != false else { return }
             container?.beginDirectDrag(self, atWindowPoint: event.locationInWindow)
         }
-        container?.updateDirectDrag(atWindowPoint: event.locationInWindow)   // 1:1 follow
+        container?.updateDirectDrag(atWindowPoint: event.locationInWindow)   // 1:1 follow (no-op when nothing lifted)
     }
 
     override func mouseUp(with event: NSEvent) {
