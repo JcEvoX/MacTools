@@ -20,6 +20,7 @@ struct LaunchpadSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             windowSection
+            backgroundSection
             gridSection
             sortSection
             hiddenSection
@@ -137,6 +138,164 @@ struct LaunchpadSettingsView: View {
                     .frame(width: 110)
                 }
             }
+        }
+    }
+
+    // MARK: - Background (design §5.3)
+
+    private var dimPercentBinding: Binding<Double> {
+        Binding(
+            get: { Double(preferences.backgroundDimPercent) },
+            set: { preferences.backgroundDimPercent = Int($0.rounded()) }
+        )
+    }
+
+    private var backgroundStyleDescription: String {
+        switch preferences.backgroundStyle {
+        case .clear:
+            localization.string(
+                "settings.background.style.clearDescription",
+                defaultValue: "更通透，桌面清晰可见"
+            )
+        case .standard:
+            localization.string(
+                "settings.background.style.standardDescription",
+                defaultValue: "默认观感，均衡的玻璃质感"
+            )
+        case .deep:
+            localization.string(
+                "settings.background.style.deepDescription",
+                defaultValue: "更暗更沉浸，聚焦图标"
+            )
+        case .custom:
+            localization.string(
+                "settings.background.style.customDescription",
+                defaultValue: "自选材质与暗化程度"
+            )
+        }
+    }
+
+    private var backgroundSection: some View {
+        section(
+            title: localization.string("settings.background.title", defaultValue: "背景"),
+            icon: "circle.lefthalf.filled"
+        ) {
+            VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                backgroundPreviewCard
+                Divider()
+                row(
+                    title: localization.string("settings.background.style.title", defaultValue: "玻璃风格"),
+                    description: backgroundStyleDescription
+                ) {
+                    Picker("", selection: $preferences.backgroundStyle) {
+                        ForEach(LaunchpadBackgroundStyle.allCases) { style in
+                            Text(style.label(localization: localization)).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 224)
+                }
+                if preferences.backgroundStyle == .custom {
+                    Divider()
+                    row(
+                        title: localization.string("settings.background.material.title", defaultValue: "玻璃材质"),
+                        description: localization.string(
+                            "settings.background.material.description",
+                            defaultValue: "背景玻璃的取样材质"
+                        )
+                    ) {
+                        Picker("", selection: $preferences.backgroundMaterial) {
+                            ForEach(LaunchpadGlassMaterial.allCases) { material in
+                                Text(material.label(localization: localization)).tag(material)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 110)
+                    }
+                    Divider()
+                    row(
+                        title: localization.string("settings.background.dim.title", defaultValue: "背景暗化"),
+                        description: localization.string(
+                            "settings.background.dim.description",
+                            defaultValue: "数值越大背景越暗"
+                        )
+                    ) {
+                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                            Slider(
+                                value: dimPercentBinding,
+                                in: Double(LaunchpadBackgroundDim.percentRange.lowerBound)
+                                    ... Double(LaunchpadBackgroundDim.percentRange.upperBound),
+                                step: 5
+                            )
+                            .frame(minWidth: 120, idealWidth: 160, maxWidth: 200)
+                            Text(
+                                localization.format(
+                                    "settings.background.dim.value",
+                                    defaultValue: "%d%%",
+                                    preferences.backgroundDimPercent
+                                )
+                            )
+                            .font(PluginSettingsTheme.Typography.monospacedValue)
+                            .frame(width: 44, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Inline glass preview (G6): the settings window taking key always closes the overlay,
+    /// so tuning would otherwise be blind. A desktop-ish gradient underlay + the SAME recipe
+    /// glass (within-window, so it samples the gradient) + the dim layer — live, since it
+    /// binds the published preferences directly. The layout-preview feature (design §4)
+    /// absorbs this recipe as its canvas background later; keep it the single implementation.
+    private var backgroundPreviewCard: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.26, green: 0.42, blue: 0.86),
+                    Color(red: 0.56, green: 0.36, blue: 0.78),
+                    Color(red: 0.93, green: 0.62, blue: 0.40),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // Soft shapes give the blur something legible to chew on.
+            Circle()
+                .fill(.white.opacity(0.55))
+                .frame(width: 46, height: 46)
+                .offset(x: -64, y: -10)
+            Circle()
+                .fill(Color(red: 0.18, green: 0.65, blue: 0.45).opacity(0.8))
+                .frame(width: 34, height: 34)
+                .offset(x: 52, y: 16)
+            previewGlass
+        }
+        .frame(width: 220, height: 80)
+        .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous))
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            localization.string(
+                "settings.background.preview.accessibility",
+                defaultValue: "背景玻璃效果预览"
+            )
+        )
+    }
+
+    @ViewBuilder
+    private var previewGlass: some View {
+        switch preferences.backgroundRecipe {
+        case .legacyUltraThin:
+            Rectangle().fill(.ultraThinMaterial)
+        case .glass(let material, let dimOpacity, let forcesDark):
+            LaunchpadGlassBackdrop(
+                material: material,
+                blendingMode: .withinWindow,
+                forcesDarkAppearance: forcesDark
+            )
+            Rectangle().fill(.black.opacity(dimOpacity))
         }
     }
 

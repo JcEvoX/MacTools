@@ -79,6 +79,37 @@ final class LaunchpadPreferences: ObservableObject {
         didSet { storage.set(hotCorner.rawValue, forKey: Keys.hotCorner) }
     }
 
+    // MARK: Glass background (design §5)
+
+    @Published var backgroundStyle: LaunchpadBackgroundStyle {
+        didSet { storage.set(backgroundStyle.rawValue, forKey: Keys.backgroundStyle) }
+    }
+
+    /// Only consulted while `backgroundStyle == .custom`; kept persisted across style
+    /// switches so flipping back to custom restores the user's last tuning.
+    @Published var backgroundMaterial: LaunchpadGlassMaterial {
+        didSet { storage.set(backgroundMaterial.rawValue, forKey: Keys.backgroundMaterial) }
+    }
+
+    /// Custom-style dim layer, in whole percent (PluginStorage has no double accessor).
+    @Published var backgroundDimPercent: Int {
+        didSet {
+            // Same single-write-path clamp discipline as `columns`.
+            let valid = LaunchpadBackgroundDim.normalized(backgroundDimPercent)
+            guard valid == backgroundDimPercent else { backgroundDimPercent = valid; return }
+            storage.set(backgroundDimPercent, forKey: Keys.backgroundDimPercent)
+        }
+    }
+
+    /// The full rendering description. The overlay snapshots it at `open()` (same session
+    /// discipline as `windowMode`) — settings changes apply on the next summon.
+    var backgroundRecipe: LaunchpadBackgroundRecipe {
+        backgroundStyle.recipe(
+            customMaterial: backgroundMaterial,
+            customDimPercent: backgroundDimPercent
+        )
+    }
+
     private let storage: PluginStorage
 
     private enum Keys {
@@ -86,6 +117,9 @@ final class LaunchpadPreferences: ObservableObject {
         static let columns = "columns"
         static let hidden = "hiddenAppIDs"
         static let hotCorner = "hotCorner"
+        static let backgroundStyle = "backgroundStyle"
+        static let backgroundMaterial = "backgroundMaterial"
+        static let backgroundDimPercent = "backgroundDimPercent"
     }
 
     static func normalizedColumns(_ value: Int) -> Int {
@@ -100,5 +134,18 @@ final class LaunchpadPreferences: ObservableObject {
         self.columns = Self.normalizedColumns(storage.integer(forKey: Keys.columns))
         self.hiddenAppIDs = Set(storage.stringArray(forKey: Keys.hidden) ?? [])
         self.hotCorner = HotCorner(rawValue: storage.string(forKey: Keys.hotCorner) ?? "") ?? .off
+        // Unknown raw values (a downgrade wrote a future style) fall back to the default,
+        // same pattern as `windowMode`.
+        self.backgroundStyle = LaunchpadBackgroundStyle(
+            rawValue: storage.string(forKey: Keys.backgroundStyle) ?? ""
+        ) ?? .standard
+        self.backgroundMaterial = LaunchpadGlassMaterial(
+            rawValue: storage.string(forKey: Keys.backgroundMaterial) ?? ""
+        ) ?? .launchpad
+        // `integer(forKey:)` returns 0 when unset, but 0 is a VALID dim — probe with
+        // `object(forKey:)` so a stored 0 isn't mistaken for "use the default".
+        self.backgroundDimPercent = storage.object(forKey: Keys.backgroundDimPercent) == nil
+            ? LaunchpadBackgroundDim.defaultPercent
+            : LaunchpadBackgroundDim.normalized(storage.integer(forKey: Keys.backgroundDimPercent))
     }
 }

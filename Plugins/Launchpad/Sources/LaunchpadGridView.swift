@@ -36,6 +36,9 @@ struct LaunchpadGridView: View {
     var isCompact: Bool = false
     /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
     var hiddenAppIDs: Set<String> = []
+    /// Glass background recipe, snapshotted at `open()` like `windowMode` (design §5.4 —
+    /// no live re-binding mid-session). Default = the standard preset's legacy rendering.
+    var backgroundRecipe: LaunchpadBackgroundRecipe = .legacyUltraThin
     var localization: PluginLocalization = PluginLocalization(bundle: .main)
     var onActivate: (LaunchpadAppItem) -> Void
     var onReveal: (LaunchpadAppItem) -> Void
@@ -130,18 +133,53 @@ struct LaunchpadGridView: View {
         max(1, Int(ceil(Double(filtered.count) / Double(perPage))))
     }
 
-    var body: some View {
-        ZStack {
-            // Click-to-dismiss on empty space — the fullscreen Launchpad behaviour. Icons
-            // and the search field (an AppKit NSView) hit-test first and swallow their own
-            // clicks, so only genuine empty space (gaps/margins) reaches this layer. In
-            // compact mode the panel itself is the content, so inside clicks must NOT
-            // dismiss (outside clicks deactivate the app → close).
+    /// Main background, resolved from the session's recipe snapshot (never switches
+    /// mid-session, so the case change carries no view-identity risk).
+    /// - `.legacyUltraThin` (the default "standard" preset) is the pre-change path,
+    ///   byte-identical: one `.ultraThinMaterial` fill doubling as the dismiss tap layer (G1).
+    /// - `.glass` is the parameterised backdrop + a plain dim Rectangle (free — no second
+    ///   effect view, §5.5 performance line) + a clear tap layer preserving the exact
+    ///   click-to-dismiss semantics.
+    @ViewBuilder
+    private var backgroundLayer: some View {
+        switch backgroundRecipe {
+        case .legacyUltraThin:
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { if !isCompact { onDismiss() } }
+        case .glass(let material, let dimOpacity, let forcesDark):
+            LaunchpadGlassBackdrop(
+                material: material,
+                blendingMode: .behindWindow,
+                forcesDarkAppearance: forcesDark,
+                // Compact panel: behind-window blur may ignore the host layer's corner
+                // mask (AppKit gotcha, design §5.4 #4) — round the material itself too.
+                cornerRadius: isCompact ? LaunchpadCompactPanelMetrics.cornerRadius : 0
+            )
+            .ignoresSafeArea()
+            Rectangle()
+                .fill(.black.opacity(dimOpacity))
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { if !isCompact { onDismiss() } }
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            // Glass backdrop + click-to-dismiss on empty space (design §5.4). Icons and the
+            // search field (AppKit NSViews) hit-test first and swallow their own clicks, so
+            // only genuine empty space (gaps/margins) reaches the tap layer. In compact mode
+            // the panel itself is the content, so inside clicks must NOT dismiss (outside
+            // clicks deactivate the app → close). Stays OUTSIDE the paging `.offset` —
+            // wrapping it would re-sample the desktop every paging frame (§5.5).
+            backgroundLayer
 
             VStack(spacing: isCompact ? 14 : 20) {
                 searchBar
@@ -712,8 +750,14 @@ struct LaunchpadGridView: View {
     /// tap layer on top so a tap anywhere closes the folder.
     private var folderScrim: some View {
         ZStack {
-            FrostedGlassScrim(isCompact: isCompact)
-                .ignoresSafeArea()
+            // G4: deliberately NOT linked to the background style in v1 — the folder scrim
+            // is a surface floating over content, semantically independent of the backdrop.
+            // Same materials the former private FrostedGlassScrim hardcoded.
+            LaunchpadGlassBackdrop(
+                material: isCompact ? .frosted : .launchpad,
+                blendingMode: .withinWindow
+            )
+            .ignoresSafeArea()
             Rectangle()
                 .fill(.black.opacity(0.18))
                 .ignoresSafeArea()
@@ -772,6 +816,9 @@ struct LaunchpadGridView: View {
         .contentShape(Rectangle())
         .onTapGesture { renameController.endEditing(commit: true) }
         .frame(maxWidth: 760)
+        // TODO(G5): on macOS 26+ adopt `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))`
+        // here (folder panel + compact floating panel only — the fullscreen backdrop stays an
+        // NSVisualEffectView per HIG). `#available` gated, separate commit, Tahoe screenshots.
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -841,32 +888,6 @@ struct LaunchpadGridView: View {
             coordinator: dragCoordinator,
             folderContextID: folder.id
         )
-    }
-}
-
-/// A real frosted-glass blur of whatever is behind it in the same window — used as the folder
-/// scrim so the grid genuinely frosts (SwiftUI `.blur` can't blur the embedded AppKit grid).
-/// `.withinWindow` blends with the sibling views behind it; `hitTest` returns nil so the clear
-/// SwiftUI tap layer above it still receives the tap-to-close.
-private struct FrostedGlassScrim: NSViewRepresentable {
-    var isCompact = false
-
-    private final class PassthroughEffectView: NSVisualEffectView {
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    }
-
-    private var material: NSVisualEffectView.Material { isCompact ? .popover : .fullScreenUI }
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = PassthroughEffectView()
-        view.material = material
-        view.blendingMode = .withinWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
     }
 }
 

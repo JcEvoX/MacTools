@@ -197,6 +197,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             columns: preferences.columns,
             isCompact: isCompact,
             hiddenAppIDs: preferences.hiddenAppIDs,
+            // Snapshot, same discipline as `sessionMode`: settings changes apply on the
+            // next summon (the settings window taking key closes the overlay anyway).
+            backgroundRecipe: preferences.backgroundRecipe,
             localization: localization,
             onActivate: { [weak self] app in self?.launch(app) },
             onReveal: { [weak self] app in self?.reveal(app) },
@@ -205,9 +208,15 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         ))
         win.contentView = host
         if isCompact {
-            // Round the floating panel; the material fills the host and is clipped to it.
+            // Round the floating panel. This layer mask clips the in-process SwiftUI
+            // content (icons, labels, dim layer, legacy ultraThinMaterial); the glass
+            // recipes additionally round the behind-window blur itself via the backdrop's
+            // maskImage with the SAME shared radius (see LaunchpadGlassBackdrop).
+            // TODO(G5): on macOS 26+ wrap the compact panel in NSGlassEffectView (with an
+            // NSGlassEffectContainerView shared with the folder panel when both are visible).
+            // `#available` gated, separate commit, Tahoe screenshots.
             host.wantsLayer = true
-            host.layer?.cornerRadius = 22
+            host.layer?.cornerRadius = LaunchpadCompactPanelMetrics.cornerRadius
             host.layer?.masksToBounds = true
         }
 
