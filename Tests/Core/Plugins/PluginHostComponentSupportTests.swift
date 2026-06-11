@@ -43,6 +43,39 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second", "first"])
     }
 
+    func testDisplayPreferencesReadingWithEmptyDefaultPluginIDsDoesNotDiscardStoredOrder() {
+        let store = makeDisplayPreferencesStore()
+        store.setOrderedPluginIDs(["second", "first"], defaultPluginIDs: ["first", "second"])
+
+        XCTAssertTrue(store.orderedPluginIDs(defaultPluginIDs: []).isEmpty)
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first", "second"]),
+            ["second", "first"]
+        )
+    }
+
+    func testDisplayPreferencesReadingWithPartialDefaultPluginIDsDoesNotDiscardMissingPluginOrder() {
+        let store = makeDisplayPreferencesStore()
+        store.setOrderedPluginIDs(["third", "second", "first"], defaultPluginIDs: ["first", "second", "third"])
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first"]),
+            ["first"]
+        )
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first", "second", "third"]),
+            ["third", "second", "first"]
+        )
+    }
+
+    func testDisplayPreferencesHiddenPluginSurvivesTemporaryMissingPlugin() {
+        let store = makeDisplayPreferencesStore()
+        store.setVisibility(false, for: "dynamic", defaultPluginIDs: ["dynamic"])
+
+        XCTAssertTrue(store.isVisible("dynamic", defaultPluginIDs: []))
+        XCTAssertFalse(store.isVisible("dynamic", defaultPluginIDs: ["dynamic"]))
+    }
+
     func testComponentOnlyPluginContributesSettingsPermissionsAndShortcuts() {
         let componentPanelPlugin = MockComponentPanelPlugin(
             id: "component",
@@ -482,6 +515,12 @@ final class PluginHostComponentSupportTests: XCTestCase {
             displayConfigurationObserver: displayConfigurationObserver,
             displayTopologyRefreshDelay: displayTopologyRefreshDelay
         )
+    }
+
+    private func makeDisplayPreferencesStore() -> PluginDisplayPreferencesStore {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return PluginDisplayPreferencesStore(userDefaults: defaults)
     }
 
     private func installTestPluginPackage(

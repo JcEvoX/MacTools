@@ -172,6 +172,7 @@ final class MenuBarStatusItemController: NSObject {
 
         let oldItem = statusItem
         NSStatusBar.system.removeStatusItem(oldItem)
+        MenuBarControlItemDefaults.resetVisibleControlItemPosition()
 
         let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName

@@ -57,6 +57,35 @@ final class MenuBarHiddenSnapshotTests: XCTestCase {
         XCTAssertEqual(visibleItems.map(\.tag), [host.tag, visible.tag])
     }
 
+    func testLayoutPolicyDetectsHostIconRecoveryFromGeometry() {
+        let dividerBounds = CGRect(x: 100, y: 0, width: 10, height: 20)
+        let hiddenHost = makeItem(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            title: "MacTools",
+            instance: 0,
+            bounds: CGRect(x: 60, y: 0, width: 20, height: 20)
+        )
+        let visibleHost = makeItem(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            title: "MacTools",
+            instance: 0,
+            bounds: CGRect(x: 120, y: 0, width: 20, height: 20)
+        )
+
+        XCTAssertTrue(
+            MenuBarHiddenLayoutPolicy.hostIconNeedsRecovery(
+                items: [hiddenHost],
+                hiddenDividerBounds: dividerBounds
+            )
+        )
+        XCTAssertFalse(
+            MenuBarHiddenLayoutPolicy.hostIconNeedsRecovery(
+                items: [visibleHost],
+                hiddenDividerBounds: dividerBounds
+            )
+        )
+    }
+
     func testLayoutPolicyUsesDividerBoundsAndMidpoints() {
         let dividerBounds = CGRect(x: 100, y: 0, width: 10, height: 20)
         let hidden = makeItem(
@@ -221,6 +250,153 @@ final class MenuBarHiddenSnapshotTests: XCTestCase {
         )
 
         XCTAssertTrue(candidates.isEmpty)
+    }
+
+    func testStoredLayoutPolicyDefaultsNewHideableItemsToHidden() {
+        let visible = makeItem(namespace: "com.example.visible", title: "Item")
+        let hidden = makeItem(namespace: "com.example.hidden", title: "Item")
+        let newlySeen = makeItem(namespace: "com.example.new", title: "Item")
+        let host = makeItem(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            title: "MacTools",
+            instance: 0
+        )
+        let storedLayout = MenuBarHiddenStoredLayout(
+            visibleItemStableKeys: [visible.tag.stableKey],
+            hiddenItemStableKeys: [hidden.tag.stableKey],
+            alwaysHiddenItemStableKeys: [],
+            isAlwaysHiddenEnabled: false
+        )
+
+        let layout = MenuBarHiddenStoredLayoutPolicy.appendNewItemsToHiddenByDefault(
+            items: [visible, hidden, newlySeen, host],
+            storedLayout: storedLayout
+        )
+
+        XCTAssertEqual(layout.visibleItemStableKeys, [visible.tag.stableKey, host.tag.stableKey])
+        XCTAssertEqual(layout.hiddenItemStableKeys, [hidden.tag.stableKey, newlySeen.tag.stableKey])
+    }
+
+    func testStoredLayoutPolicyPreservesMissingKeysWhenRecordingCurrentLayout() {
+        let visible = makeItem(namespace: "com.example.visible", title: "Item")
+        let hidden = makeItem(namespace: "com.example.hidden", title: "Item")
+
+        let layout = MenuBarHiddenStoredLayoutPolicy.visibleHiddenLayout(
+            visibleItems: [visible],
+            hiddenItems: [hidden],
+            alwaysHiddenItems: [],
+            previousVisibleItemStableKeys: ["com.example.missing.visible:Item", visible.tag.stableKey],
+            previousHiddenItemStableKeys: ["com.example.missing.hidden:Item", hidden.tag.stableKey]
+        )
+
+        XCTAssertEqual(layout.visibleItemStableKeys, [
+            "com.example.missing.visible:Item",
+            visible.tag.stableKey,
+        ])
+        XCTAssertEqual(layout.hiddenItemStableKeys, [
+            "com.example.missing.hidden:Item",
+            hidden.tag.stableKey,
+        ])
+    }
+
+    func testStoredLayoutPolicyRemovesAlwaysHiddenItemsFromVisibleHiddenLayout() {
+        let visible = makeItem(namespace: "com.example.visible", title: "Item")
+        let movedToAlwaysHidden = makeItem(namespace: "com.example.always", title: "Item")
+
+        let layout = MenuBarHiddenStoredLayoutPolicy.visibleHiddenLayout(
+            visibleItems: [visible],
+            hiddenItems: [],
+            alwaysHiddenItems: [movedToAlwaysHidden],
+            previousVisibleItemStableKeys: [visible.tag.stableKey],
+            previousHiddenItemStableKeys: [movedToAlwaysHidden.tag.stableKey]
+        )
+
+        XCTAssertEqual(layout.visibleItemStableKeys, [visible.tag.stableKey])
+        XCTAssertTrue(layout.hiddenItemStableKeys.isEmpty)
+    }
+
+    func testStoredLayoutPolicyUsesStableKeysForDesiredSection() {
+        let visible = makeItem(namespace: "com.example.visible", title: "Item")
+        let hidden = makeItem(namespace: "com.example.hidden", title: "Item")
+        let alwaysHidden = makeItem(namespace: "com.example.always", title: "Item")
+        let newlySeen = makeItem(namespace: "com.example.new", title: "Item")
+        let host = makeItem(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            title: "MacTools",
+            instance: 0
+        )
+        let layout = MenuBarHiddenStoredLayout(
+            visibleItemStableKeys: [visible.tag.stableKey],
+            hiddenItemStableKeys: [hidden.tag.stableKey],
+            alwaysHiddenItemStableKeys: [alwaysHidden.tag.stableKey],
+            isAlwaysHiddenEnabled: true
+        )
+
+        XCTAssertEqual(
+            MenuBarHiddenStoredLayoutPolicy.desiredSection(for: visible, storedLayout: layout),
+            .visible
+        )
+        XCTAssertEqual(
+            MenuBarHiddenStoredLayoutPolicy.desiredSection(for: hidden, storedLayout: layout),
+            .hidden
+        )
+        XCTAssertEqual(
+            MenuBarHiddenStoredLayoutPolicy.desiredSection(for: alwaysHidden, storedLayout: layout),
+            .alwaysHidden
+        )
+        XCTAssertEqual(
+            MenuBarHiddenStoredLayoutPolicy.desiredSection(for: newlySeen, storedLayout: layout),
+            .hidden
+        )
+        XCTAssertEqual(
+            MenuBarHiddenStoredLayoutPolicy.desiredSection(for: host, storedLayout: layout),
+            .visible
+        )
+    }
+
+    func testMenuBarDragCommitPolicySeparatesCommitFromRecovery() {
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .unknown,
+                dividerNeedsRecovery: false
+            ),
+            .commit
+        )
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .divider,
+                dividerNeedsRecovery: false
+            ),
+            .commit
+        )
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .divider,
+                dividerNeedsRecovery: true
+            ),
+            .recoverThenCommit
+        )
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .unknown,
+                dividerNeedsRecovery: true
+            ),
+            .recoverThenCommit
+        )
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .hostIcon,
+                dividerNeedsRecovery: true
+            ),
+            .recoverOnly
+        )
+        XCTAssertEqual(
+            MenuBarHiddenMenuBarDragCommitPolicy.decision(
+                target: .hostIcon,
+                dividerNeedsRecovery: false
+            ),
+            .recoverOnly
+        )
     }
 
     func testLayoutPolicyDetectsReversedAlwaysHiddenDividerOrder() {

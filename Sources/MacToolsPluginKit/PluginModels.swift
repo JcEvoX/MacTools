@@ -127,6 +127,17 @@ public enum MenuBarControlItemDefaults {
         setPreferredPosition(position, autosaveName: visibleAutosaveName, userDefaults: userDefaults)
     }
 
+    public static func visibleControlItemNeedsRecovery(userDefaults: UserDefaults = .standard) -> Bool {
+        guard
+            let visiblePosition = visibleControlItemPreferredPosition(userDefaults: userDefaults),
+            let hiddenDividerPosition = hiddenDividerControlItemPreferredPosition(userDefaults: userDefaults)
+        else {
+            return false
+        }
+
+        return visiblePosition >= hiddenDividerPosition
+    }
+
     public static func prepareHiddenDividerControlItem(
         preferredPosition: Double = hiddenDefaultPreferredPosition,
         userDefaults: UserDefaults = .standard

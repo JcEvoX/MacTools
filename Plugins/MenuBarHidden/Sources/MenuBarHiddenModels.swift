@@ -201,6 +201,12 @@ enum MenuBarHiddenMovePlacement: Equatable {
     case after(MenuBarItemTag)
 }
 
+enum MenuBarHiddenMenuBarDragTarget: Equatable {
+    case hostIcon
+    case divider
+    case unknown
+}
+
 struct MenuBarHiddenResolvedMoveTarget: Equatable {
     let point: CGPoint
     let windowID: CGWindowID?
@@ -365,6 +371,100 @@ enum MenuBarHiddenAlwaysHiddenRestorePolicy {
     }
 }
 
+struct MenuBarHiddenStoredLayout: Equatable {
+    var visibleItemStableKeys: [String]
+    var hiddenItemStableKeys: [String]
+    var alwaysHiddenItemStableKeys: Set<String>
+    var isAlwaysHiddenEnabled: Bool
+}
+
+enum MenuBarHiddenStoredLayoutPolicy {
+    static func desiredSection(
+        for item: MenuBarItem,
+        storedLayout: MenuBarHiddenStoredLayout
+    ) -> MenuBarHiddenSection {
+        guard item.canBeHidden else {
+            return .visible
+        }
+
+        let key = item.tag.stableKey
+        if storedLayout.isAlwaysHiddenEnabled,
+           storedLayout.alwaysHiddenItemStableKeys.contains(key)
+        {
+            return .alwaysHidden
+        }
+        if storedLayout.visibleItemStableKeys.contains(key) {
+            return .visible
+        }
+        if storedLayout.hiddenItemStableKeys.contains(key) {
+            return .hidden
+        }
+        return .hidden
+    }
+
+    static func visibleHiddenLayout(
+        visibleItems: [MenuBarItem],
+        hiddenItems: [MenuBarItem],
+        alwaysHiddenItems: [MenuBarItem],
+        previousVisibleItemStableKeys: [String],
+        previousHiddenItemStableKeys: [String]
+    ) -> (visibleItemStableKeys: [String], hiddenItemStableKeys: [String]) {
+        let currentVisibleKeys = stableKeys(for: visibleItems)
+        let currentHiddenKeys = stableKeys(for: hiddenItems.filter(\.canBeHidden))
+        let currentAlwaysHiddenKeys = stableKeys(for: alwaysHiddenItems.filter(\.canBeHidden))
+        let currentKeys = Set(currentVisibleKeys + currentHiddenKeys + currentAlwaysHiddenKeys)
+
+        let missingVisibleKeys = previousVisibleItemStableKeys.filter { !currentKeys.contains($0) }
+        let missingHiddenKeys = previousHiddenItemStableKeys.filter { !currentKeys.contains($0) }
+
+        return (
+            visibleItemStableKeys: normalizedStableKeys(missingVisibleKeys + currentVisibleKeys),
+            hiddenItemStableKeys: normalizedStableKeys(missingHiddenKeys + currentHiddenKeys)
+        )
+    }
+
+    static func appendNewItemsToHiddenByDefault(
+        items: [MenuBarItem],
+        storedLayout: MenuBarHiddenStoredLayout
+    ) -> (visibleItemStableKeys: [String], hiddenItemStableKeys: [String]) {
+        var visibleKeys = storedLayout.visibleItemStableKeys
+        var hiddenKeys = storedLayout.hiddenItemStableKeys
+        var knownKeys = Set(visibleKeys + hiddenKeys)
+        knownKeys.formUnion(storedLayout.alwaysHiddenItemStableKeys)
+
+        for item in items {
+            let key = item.tag.stableKey
+            guard !knownKeys.contains(key) else { continue }
+            knownKeys.insert(key)
+
+            if item.canBeHidden {
+                hiddenKeys.append(key)
+            } else {
+                visibleKeys.append(key)
+            }
+        }
+
+        return (
+            visibleItemStableKeys: normalizedStableKeys(visibleKeys),
+            hiddenItemStableKeys: normalizedStableKeys(hiddenKeys)
+        )
+    }
+
+    private static func stableKeys(for items: [MenuBarItem]) -> [String] {
+        normalizedStableKeys(items.map(\.tag.stableKey))
+    }
+
+    private static func normalizedStableKeys(_ keys: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for key in keys where !key.isEmpty {
+            guard seen.insert(key).inserted else { continue }
+            result.append(key)
+        }
+        return result
+    }
+}
+
 enum MenuBarHiddenLayoutPolicy {
     static func sectionItems(
         _ section: MenuBarHiddenSection,
@@ -479,7 +579,7 @@ enum MenuBarHiddenLayoutPolicy {
     static func hostIconNeedsRecovery(items: [MenuBarItem], hiddenDividerBounds: CGRect?) -> Bool {
         guard let hiddenDividerBounds else { return false }
         return items.contains {
-            $0.isHostApplicationIcon && section(
+            $0.isHostApplicationIcon && rawSection(
                 for: $0,
                 hiddenDividerBounds: hiddenDividerBounds,
                 alwaysHiddenDividerBounds: nil
@@ -505,7 +605,18 @@ enum MenuBarHiddenLayoutPolicy {
         if item.isHostApplicationIcon {
             return .visible
         }
+        return rawSection(
+            for: item,
+            hiddenDividerBounds: hiddenDividerBounds,
+            alwaysHiddenDividerBounds: alwaysHiddenDividerBounds
+        )
+    }
 
+    private static func rawSection(
+        for item: MenuBarItem,
+        hiddenDividerBounds: CGRect,
+        alwaysHiddenDividerBounds: CGRect? = nil
+    ) -> MenuBarHiddenSection {
         // Mirrors Thaw's CacheContext.findSection. The hidden divider separates
         // visible from hidden; when present, the always-hidden divider sits to
         // the left of it and separates hidden from permanently hidden.
@@ -535,6 +646,26 @@ enum MenuBarHiddenLayoutPolicy {
             return itemMidX >= alwaysHiddenMidX ? .hidden : .alwaysHidden
         }
         return .hidden
+    }
+}
+
+enum MenuBarHiddenMenuBarDragCommitPolicy {
+    enum Decision: Equatable {
+        case commit
+        case recoverThenCommit
+        case recoverOnly
+    }
+
+    static func decision(
+        target: MenuBarHiddenMenuBarDragTarget,
+        dividerNeedsRecovery: Bool
+    ) -> Decision {
+        switch target {
+        case .hostIcon:
+            return .recoverOnly
+        case .divider, .unknown:
+            return dividerNeedsRecovery ? .recoverThenCommit : .commit
+        }
     }
 }
 

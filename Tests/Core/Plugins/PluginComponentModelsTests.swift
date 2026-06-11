@@ -166,6 +166,32 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
         )
     }
 
+    func testVisibleControlItemNeedsRecoveryWhenStoredLeftOfHiddenDivider() {
+        MenuBarControlItemDefaults.setHiddenDividerControlItemPreferredPosition(8, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(9, userDefaults: userDefaults)
+
+        XCTAssertTrue(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
+
+        MenuBarControlItemDefaults.resetVisibleControlItemPosition(userDefaults: userDefaults)
+
+        XCTAssertFalse(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
+        XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 7.5)
+    }
+
+    func testVisibleControlItemDoesNotNeedRecoveryWhenStoredRightOfHiddenDivider() {
+        MenuBarControlItemDefaults.setHiddenDividerControlItemPreferredPosition(8, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(7.5, userDefaults: userDefaults)
+
+        XCTAssertFalse(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
+    }
+
+    func testVisibleControlItemNeedsRecoveryWhenStoredAtSamePositionAsHiddenDivider() {
+        MenuBarControlItemDefaults.setHiddenDividerControlItemPreferredPosition(8, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(8, userDefaults: userDefaults)
+
+        XCTAssertTrue(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
+    }
+
     func testDividerRecoveryUsesCurrentVisiblePosition() {
         MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(4, userDefaults: userDefaults)
 
