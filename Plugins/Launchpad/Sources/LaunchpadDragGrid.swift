@@ -2,14 +2,23 @@ import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
-/// Fixed cell geometry — mirrors the previous SwiftUI cell so the AppKit grid looks the
-/// same when not dragging.
+/// Cell geometry, single-sourced (design §1.2). The default initialiser stays
+/// byte-compatible with the historical hardcoded layout; appearance preferences go
+/// through `LaunchpadGridMetrics.resolve(_:)` (LaunchpadLayoutMath.swift), the ONLY
+/// resolution entry point.
 struct LaunchpadGridMetrics: Equatable {
     var cellWidth: CGFloat = 116
     var cellHeight: CGFloat = 124
     var iconSide: CGFloat = 64        // smaller, airier icons (closer to iOS) inside the same pitch
     var columnSpacing: CGFloat = 8
     var rowSpacing: CGFloat = 16
+    // Derived appearance fields (design §1.2), reverse-engineered from the previous
+    // in-cell hardcodes (icon at y=8, label 8 below the icon, 32pt tall, labels shown)
+    // so the defaults keep `LaunchpadGridMetrics()` byte-compatible.
+    var showsLabels: Bool = true
+    var iconTopInset: CGFloat = 8
+    var labelGap: CGFloat = 8
+    var labelHeight: CGFloat = 32
 }
 
 /// Where a dragged app should land, expressed as a *relative* position (never an absolute
@@ -220,11 +229,14 @@ final class LaunchpadGridContainerView: NSView {
         let sameItems = cells.map(\.cell) == grid.items
         let sameColumns = columns == max(1, grid.columns)
         let sameRows = rows == max(0, grid.rows)
+        // Metrics change with unchanged items must NOT take the fast path (design §1.3):
+        // the cells would keep their old icon/label frames and never re-layout.
+        let sameMetrics = metrics == grid.metrics
         self.grid = grid
         self.columns = max(1, grid.columns)
         self.rows = max(0, grid.rows)
         self.metrics = grid.metrics
-        if sameItems {
+        if sameItems && sameMetrics {
             for cell in cells { cell.isSelected = (cell.layoutID == grid.selectedID) }
             if !sameColumns || !sameRows { needsLayout = true }
         } else {
@@ -487,7 +499,7 @@ final class LaunchpadGridContainerView: NSView {
         let p = coordinator.pageLocalPoint(fromWindow: windowPoint)
             ?? (window != nil ? convert(windowPoint, from: nil) : windowPoint)
         let iconCentre = NSPoint(x: cell.frame.minX + metrics.cellWidth / 2,
-                                 y: cell.frame.minY + 8 + metrics.iconSide / 2)
+                                 y: cell.frame.minY + metrics.iconTopInset + metrics.iconSide / 2)
         let grabOffset = NSPoint(x: p.x - iconCentre.x, y: iconCentre.y - p.y)
         let isApp: Bool = { if case .app = cell.cell { return true }; return false }()
         let screen = window?.convertPoint(toScreen: windowPoint) ?? .zero
@@ -779,10 +791,12 @@ final class LaunchpadGridContainerView: NSView {
     /// to either side stay reorder.
     private func mergeRect(forSlot slot: Int) -> CGRect {
         let s = slotRect(slot)
-        let inset: CGFloat = 8
+        // Scales with the icon (design §1.1): 8 at the long-standing 64pt (regression
+        // unchanged), floored at 6 so a 48pt icon keeps a usable 36×36 hot zone.
+        let inset: CGFloat = max(6, metrics.iconSide * 0.125)
         return CGRect(
             x: s.minX + (metrics.cellWidth - metrics.iconSide) / 2 + inset,
-            y: s.minY + 8 + inset,
+            y: s.minY + metrics.iconTopInset + inset,
             width: metrics.iconSide - inset * 2,
             height: metrics.iconSide - inset * 2
         )
@@ -1029,7 +1043,7 @@ final class LaunchpadGridContainerView: NSView {
     /// The icon area inside a slot/cell frame — mirrors the cell's own `iconFrame` placement.
     private func iconRect(in slot: CGRect) -> CGRect {
         CGRect(x: slot.minX + (metrics.cellWidth - metrics.iconSide) / 2,
-               y: slot.minY + 8,
+               y: slot.minY + metrics.iconTopInset,
                width: metrics.iconSide, height: metrics.iconSide)
     }
 
@@ -1226,8 +1240,16 @@ final class LaunchpadGridCellView: NSView {
 
     /// The icon area both the app image view and the folder thumbnail occupy.
     private var iconFrame: CGRect {
-        CGRect(x: (metrics.cellWidth - metrics.iconSide) / 2, y: 8,
+        CGRect(x: (metrics.cellWidth - metrics.iconSide) / 2, y: metrics.iconTopInset,
                width: metrics.iconSide, height: metrics.iconSide)
+    }
+
+    /// The label strip below the icon. With labels hidden (`showsLabels == false`) the
+    /// height collapses to 0 and the field is hidden — accessibility label and toolTip
+    /// still carry the name (design §1.2).
+    private var labelFrame: CGRect {
+        CGRect(x: 2, y: metrics.iconTopInset + metrics.iconSide + metrics.labelGap,
+               width: metrics.cellWidth - 4, height: metrics.labelHeight)
     }
 
     /// The icon area enlarged ~1.1× while armed as a merge target.
@@ -1244,8 +1266,9 @@ final class LaunchpadGridCellView: NSView {
         imageView.frame = iconFrame
         addSubview(imageView)
 
-        label.frame = CGRect(x: 2, y: 8 + metrics.iconSide + 8, width: metrics.cellWidth - 4, height: 32)
-        label.font = .systemFont(ofSize: 12)
+        label.frame = labelFrame
+        label.isHidden = !metrics.showsLabels
+        label.font = .systemFont(ofSize: 12)   // font size stays constant across icon sizes (design §1.1)
         label.alignment = .center
         label.maximumNumberOfLines = 2
         label.lineBreakMode = .byTruncatingTail
@@ -1266,6 +1289,8 @@ final class LaunchpadGridCellView: NSView {
     func update(cell: LaunchpadDisplayCell, icons: [NSImage], metrics: LaunchpadGridMetrics) {
         self.metrics = metrics
         imageView.frame = iconFrame
+        label.frame = labelFrame
+        label.isHidden = !metrics.showsLabels
         configure(cell: cell, icons: icons)
     }
 
@@ -1465,6 +1490,9 @@ final class LaunchpadGridCellView: NSView {
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
         let icon = iconFrame.insetBy(dx: -2, dy: -2)
+        // Hidden labels (design §1.2): the label strip is skipped outright — only the
+        // icon (±2pt) claims events, everything else falls through to the pager.
+        guard metrics.showsLabels else { return icon.contains(local) ? self : nil }
         let labelHit = NSRect(x: icon.minX, y: label.frame.minY, width: icon.width, height: label.frame.height)
         return (icon.contains(local) || labelHit.contains(local)) ? self : nil
     }

@@ -34,6 +34,11 @@ struct LaunchpadGridView: View {
     /// panel dismisses by clicking *outside* it (→ app resigns active), drops the
     /// inside-the-panel click-to-dismiss that fullscreen Launchpad uses.
     var isCompact: Bool = false
+    /// Session grid metrics, injected by the overlay controller (single source, design
+    /// §1.4): paging math, the AppKit page grids and the folder panel all read THIS —
+    /// never a private mirror. Default = the historical appearance, so callers that
+    /// don't inject (and P1 as a whole) are byte-compatible.
+    var metrics = LaunchpadGridMetrics()
     /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
     var hiddenAppIDs: Set<String> = []
     /// Glass background recipe, snapshotted at `open()` like `windowMode` (design §5.4 —
@@ -74,11 +79,9 @@ struct LaunchpadGridView: View {
     /// Stable handle into the bridged rename field, so SwiftUI-side hooks (blank tap, folder
     /// close, in-folder drag start) can end the edit session explicitly (design §2.3/§2.7).
     @State private var renameController = LaunchpadFolderRenameController()
-    // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
-    private let cellWidth: CGFloat = 116
-    private let cellHeight: CGFloat = 124
-    private let columnSpacing: CGFloat = 8
-    private let rowSpacing: CGFloat = 16
+    /// Shared chrome constants (search bar, paddings, page-dot reserve) — single-sourced
+    /// in `LaunchpadLayoutMath.Chrome` so the settings preview can't drift (design §1.1).
+    private var chrome: LaunchpadLayoutMath.Chrome { .standard(isCompact: isCompact) }
 
     private var filtered: [LaunchpadDisplayCell] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,13 +184,13 @@ struct LaunchpadGridView: View {
             // wrapping it would re-sample the desktop every paging frame (§5.5).
             backgroundLayer
 
-            VStack(spacing: isCompact ? 14 : 20) {
+            VStack(spacing: chrome.stackSpacing) {
                 searchBar
                 content
             }
-            .padding(.top, isCompact ? 24 : 60)
-            .padding(.bottom, isCompact ? 20 : 32)
-            .padding(.horizontal, isCompact ? 24 : 48)
+            .padding(.top, chrome.topPadding)
+            .padding(.bottom, chrome.bottomPadding)
+            .padding(.horizontal, chrome.horizontalPadding)
 
             // Folder overlay = a frosted scrim + the folder panel. Both are rendered whenever a
             // folder is open and animated via `folderShown` (explicit scale/opacity, not a
@@ -285,7 +288,7 @@ struct LaunchpadGridView: View {
             onLaunch: activateSelection,
             onCancel: handleCancel
         )
-        .frame(width: 360, height: 28)
+        .frame(width: chrome.searchBarWidth, height: chrome.searchBarHeight)
     }
 
     @ViewBuilder
@@ -377,6 +380,10 @@ struct LaunchpadGridView: View {
             selectedID: selectedID,
             isCompact: isCompact,
             interactionEnabled: openFolder == nil,    // exactly matches overlay visibility
+            // The critical seam (design §1.4): the root pages must run on the SAME
+            // injected metrics as the paging math above, or the SwiftUI pager and the
+            // AppKit grid disagree and cross-page carry drop points skew.
+            metrics: metrics,
             localization: localization,
             iconProvider: { catalog.icon(for: $0) },
             onActivate: activateCell,
@@ -572,15 +579,16 @@ struct LaunchpadGridView: View {
     // MARK: - Layout + navigation
 
     private func updateLayout(size: CGSize) {
-        if columns != LaunchpadPreferences.autoColumns {
-            columnCount = max(1, columns)                       // fixed count from preferences
-        } else {
-            let usable = max(size.width, cellWidth)
-            columnCount = max(1, Int(usable / (cellWidth + columnSpacing)))
-        }
-        // Reserve ~26pt for the page indicator row below the grid.
-        let usableHeight = max(cellHeight, size.height - 26)
-        rowCount = max(1, Int((usableHeight + rowSpacing) / (cellHeight + rowSpacing)))
+        // Pure capacity math lives in LaunchpadLayoutMath.pageGrid (shared with the
+        // settings preview, design §1.2). Fixed-column overflow clamping (ruling A4)
+        // stays OFF until P2 — today's behaviour, preserved exactly.
+        let grid = LaunchpadLayoutMath.pageGrid(
+            viewport: size,
+            metrics: metrics,
+            fixedColumns: columns == LaunchpadPreferences.autoColumns ? nil : columns
+        )
+        columnCount = grid.columns
+        rowCount = grid.rows
         // Layout (and thus perPage) changed: keep the selection valid and re-derive the
         // visible page *from it*, so the source-of-truth selection is always on screen —
         // not stranded on a now-wrong page (Codex P1). Mid-carry the pull-back is exempt:
@@ -770,7 +778,7 @@ struct LaunchpadGridView: View {
     }
 
     private func folderPanel(_ folder: (id: String, name: String, items: [LaunchpadAppItem])) -> some View {
-        let metrics = LaunchpadGridMetrics()
+        // Reuses the injected session metrics (design §1.4) — no ad-hoc construction.
         let cols = min(max(folder.items.count, 1), 5)              // Mac is wide; cap at 5 per row
         let rows = max(1, (folder.items.count + cols - 1) / cols)
         let gridW = CGFloat(cols) * metrics.cellWidth + CGFloat(cols - 1) * metrics.columnSpacing
@@ -815,6 +823,13 @@ struct LaunchpadGridView: View {
         // Cells and the field are AppKit views that hit-test first, so they're unaffected.
         .contentShape(Rectangle())
         .onTapGesture { renameController.endEditing(commit: true) }
+        // NOTE: this cap IS the rendered plate width, not a never-binding ceiling — a
+        // maxWidth-only frame fills its proposal up to the cap, and the material
+        // background below is applied to THIS frame. Both window modes propose > 760,
+        // so every folder plate renders exactly 760pt wide today. Deriving the cap from
+        // metrics (design §1.1: 5 columns + padding) is therefore a visible width change
+        // and is deferred to P2, where it ships as a deliberate, screenshot-verified
+        // appearance change. P1 keeps the historical literal byte-for-byte.
         .frame(maxWidth: 760)
         // TODO(G5): on macOS 26+ adopt `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))`
         // here (folder panel + compact floating panel only — the fullscreen backdrop stays an

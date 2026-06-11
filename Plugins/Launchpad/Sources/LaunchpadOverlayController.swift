@@ -298,15 +298,10 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// floating panel (compact). Used for both initial placement and screen changes.
     private func targetFrame(on screen: NSScreen) -> NSRect {
         guard sessionMode == .compact else { return screen.frame }
-        let visible = screen.visibleFrame
-        let width = min(960, visible.width * 0.72)
-        let height = min(680, visible.height * 0.82)
-        return NSRect(
-            x: visible.midX - width / 2,
-            y: visible.midY - height / 2,
-            width: width,
-            height: height
-        )
+        // `legacyCap: true` reproduces the historical min(960/680) formula byte for
+        // byte. P2 flips it off and wires scalePercent + session metrics (design §3.3,
+        // ruling A5 — that cap removal is a deliberate, separately-shipped change).
+        return LaunchpadLayoutMath.compactFrame(visible: screen.visibleFrame, legacyCap: true)
     }
 
     // MARK: - Dismissal (Codex P0 #4)
