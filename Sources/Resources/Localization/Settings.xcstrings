@@ -7,13 +7,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A free, open-source collection of macOS menu bar tools.\\nBuilt with SwiftUI."
+            "value": "A free, open-source collection of macOS menu bar tools. Built with SwiftUI."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "一款免费、开源的 macOS 菜单栏工具集合。\\n使用 SwiftUI 构建。"
+            "value": "一款免费、开源的 macOS 菜单栏工具集合。使用 SwiftUI 构建。"
           }
         }
       }
