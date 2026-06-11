@@ -21,11 +21,12 @@ struct LaunchpadGridView: View {
     /// re-evaluates `filtered` and re-renders — the overlay grid does NOT observe
     /// `onStateChange`, so this injection is the only reorder-refresh path (design §5.5 / R1).
     @ObservedObject var layoutStore: LaunchpadLayoutStore
-    /// Shared across the root pages and the open folder; owns the finger-bound folder-exit handoff.
-    /// Injected (the overlay controller owns it) so overlay teardown can abort an in-flight eject —
-    /// the floating icon is a separate child NSWindow that would otherwise outlive the launcher.
-    /// `@ObservedObject` so its `@Published` eject token re-renders this view: the eject is requested
-    /// from an AppKit mouseUp handler, where a captured-closure `@State` write doesn't invalidate.
+    /// Shared across the root pages and the open folder; owns the finger-bound carry session.
+    /// Injected (the overlay controller owns it) so overlay teardown can abort an in-flight carry —
+    /// the floating icon is a separate NSWindow that would otherwise outlive the launcher.
+    /// `@ObservedObject` so its `@Published` commit token re-renders this view: the commit visuals
+    /// are requested from an AppKit mouseUp handler, where a captured-closure `@State` write
+    /// doesn't invalidate. The token is VISUAL-only — data lands via the injected storeApplier.
     @ObservedObject var dragCoordinator: LaunchpadDragCoordinator
     /// Fixed column count, or `LaunchpadPreferences.autoColumns` (0) to fit to width.
     var columns: Int = LaunchpadPreferences.autoColumns
@@ -82,7 +83,7 @@ struct LaunchpadGridView: View {
             .reconcile(apps: catalog.apps, layout: layoutStore.layout, hidden: sessionHidden)
         // During a folder carry, hide the carried app from its source folder's thumbnail (display
         // only — the data isn't touched until release, preserving the drop-back-in revert).
-        guard dragCoordinator.ejectActive,
+        guard dragCoordinator.folderEjectActive,
               let appID = dragCoordinator.carriedAppID,
               let folderID = dragCoordinator.carriedSourceFolderID
         else { return cells }
@@ -163,18 +164,29 @@ struct LaunchpadGridView: View {
         // Mid-drag: the app left the folder → zoom the folder closed NOW while the drag continues
         // (kept mounted so the folder cell stays the live mouse-event target until release). Driven
         // by the coordinator's @Published flag so this runs in a tracked SwiftUI transaction.
-        .onChange(of: dragCoordinator.ejectActive) { _, active in
+        .onChange(of: dragCoordinator.folderEjectActive) { _, active in
             if active { withAnimation(folderCloseAnimation) { folderShown = false } }
         }
-        // Release: apply the carried app's resolved outcome (reorder / make folder / add to folder)
-        // and finish unmounting the folder.
-        .onChange(of: dragCoordinator.ejectToken) { _, _ in
-            guard let req = dragCoordinator.pendingEject else { return }
-            handleMoveOutOfFolder(req.folderID, req.appID, req.result)
-            openFolderID = nil
-            folderShown = false
+        // Release: VISUAL channel only. The store mutation already happened synchronously in
+        // mouseUp through the coordinator's injected storeApplier (design §1.3) — if this view is
+        // torn down before the token is consumed, only the close/re-select visuals are lost.
+        .onChange(of: dragCoordinator.commitToken) { _, _ in
+            guard let visual = dragCoordinator.pendingVisualCommit else { return }
+            if case .folder = visual.origin {       // finish unmounting the (already zoomed) folder
+                openFolderID = nil
+                folderShown = false
+            }
+            if let landingID = visual.landingID { relocateSelection(to: landingID) }
+            dragOrderSnapshot = nil
         }
         .onChange(of: searchText) { _, _ in
+            // Design §9.1 row 6: typing mid-carry cancels the carry FIRST, before the folder
+            // close and the page/selection reset. This keeps `editableAtBegin`'s safety premise
+            // self-contained — a release can never classify against the flattened search cells
+            // and write the store. (The folder grid's unmount hook is the second insurance: a
+            // non-empty query dissolves folders, so the source grid leaves the window in this
+            // same commit and would cancel too.)
+            if dragCoordinator.carrySession != nil { dragCoordinator.cancelCarry(.searchActivated) }
             selectedIndex = 0; currentPage = 0
             closeFolder()        // typing dissolves folders into a flat search (animated close)
         }
@@ -367,26 +379,6 @@ struct LaunchpadGridView: View {
         layoutStore.captureVisibleOrder(rootApps(of: order))
         layoutStore.addToFolder(folderID, app: appID)
         relocateSelection(to: folderID)
-    }
-
-    /// Finger-bound folder exit commit: apply the carried app's resolved outcome over the root grid —
-    /// reorder at the cursor slot, merge onto an app (new folder), or add to a folder — each as a
-    /// single store mutation. Selection follows the result (the new/destination folder, or the app).
-    private func handleMoveOutOfFolder(_ folderID: String, _ appID: String, _ result: LaunchpadExternalDropResult) {
-        guard isLayoutEditable else { return }
-        layoutStore.captureVisibleOrder(rootApps(of: filtered))
-        switch result {
-        case .reorder(let target):
-            layoutStore.moveOutOfFolder(folderID, app: appID, to: target)
-            relocateSelection(to: appID)
-        case .makeFolder(let targetAppID):
-            let newID = UUID().uuidString
-            layoutStore.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID, name: folderDefaultName, id: newID)
-            relocateSelection(to: newID)
-        case .addToFolder(let destFolderID):
-            layoutStore.ejectIntoFolder(source: folderID, app: appID, destination: destFolderID)
-            relocateSelection(to: destFolderID)
-        }
     }
 
     private func moveAppToFront(_ app: LaunchpadAppItem) {
@@ -703,7 +695,11 @@ struct LaunchpadGridView: View {
             },
             onMakeFolder: { _, _ in },
             onAddToFolder: { _, _ in },
-            onDragBegan: {},
+            // Freeze the visible ROOT order (+ editability) the moment an in-folder drag begins:
+            // if it escalates to an eject carry, the session adopts this snapshot so the commit's
+            // captureVisibleOrder resolves against what the user saw, not a list a mid-carry
+            // catalog reload may have changed (design §1.3 / constraint 15).
+            onDragBegan: { dragCoordinator.freezeVisibleOrder(filtered, editable: isLayoutEditable) },
             onPageSwipe: { _ in },
             onPageDrag: { _, _, _ in },
             onPageScroll: { _, _ in },

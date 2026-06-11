@@ -1,36 +1,149 @@
 import AppKit
 import Combine
+import OSLog
 
-/// Coordinates the iOS-style "drag an app OUT of a folder" gesture across the separate AppKit grids.
-///
-/// Flow: while dragging an app inside the open folder, the moment it leaves the folder the folder
-/// ZOOMS CLOSED (mid-drag) and a floating icon — hosted in its OWN borderless child window, NOT in
-/// the SwiftUI `NSHostingView` (which froze when mutated mid-drag) — follows the cursor over the
-/// launcher. On release the app drops at the cursor's root slot.
-///
-/// It is an `ObservableObject`: the mid-drag close and the final commit are requested from inside an
-/// AppKit mouse handler, where mutating the host view's `@State` directly does NOT invalidate the
-/// view. Publishing `ejectActive` / `ejectToken` instead routes both back through SwiftUI `.onChange`,
-/// where the `@State` mutations (close the folder, move the app) run in a tracked transaction.
+// MARK: - Floating icon presentation (injectable — tests swap in a spy, design §10-①)
+
+/// The cursor-following floating icon a carry rides in. It lives in its OWN borderless window,
+/// NOT in the SwiftUI `NSHostingView` (which froze when mutated mid-drag).
 @MainActor
-final class LaunchpadDragCoordinator: ObservableObject {
-    struct EjectRequest {
-        let folderID: String
-        let appID: String
-        let result: LaunchpadExternalDropResult
+protocol LaunchpadFloatingIconPresenting: AnyObject {
+    var isPresenting: Bool { get }
+    func present(icon: NSImage?, side: CGFloat, atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level)
+    func move(toScreenPoint p: NSPoint)
+    /// Fly to the resolved slot, then call `completion`. Hard-cut until step 8: lands instantly.
+    func settle(to screenRect: NSRect, completion: @escaping @MainActor () -> Void)
+    func dismiss()
+}
+
+/// Production presenter: a borderless, mouse-transparent NSWindow one level above the overlay.
+@MainActor
+final class LaunchpadFloatingIconWindowPresenter: LaunchpadFloatingIconPresenting {
+    private var window: NSWindow?
+    private var side: CGFloat = 0
+
+    var isPresenting: Bool { window != nil }
+
+    func present(icon: NSImage?, side: CGFloat, atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) {
+        dismiss()
+        self.side = side
+        let frame = NSRect(x: 0, y: 0, width: side, height: side)
+        let win = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        win.isOpaque = false
+        win.backgroundColor = .clear
+        win.hasShadow = true
+        win.ignoresMouseEvents = true
+        win.level = NSWindow.Level(rawValue: aboveLevel.rawValue + 1)
+        let iconView = NSImageView(frame: frame)
+        iconView.image = icon
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        win.contentView = iconView
+        window = win
+        move(toScreenPoint: p)
+        win.orderFront(nil)
     }
 
-    /// True from the moment the dragged app leaves the folder until release — the host view watches
-    /// this and zooms the folder closed while the drag continues.
-    @Published private(set) var ejectActive = false
-    /// Bumped on release — the host view performs the move + final close in its `.onChange`.
-    @Published private(set) var ejectToken = 0
-    private(set) var pendingEject: EjectRequest?
+    func move(toScreenPoint p: NSPoint) {
+        window?.setFrameOrigin(NSPoint(x: p.x - side / 2, y: p.y - side / 2))
+    }
 
-    /// The app currently being carried out + its source folder — used to hide it from that folder's
-    /// thumbnail during the carry (transient display only; the data isn't touched until release).
-    private(set) var carriedAppID: String?
-    private(set) var carriedSourceFolderID: String?
+    func settle(to screenRect: NSRect, completion: @escaping @MainActor () -> Void) {
+        window?.setFrame(screenRect, display: false)
+        dismiss()
+        completion()
+    }
+
+    func dismiss() {
+        window?.orderOut(nil)
+        window = nil
+    }
+}
+
+// MARK: - Commit routing (pure data, design §1.3)
+
+/// A release, as data: what was carried, where it came from, what the container resolved.
+struct LaunchpadCarryCommit {
+    let itemID: String
+    let origin: LaunchpadCarrySession.Origin
+    let result: LaunchpadExternalDropResult
+}
+
+/// The store mutation a commit maps to. Applied by the injected `storeApplier` — the data path
+/// never travels through a SwiftUI `@Published` token, so a torn-down view can't lose it.
+enum CarryStoreAction: Equatable {
+    case move(id: String, target: LaunchpadDropTarget?)   // nil target = global tail
+    case makeFolder(targetAppID: String, draggedID: String)
+    case addToFolder(folderID: String, appID: String)
+    case moveOutOfFolder(folderID: String, appID: String, result: LaunchpadExternalDropResult)
+    case none                                              // no-op: skip the write; visuals settle as usual
+}
+
+/// Coordinates carry sessions (an item dragged OUTSIDE any container — ejected from a folder
+/// today, lifted from the root page in step 7) across the separate per-page AppKit grids.
+///
+/// Flow: while dragging an app inside the open folder, the moment it leaves the folder the folder
+/// ZOOMS CLOSED (mid-drag) and a floating icon — hosted in its OWN borderless window — follows the
+/// cursor over the launcher. On release the data lands SYNCHRONOUSLY in mouseUp through the
+/// injected `storeApplier`; the `@Published commitToken` is a pure VISUAL channel (close the
+/// folder, re-select, drop the frozen snapshot) that is harmless to lose if the overlay tears
+/// down before SwiftUI consumes it (design §1.3 — the fix for the resign-active commit race).
+///
+/// It is an `ObservableObject` because the mid-drag folder close must still be requested from an
+/// AppKit mouse handler, where mutating the host view's `@State` directly does NOT invalidate the
+/// view; `@Published` routes it through SwiftUI `.onChange` in a tracked transaction.
+@MainActor
+final class LaunchpadDragCoordinator: ObservableObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "LaunchpadCarry"
+    )
+
+    enum CarryCancelReason {
+        case overlayClosed, anchorUnmounted, searchActivated, geometryChanged, shutdown
+    }
+
+    enum CarryEndReason { case committed, cancelled }
+
+    /// What the visual channel needs after a commit. The store mutation already happened.
+    struct VisualCommit {
+        let itemID: String
+        let origin: LaunchpadCarrySession.Origin
+        let result: LaunchpadExternalDropResult
+        /// Where the selection should follow (the moved app / the new or destination folder);
+        /// nil when nothing was written.
+        let landingID: String?
+    }
+
+    /// True from lift until release/cancel, for ANY carry origin.
+    @Published private(set) var carryActive = false
+    /// True only while a FOLDER-origin carry is live — drives the mid-drag folder close and the
+    /// source folder's thumbnail filter in the host view.
+    @Published private(set) var folderEjectActive = false
+    /// Bumped on release — VISUAL channel only (close folder / relocate selection / clear the
+    /// frozen snapshot). The data was already applied synchronously via `storeApplier`.
+    @Published private(set) var commitToken = 0
+    private(set) var pendingVisualCommit: VisualCommit?
+
+    private(set) var carrySession: LaunchpadCarrySession?
+    private(set) var endReason: CarryEndReason?
+
+    /// Synchronous mouseUp data path, injected by the overlay controller (it owns both the
+    /// coordinator and the layout store). Returns the landing id for the visual channel.
+    var storeApplier: (@MainActor (CarryStoreAction, [LaunchpadDisplayCell]) -> String?)?
+    /// Test seam: swap the floating-icon window for a spy (design §10-①).
+    var floatingPresenterFactory: @MainActor () -> LaunchpadFloatingIconPresenting =
+        { LaunchpadFloatingIconWindowPresenter() }
+
+    /// Visible-order snapshot + editability staged by the host view when a drag begins
+    /// (`onDragBegan` fires before any carry can start); adopted by the next session at lift.
+    private var pendingFrozenOrder: [LaunchpadDisplayCell] = []
+    private var pendingEditable = true
+    /// Set when a live carry is cancelled, cleared when the next gesture begins
+    /// (`freezeVisibleOrder`). A cancelled gesture's orphan events must STAY orphaned
+    /// (design §1.2): without this latch the grid's late-eject fallback (`commitOut` with no
+    /// session) could re-open a session from the same mouse gesture — with stale staged
+    /// editability — and commit the very drop the cancel aborted.
+    private var carryCancelledThisGesture = false
 
     private struct WeakContainer { weak var value: LaunchpadGridContainerView? }
 
@@ -42,9 +155,6 @@ final class LaunchpadDragCoordinator: ObservableObject {
     private(set) var currentPage = 0
     /// Viewport/page geometry pushed from the grid (AppKit window space, Equatable-deduped).
     private(set) var geometry = LaunchpadPageGeometry()
-
-    private var floatingWindow: NSWindow?
-    private var floatingSide: CGFloat = 0
 
     /// The container an external drag should classify against — the visible page's grid.
     private var activeContainer: LaunchpadGridContainerView? { pages[currentPage]?.value }
@@ -84,42 +194,56 @@ final class LaunchpadDragCoordinator: ObservableObject {
     }
 
     // Test-facing read-only surface (design §10-④).
-    var hasFloatingWindow: Bool { floatingWindow != nil }
+    var hasFloatingWindow: Bool { carrySession?.presenter.isPresenting ?? false }
     var registeredPageIndices: [Int] { pages.filter { $0.value.value != nil }.keys.sorted() }
 
-    /// Begin the eject: raise a floating icon at the cursor and signal the folder to close. Safe to
-    /// call from a mouse handler — creating an `NSWindow` is pure AppKit (no SwiftUI), and the
-    /// `@Published` flip schedules the SwiftUI close asynchronously rather than mutating it inline.
-    func beginEject(appID: String, sourceFolderID: String, icon: NSImage?, iconSide: CGFloat,
-                    atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) {
-        guard !ejectActive else { return }
-        carriedAppID = appID
-        carriedSourceFolderID = sourceFolderID
-        activeContainer?.beginExternalDrag(appID: appID) // visible page starts making way / can merge
-        floatingSide = iconSide * 1.1
-        let frame = NSRect(x: 0, y: 0, width: floatingSide, height: floatingSide)
-        let win = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-        win.isOpaque = false
-        win.backgroundColor = .clear
-        win.hasShadow = true
-        win.ignoresMouseEvents = true
-        win.level = NSWindow.Level(rawValue: aboveLevel.rawValue + 1)
-        let iconView = NSImageView(frame: frame)
-        iconView.image = icon
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        win.contentView = iconView
-        floatingWindow = win
-        positionFloating(atScreenPoint: p)
-        win.orderFront(nil)
-        ejectActive = true
+    // MARK: - Carry session lifecycle (design §1)
+
+    /// Freeze the visible root order (+ editability) for the NEXT carry. Called from the host
+    /// view's `onDragBegan` — the only point with access to `filtered`/`isLayoutEditable` — so
+    /// the session can adopt both at lift without the coordinator reaching into the view.
+    func freezeVisibleOrder(_ order: [LaunchpadDisplayCell], editable: Bool = true) {
+        pendingFrozenOrder = order
+        pendingEditable = editable
+        carryCancelledThisGesture = false      // a new gesture starts with a clean slate
+    }
+
+    /// Begin a carry: raise the floating icon at the cursor and start make-way/merge on the
+    /// visible page. Safe to call from a mouse handler — the floating window is pure AppKit, and
+    /// the `@Published` flips schedule the SwiftUI folder close asynchronously.
+    @discardableResult
+    func beginCarry(itemID: String, origin: LaunchpadCarrySession.Origin, isApp: Bool,
+                    icon: NSImage?, iconSide: CGFloat,
+                    atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) -> Bool {
+        guard carrySession == nil, !carryCancelledThisGesture else { return false }
+        let session = LaunchpadCarrySession(
+            itemID: itemID,
+            origin: origin,
+            isApp: isApp,
+            editableAtBegin: pendingEditable,
+            frozenVisibleOrder: pendingFrozenOrder,
+            presenter: floatingPresenterFactory()
+        )
+        pendingFrozenOrder = []
+        pendingEditable = true
+        session.presenter.present(icon: icon, side: iconSide * 1.1, atScreenPoint: p, aboveLevel: aboveLevel)
+        carrySession = session
+        activeContainer?.beginExternalDrag(appID: itemID)   // visible page starts making way / can merge
+        endReason = nil
+        carryActive = true
+        if case .folder = origin { folderEjectActive = true }
+        return true
     }
 
     /// Follow the cursor: move the floating icon (screen space) AND drive the visible page's
     /// make-way / merge classification. The window point is mapped to page-local space through the
     /// pushed geometry — NOT through `convert` against the page container, whose frame chain is
     /// blind to the SwiftUI paging `.offset` (off by page×pageWidth on page > 0).
-    func moveEject(atScreenPoint screen: NSPoint, atWindowPoint window: NSPoint) {
-        positionFloating(atScreenPoint: screen)
+    func carryMoved(atScreenPoint screen: NSPoint, atWindowPoint window: NSPoint) {
+        guard let session = carrySession, session.isCarrying else { return }
+        session.lastScreenPoint = screen
+        session.lastWindowPoint = window
+        session.presenter.move(toScreenPoint: screen)
         guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
             activeContainer?.updateExternalDrag(atWindowPoint: window)
             return
@@ -128,12 +252,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
         activeContainer?.updateExternalDrag(atContainerPoint: space.local(fromWindow: window))
     }
 
-    /// Release after an eject: read the visible page's resolved outcome (merge or reorder), request
-    /// it, and drop the float. A `.reorder(nil)` from the container means classification never
-    /// settled (the whole carry stayed in columns' central dead-band, where updates set neither a
-    /// gap nor a merge) — re-resolve from the RELEASE point so an in-grid drop never falls back to
-    /// the tail; on a genuinely empty/out-of-grid release the re-resolution is nil again.
-    func commitOut(folderID: String, appID: String, atWindowPoint p: NSPoint) {
+    /// mouseUp: resolve the drop, land the DATA synchronously through `storeApplier`, tear the
+    /// floating icon down, then bump the visual token (design §1.4, hard-cut subset — the
+    /// resolve/freeze split and flight settle arrive in steps 4/8).
+    func carryReleased(atWindowPoint p: NSPoint) {
+        guard let session = carrySession, session.isCarrying else { return }
+
+        // Resolve exactly as the legacy eject commit did: a `.reorder(nil)` means classification
+        // never settled (the whole carry stayed in the columns' central dead-band) — re-resolve
+        // from the RELEASE point so an in-grid drop never falls back to the tail.
         let releaseTarget: LaunchpadDropTarget?
         if let space = carrySpace {
             releaseTarget = activeContainer?.rootDropTarget(atContainerPoint: space.local(fromWindow: p))
@@ -142,16 +269,139 @@ final class LaunchpadDragCoordinator: ObservableObject {
         }
         var result = activeContainer?.commitExternalDrag() ?? .reorder(releaseTarget)
         if case .reorder(nil) = result { result = .reorder(releaseTarget) }
-        pendingEject = EjectRequest(folderID: folderID, appID: appID, result: result)
-        tearDownFloating()
-        ejectToken += 1
+
+        // DATA lands here, synchronously in mouseUp. Editability uses the value frozen at lift —
+        // a live isLayoutEditable check could drop a commit landing after typing flattened the
+        // layout to search (BR-2).
+        let action: CarryStoreAction = session.editableAtBegin
+            ? Self.resolveCarryCommit(
+                LaunchpadCarryCommit(itemID: session.itemID, origin: session.origin, result: result),
+                frozenOrder: session.frozenVisibleOrder)
+            : .none
+        var landingID: String?
+        if action != .none {
+            if let storeApplier {
+                landingID = storeApplier(action, session.frozenVisibleOrder)
+            } else {
+                // Production always injects the applier in the overlay controller's init. Reaching
+                // here means that wiring regressed: the commit's DATA is being dropped while the
+                // visual token below still fires — the exact silent-loss class this step exists to
+                // kill. Loud, not fatal: the legacy eject shims legitimately run applier-less in
+                // tests (token/pendingEject assertions).
+                Self.logger.fault("carry commit resolved to a store action but no storeApplier is injected — data dropped")
+            }
+        }
+
+        pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
+                                           result: result, landingID: landingID)
+        session.presenter.dismiss()                          // hard-cut settle (flight is step 8)
+        carrySession = nil
+        endReason = .committed
+        folderEjectActive = false
+        carryActive = false
+        commitToken += 1                                     // visual-only; data is already safe
     }
 
-    /// Abort an in-flight eject (launcher closed / torn down) without moving anything.
-    func cancelEject() {
+    /// Abort an in-flight carry (launcher closed / source unmounted / search activated) without
+    /// moving anything. Fully synchronous — never routed through a `@Published` token, so the
+    /// teardown does not depend on the view tree surviving (design §9.2). Nil-safe: a cancel with
+    /// no session is ignored. `reason` gains distinct behaviour in later steps (page clamp etc.).
+    func cancelCarry(_ reason: CarryCancelReason) {
+        guard let session = carrySession else { return }
+        carryCancelledThisGesture = true
         activeContainer?.endExternalDrag()
-        tearDownFloating()
+        session.presenter.dismiss()
+        carrySession = nil
+        endReason = .cancelled
+        folderEjectActive = false
+        carryActive = false
     }
+
+    /// Pure mapping: container resolution + origin → store action (design §1.3). Static so unit
+    /// tests drive every branch without a session or a window.
+    static func resolveCarryCommit(_ commit: LaunchpadCarryCommit,
+                                   frozenOrder: [LaunchpadDisplayCell]) -> CarryStoreAction {
+        switch commit.origin {
+        case .folder(let folderID):
+            // The store's moveOutOfFolder family already handles nil-target tail drops and the
+            // 2-app dissolve target redirect — pass the result through untouched.
+            return .moveOutOfFolder(folderID: folderID, appID: commit.itemID, result: commit.result)
+        case .rootPage:
+            switch commit.result {
+            case .makeFolder(let targetAppID):
+                return .makeFolder(targetAppID: targetAppID, draggedID: commit.itemID)
+            case .addToFolder(let folderID):
+                return .addToFolder(folderID: folderID, appID: commit.itemID)
+            case .reorder(let target?):
+                let order = frozenOrder.map(\.layoutID)
+                guard !target.isNoOp(dragged: commit.itemID, in: order) else { return .none }
+                return .move(id: commit.itemID, target: target)
+            case .reorder(nil):
+                // Out-of-grid release = land at the global tail; already last = no-op. The tail
+                // node may be a folder — `move(after: folderID)` is a valid existing operation.
+                guard let last = frozenOrder.last, last.layoutID != commit.itemID else { return .none }
+                return .move(id: commit.itemID, target: .after(last.layoutID))
+            }
+        }
+    }
+
+    // MARK: - Legacy eject API (thin shims — design §0 naming table; existing tests + the
+    // container's call sites keep compiling unchanged)
+
+    struct EjectRequest {
+        let folderID: String
+        let appID: String
+        let result: LaunchpadExternalDropResult
+    }
+
+    var ejectActive: Bool { folderEjectActive }
+    var ejectToken: Int { commitToken }
+
+    var pendingEject: EjectRequest? {
+        guard let visual = pendingVisualCommit,
+              case .folder(let folderID) = visual.origin else { return nil }
+        return EjectRequest(folderID: folderID, appID: visual.itemID, result: visual.result)
+    }
+
+    /// The app currently being carried out of a folder + its source — used to hide it from that
+    /// folder's thumbnail during the carry (transient display only; data lands at release).
+    var carriedAppID: String? {
+        guard let session = carrySession, case .folder = session.origin else { return nil }
+        return session.itemID
+    }
+
+    var carriedSourceFolderID: String? {
+        guard let session = carrySession, case .folder(let folderID) = session.origin else { return nil }
+        return folderID
+    }
+
+    func beginEject(appID: String, sourceFolderID: String, icon: NSImage?, iconSide: CGFloat,
+                    atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) {
+        beginCarry(itemID: appID, origin: .folder(sourceFolderID: sourceFolderID), isApp: true,
+                   icon: icon, iconSide: iconSide, atScreenPoint: p, aboveLevel: aboveLevel)
+    }
+
+    func moveEject(atScreenPoint screen: NSPoint, atWindowPoint window: NSPoint) {
+        carryMoved(atScreenPoint: screen, atWindowPoint: window)
+    }
+
+    func commitOut(folderID: String, appID: String, atWindowPoint p: NSPoint) {
+        if carrySession == nil {
+            // Late eject: the release point itself is the first clearly-outside point (no
+            // updateDirectDrag classified in between, e.g. windowless tests or a single fast
+            // mouse delta), so no session was begun. Open one and commit it immediately — the
+            // floating icon is presented and dismissed within the same runloop turn (never drawn).
+            beginCarry(itemID: appID, origin: .folder(sourceFolderID: folderID), isApp: true,
+                       icon: nil, iconSide: 0, atScreenPoint: p, aboveLevel: .normal)
+        }
+        carryReleased(atWindowPoint: p)
+    }
+
+    func cancelEject() {
+        cancelCarry(.shutdown)
+    }
+
+    // MARK: - Debug geometry probe
 
     #if DEBUG
     /// Lets a runtime session validate the geometry push by just opening the launcher and flipping
@@ -197,16 +447,4 @@ final class LaunchpadDragCoordinator: ObservableObject {
     private func scheduleGeometryProbe() {}
     private func crossCheckGeometry(space: LaunchpadCarrySpace) {}
     #endif
-
-    private func positionFloating(atScreenPoint p: NSPoint) {
-        floatingWindow?.setFrameOrigin(NSPoint(x: p.x - floatingSide / 2, y: p.y - floatingSide / 2))
-    }
-
-    private func tearDownFloating() {
-        floatingWindow?.orderOut(nil)
-        floatingWindow = nil
-        carriedAppID = nil
-        carriedSourceFolderID = nil
-        ejectActive = false
-    }
 }

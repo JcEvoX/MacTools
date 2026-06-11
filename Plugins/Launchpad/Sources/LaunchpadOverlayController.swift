@@ -55,8 +55,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     private let layoutStore: LaunchpadLayoutStore
     /// Folder-eject handoff (the floating icon rides in its own child NSWindow). Controller-owned
     /// so `close()` can abort an in-flight eject deterministically — that floating window is NOT
-    /// part of the overlay window and would survive it otherwise.
-    private let dragCoordinator = LaunchpadDragCoordinator()
+    /// part of the overlay window and would survive it otherwise. Internal (not private) so tests
+    /// can drive a carry through the controller's PRODUCTION storeApplier/close wiring (§10-④).
+    let dragCoordinator = LaunchpadDragCoordinator()
     private let localization: PluginLocalization
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
@@ -76,6 +77,73 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         self.layoutStore = layoutStore
         self.localization = localization
         super.init()
+        // The synchronous mouseUp data path (design §1.3): the controller owns both the store and
+        // the coordinator, so the commit writes the store directly — never through a SwiftUI
+        // `@Published` token a torn-down view could fail to consume (the resign-active data-loss
+        // race). Captures the store/name directly: no reference back to self, no cycle.
+        let folderName = localization.string("folder.defaultName", defaultValue: "未命名")
+        dragCoordinator.storeApplier = { [layoutStore] action, frozenOrder in
+            Self.apply(action, frozenOrder: frozenOrder, to: layoutStore, folderName: folderName)
+        }
+    }
+
+    /// Maps a resolved carry commit onto the layout store, returning the landing id the visual
+    /// channel re-selects. Mirrors the per-result handlers that previously lived in the grid view
+    /// (`handleMoveOutOfFolder` and friends) — the store mutation semantics are unchanged.
+    /// Internal (not private) so tests drive the production mapping directly (design §10-⑤).
+    static func apply(
+        _ action: CarryStoreAction,
+        frozenOrder: [LaunchpadDisplayCell],
+        to store: LaunchpadLayoutStore,
+        folderName: String
+    ) -> String? {
+        // Materialize/extend the layout from the order frozen at drag start, not a live read a
+        // mid-carry catalog reload may have changed (constraint 15).
+        let rootApps = frozenOrder.compactMap { cell -> LaunchpadAppItem? in
+            if case .app(let item) = cell { return item }
+            return nil
+        }
+        switch action {
+        case .none:
+            return nil
+        case .move(let id, let target):
+            store.captureVisibleOrder(rootApps)
+            switch target {
+            case .before(let targetID):
+                store.move(id: id, before: targetID)
+            case .after(let targetID):
+                store.move(id: id, after: targetID)
+            case nil:
+                // Global tail. resolveCarryCommit only emits nil targets once the virtual tail
+                // page lands (step 6); defensive mapping in the meantime.
+                if let last = frozenOrder.last?.layoutID, last != id { store.move(id: id, after: last) }
+            }
+            return id
+        case .makeFolder(let targetAppID, let draggedID):
+            store.captureVisibleOrder(rootApps)
+            let newID = UUID().uuidString
+            store.makeFolder(target: targetAppID, dragged: draggedID, name: folderName, id: newID)
+            return newID
+        case .addToFolder(let folderID, let appID):
+            store.captureVisibleOrder(rootApps)
+            store.addToFolder(folderID, app: appID)
+            return folderID
+        case .moveOutOfFolder(let folderID, let appID, let result):
+            store.captureVisibleOrder(rootApps)
+            switch result {
+            case .reorder(let target):
+                store.moveOutOfFolder(folderID, app: appID, to: target)
+                return appID
+            case .makeFolder(let targetAppID):
+                let newID = UUID().uuidString
+                store.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID,
+                                         name: folderName, id: newID)
+                return newID
+            case .addToFolder(let destFolderID):
+                store.ejectIntoFolder(source: folderID, app: appID, destination: destFolderID)
+                return destFolderID
+            }
+        }
     }
 
     var isShown: Bool { window != nil }
@@ -154,11 +222,15 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     ///   `true` for user dismissal (Esc / background / app switch); `false` when an app
     ///   was just launched (it should come forward instead).
     func close(restoringFocus: Bool = true) {
-        guard !isTearingDown, let win = window else { return }
+        guard !isTearingDown else { return }
+        // A carry may be mid-flight (mouse still down): drop its floating icon window before the
+        // overlay goes — it's a separate window and would outlive us. Ahead of the window guard
+        // (nil-safe and idempotent) so no close request can ever leave a floating icon behind.
+        // Fully synchronous; if a commit already landed, its data hit the store in mouseUp and
+        // only visuals are skipped.
+        dragCoordinator.cancelCarry(.overlayClosed)
+        guard let win = window else { return }
         isTearingDown = true
-        // A folder eject may be mid-flight (mouse still down): drop its floating icon window
-        // before the overlay goes — it's a separate child window and would outlive us.
-        dragCoordinator.cancelEject()
         removeDismissHandlers()
         win.delegate = nil
         win.orderOut(nil)
