@@ -176,8 +176,27 @@ struct LaunchpadGridView: View {
                 openFolderID = nil
                 folderShown = false
             }
-            if let landingID = visual.landingID { relocateSelection(to: landingID) }
+            // One animation for re-select + virtual-page collapse: the dot retracting and the
+            // viewport falling back to the last real page read as a single motion (§6.2).
+            withAnimation(pageSnap) {
+                if let landingID = visual.landingID { relocateSelection(to: landingID) }
+                currentPage = min(currentPage, pageCount - 1)
+            }
             dragOrderSnapshot = nil
+        }
+        // Declared AFTER the commitToken handler — on a commit, the landing re-selection above
+        // must win before this cancel-shaped fallback could run (§6.4, AR-8).
+        .onChange(of: dragCoordinator.carryActive) { _, active in
+            if active {
+                // Entering a carry clears any in-flight two-finger paging residue: the deferred
+                // snap work item would otherwise fire mid-carry with a stale translation (AC-6).
+                pageScrollEndWork?.cancel()
+                pageScrollEndWork = nil
+                pageDragTranslation = 0
+            } else if dragCoordinator.endReason == .cancelled {
+                // A cancelled carry collapses the virtual tail page; clamp back with the snap.
+                withAnimation(pageSnap) { currentPage = min(currentPage, pageCount - 1) }
+            }
         }
         .onChange(of: searchText) { _, _ in
             // Design §9.1 row 6: typing mid-carry cancels the carry FIRST, before the folder
@@ -237,12 +256,20 @@ struct LaunchpadGridView: View {
         }
     }
 
+    /// Real pages plus one VIRTUAL tail page while a carry is live (design §6.1): an empty,
+    /// zero-cost container appended from carry begin, so the page a dwell flips to is already
+    /// mounted and registered. A drop on it lands at the global tail (§6.2 — the documented iOS
+    /// divergence: no persistent sparse pages); afterwards the page collapses with the snap.
+    private var displayPageCount: Int {
+        pageCount + (dragCoordinator.carryActive && isLayoutEditable ? 1 : 0)
+    }
+
     private var pagedGrid: some View {
         GeometryReader { geo in
-            let visiblePage = min(currentPage, pageCount - 1)
+            let visiblePage = min(currentPage, displayPageCount - 1)
             VStack(spacing: 10) {
                 HStack(spacing: 0) {
-                    ForEach(0..<pageCount, id: \.self) { page in
+                    ForEach(0..<displayPageCount, id: \.self) { page in
                         pageContent(page: page, columns: columnCount)
                             .frame(width: geo.size.width)
                     }
@@ -260,7 +287,7 @@ struct LaunchpadGridView: View {
                 // via `withAnimation` in the handlers (not a value-keyed modifier) so the live
                 // drag offset and the snap stay one continuous motion.
 
-                if pageCount > 1 {
+                if displayPageCount > 1 {
                     pageIndicator(current: visiblePage)
                 }
             }
@@ -426,7 +453,7 @@ struct LaunchpadGridView: View {
 
     private func pageIndicator(current: Int) -> some View {
         HStack(spacing: 9) {
-            ForEach(0..<pageCount, id: \.self) { page in
+            ForEach(0..<displayPageCount, id: \.self) { page in
                 Circle()
                     .fill(Color.primary.opacity(page == current ? 0.55 : 0.18))
                     .frame(width: 7, height: 7)
@@ -435,10 +462,13 @@ struct LaunchpadGridView: View {
                         goToPage(page)
                     }
                     // Mirror the cell fix: `.onTapGesture` is mouse-only, so VoiceOver /
-                    // AX press needs an explicit action to actually change page.
+                    // AX press needs an explicit action to actually change page. AX flips ride
+                    // the same goToPage → currentPage funnel, so they are carry-safe (§6.4).
                     .accessibilityAction { goToPage(page) }
                     .accessibilityLabel(
-                        localization.format("grid.page.accessibilityLabel", defaultValue: "第 %d 页", page + 1)
+                        page >= pageCount
+                            ? localization.string("grid.page.virtualLabel", defaultValue: "新页面")
+                            : localization.format("grid.page.accessibilityLabel", defaultValue: "第 %d 页", page + 1)
                     )
                     .accessibilityAddTraits(.isButton)
             }
@@ -460,8 +490,11 @@ struct LaunchpadGridView: View {
         rowCount = max(1, Int((usableHeight + rowSpacing) / (cellHeight + rowSpacing)))
         // Layout (and thus perPage) changed: keep the selection valid and re-derive the
         // visible page *from it*, so the source-of-truth selection is always on screen —
-        // not stranded on a now-wrong page (Codex P1).
+        // not stranded on a now-wrong page (Codex P1). Mid-carry the pull-back is exempt:
+        // the carry may be hovering a page (incl. the virtual tail) with no selection on it,
+        // and selection follows the carried item by id at commit instead (design §8).
         selectedIndex = min(max(selectedIndex, 0), max(0, filtered.count - 1))
+        guard dragCoordinator.carrySession == nil else { return }
         currentPage = filtered.isEmpty ? 0 : selectedIndex / perPage
     }
 
@@ -504,7 +537,7 @@ struct LaunchpadGridView: View {
         // A stale gesture/dot closure could fire after an async catalog update emptied the
         // list; avoid `filtered.count - 1 == -1` (Codex P2).
         guard !filtered.isEmpty else { selectedIndex = 0; currentPage = 0; return }
-        let target = min(max(page, 0), pageCount - 1)
+        let target = min(max(page, 0), displayPageCount - 1)   // == pageCount-1 outside a carry
         withAnimation(pageSnap) { currentPage = target }
         // Move selection onto the page so keyboard nav resumes from what's visible — except
         // mid-carry: selection follows the carried item by id at commit instead (design §8).
@@ -556,6 +589,10 @@ struct LaunchpadGridView: View {
     /// Snap `pageDragTranslation` to the nearest page (advancing past a threshold), shared by the
     /// empty-space drag and the two-finger scroll on release.
     private func snapToNearestPage(width: CGFloat) {
+        // Double insurance with the carry-entry residue clearing: the deferred scroll work item
+        // must never snap mid-carry (§9.4; the entry hook already cancelled it and zeroed the
+        // translation — this guard alone would freeze a stale offset on screen, AC-6/BC-2).
+        guard dragCoordinator.carrySession == nil else { return }
         let pageW = max(1, width)
         let last = max(0, pageCount - 1)
         let cur = min(currentPage, last)

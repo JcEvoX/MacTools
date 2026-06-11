@@ -729,6 +729,9 @@ final class LaunchpadGridContainerView: NSView {
         // The open-folder grid doesn't page — let the event bubble to the panel's enclosing
         // ScrollView so a folder taller than the visible cap can be two-finger scrolled.
         if grid?.folderContextID != nil { super.scrollWheel(with: event); return }
+        // Scroll events aren't anchored to the mouse-down view, so they still arrive mid-carry —
+        // edge dwell is the only flip channel while one is live (§9.4).
+        if grid?.coordinator?.carryActive == true { return }
         if event.hasPreciseScrollingDeltas {
             // Trackpad two-finger swipe: follow-the-finger paging — the SAME live-track + snap
             // as the empty-space mouse drag, so the two gestures feel identical.

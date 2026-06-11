@@ -259,7 +259,7 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         XCTAssertTrue(c1.externalDragActive)
     }
 
-    func testFlipClampedAtLastRealPage() {
+    func testLastRealPageFlipsToVirtualTailWhenEditable() {
         var fakeNow: TimeInterval = 0
         coordinator.now = { fakeNow }
         coordinator.dwellTimerFactory = { _ in nil }
@@ -270,8 +270,36 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
         fakeNow = 0.71
         coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
-        XCTAssertNil(coordinator.flipRequest, "末页右缘越界翻页必须被丢弃（虚拟尾页是步骤 6）")
-        XCTAssertEqual(coordinator.carrySession?.state, .carrying(.tracking), "被丢弃的翻页不得挂起分类")
+        XCTAssertEqual(coordinator.flipRequest?.targetPage, 2,
+                       "末真页右缘驻留必须能翻到虚拟尾页（index == pageCount，§6.1）")
+
+        // The funnel hands off to the (empty) virtual page; the old page's gap closes and the
+        // release there resolves to the tail via the resolve branch (§6.2).
+        coordinator.currentPageDidChange(2)
+        XCTAssertFalse(c1.externalDragActive, "翻到虚拟页后末真页让位收口")
+        coordinator.commitOut(folderID: "F1", appID: "/Apps/X.app",
+                              atWindowPoint: windowPoint(forLocal: NSPoint(x: 450, y: 300)))
+        XCTAssertEqual(coordinator.pendingEject?.result, .reorder(nil), "虚拟空页松手 = 全局落尾语义")
+    }
+
+    func testVirtualTailFlipBlockedWhenNotEditable() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        let (c0, _) = makePage(threeApps(), page: 0)
+        let (_, _) = makePage(threeApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(1)
+        coordinator.freezeVisibleOrder([], editable: false)  // search-like read-only projection
+        coordinator.beginEject(appID: "/Apps/X.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                               atScreenPoint: .zero, aboveLevel: .normal)
+
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 0.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNil(coordinator.flipRequest, "不可编辑会话不得翻出虚拟尾页（displayPageCount 不 +1）")
+        XCTAssertEqual(coordinator.carrySession?.state, .carrying(.tracking))
+        _ = c0
     }
 
     func testStationaryCursorFiresViaDwellTick() {

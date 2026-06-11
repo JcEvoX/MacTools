@@ -361,9 +361,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
         let decision = session.turner.update(point: local, pageWidth: space.pageWidth, now: now())
         guard case .flip(let direction) = decision else { return }
         let target = currentTargetPage + direction
-        // Clamp to real pages until step 6 adds the virtual tail index (BT-7). An out-of-range
-        // flip is simply dropped — the turner is already in cooldown and will retry on cadence.
-        guard target >= 0, target < geometry.pageCount else { return }
+        // The flippable range includes the virtual tail index (== pageCount) while the carry can
+        // edit the layout — mirroring the grid's displayPageCount (§6.1). An out-of-range flip is
+        // simply dropped: the turner is already in cooldown and will retry on cadence.
+        let lastFlippable = session.editableAtBegin ? geometry.pageCount : geometry.pageCount - 1
+        guard target >= 0, target <= lastFlippable else { return }
         session.awaitHandoff(targetPage: target)
         flipToken += 1
         flipRequest = LaunchpadFlipRequest(token: flipToken, targetPage: target)

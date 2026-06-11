@@ -171,6 +171,23 @@
         }
       }
     },
+    "grid.page.virtualLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Page"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新页面"
+          }
+        }
+      }
+    },
     "hotCorner.bottomLeft": {
       "extractionState": "manual",
       "localizations": {
