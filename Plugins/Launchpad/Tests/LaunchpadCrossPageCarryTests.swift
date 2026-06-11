@@ -47,7 +47,9 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
             onReorder: { _, _ in },
             onMakeFolder: { _, _ in },
             onAddToFolder: { _, _ in },
-            onDragBegan: {},
+            // Mirrors production wiring: a beginning drag freezes the visible order into the
+            // coordinator so a root lift's session adopts it (LaunchpadGridView.pageContent).
+            onDragBegan: { [coordinator] in coordinator?.freezeVisibleOrder(items) },
             onPageSwipe: { _ in },
             onPageDrag: { _, _, _ in },
             onPageScroll: { _, _ in },
@@ -366,5 +368,115 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         let centre = NSPoint(x: c0.cellViews[1].frame.midX, y: c0.cellViews[1].frame.midY)
         coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: centre)
         XCTAssertTrue(c0.stackTargetCell === c0.cellViews[1], "几何未推送时退回 legacy 路径，不得丢拖拽")
+    }
+
+    // MARK: - Root-page origin (step 7: the root lift rides the same carry machinery)
+
+    private func pageTwoApps() -> [LaunchpadDisplayCell] {
+        [.app(app("/Apps/D.app", "D")), .app(app("/Apps/E.app", "E")), .app(app("/Apps/F.app", "F"))]
+    }
+
+    /// Lift `cells[index]` on a root page through the container's real entry point.
+    private func rootLift(_ container: LaunchpadGridContainerView, cellAt index: Int,
+                          windowPoint: NSPoint) -> LaunchpadGridCellView {
+        let cell = container.cellViews[index]
+        container.beginDirectDrag(cell, atWindowPoint: windowPoint)
+        return cell
+    }
+
+    func testRootCarryHandsOffAcrossPagesAndResolvesOnTargetPage() {
+        var applied: [CarryStoreAction] = []
+        coordinator.storeApplier = { action, _ in applied.append(action); return nil }
+        let (c0, _) = makePage(threeApps(), page: 0)
+        let (c1, _) = makePage(pageTwoApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        let c0Frame0 = c0.cellViews[0].frame
+        let liftLocal = NSPoint(x: c0Frame0.midX, y: c0Frame0.midY)
+        let anchor = rootLift(c0, cellAt: 0, windowPoint: windowPoint(forLocal: liftLocal))
+
+        XCTAssertTrue(coordinator.carryActive)
+        XCTAssertEqual(coordinator.carrySession?.origin, .rootPage)
+        XCTAssertTrue(c0.externalDragActive)
+        XCTAssertEqual(c0.externalGapIndex, 0, "seedGap = 锚原槽")
+
+        coordinator.currentPageDidChange(1)                  // handoff to page 1
+        XCTAssertFalse(c0.externalDragActive, "源页让位收口")
+        XCTAssertTrue(c1.externalDragActive, "目标页接管让位")
+        c0.layout()
+        XCTAssertEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                       "handoff 后锚仍停泊在源容器里")
+        XCTAssertEqual(c0.cellViews[1].frame, c0Frame0, "源页紧凑无洞：B 补进锚的槽")
+
+        // Classify + release on page 1: E's right seam → data resolves against the TARGET page.
+        let seam = NSPoint(x: c1.cellViews[1].frame.maxX - 4, y: c1.cellViews[1].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertNotNil(c1.externalGapIndex, "新页让位 gap 必须打开")
+        c0.endDirectDrag(atWindowPoint: windowPoint(forLocal: seam))   // mouseUp 仍到源容器
+
+        XCTAssertEqual(applied, [.move(id: "/Apps/A.app", target: .after("/Apps/E.app"))],
+                       "跨页落点必须按目标页让位 gap 解析并同步写库")
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertFalse(c1.externalDragActive, "commit 后目标页让位收口")
+        c0.layout()
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "commit 后锚必须 reveal（不许永久隐身）")
+    }
+
+    func testRootCarryVirtualTailReleaseLandsAtGlobalTail() {
+        var applied: [CarryStoreAction] = []
+        coordinator.storeApplier = { action, _ in applied.append(action); return nil }
+        let (c0, _) = makePage(threeApps(), page: 0)
+        // One REAL page; index 1 is the virtual tail (editable session → flippable, §6.1).
+        coordinator.syncGeometry(LaunchpadPageGeometry(
+            pageWidth: 900, gridHeight: 600, pageCount: 1, perPage: 21,
+            viewportMinX: 100, viewportTopY: 700))
+        coordinator.currentPageDidChange(0)
+
+        let frame0 = c0.cellViews[0].frame
+        let anchor = rootLift(c0, cellAt: 0,
+                              windowPoint: windowPoint(forLocal: NSPoint(x: frame0.midX, y: frame0.midY)))
+
+        coordinator.currentPageDidChange(1)                  // virtual tail page (no container)
+        XCTAssertFalse(c0.externalDragActive, "翻到虚拟页后源页让位收口")
+
+        // Release over the empty virtual page: no engaged container → global-tail semantics.
+        c0.endDirectDrag(atWindowPoint: windowPoint(forLocal: NSPoint(x: 450, y: 300)))
+        XCTAssertEqual(applied, [.move(id: "/Apps/A.app", target: .after("/Apps/C.app"))],
+                       "虚拟空页松手 = 对冻结快照末项的全局落尾（§6.2 有意分歧）")
+        c0.layout()
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "落尾 commit 后锚必须 reveal")
+    }
+
+    func testCarriedFolderNeverArmsMergeAnywhere() {
+        let folder = LaunchpadDisplayCell.folder(id: "F9", name: "夹", items: [app("/Apps/X.app", "X")])
+        let items: [LaunchpadDisplayCell] = [folder, .app(app("/Apps/A.app", "A")), .app(app("/Apps/B.app", "B"))]
+        let (c0, _) = makePage(items, page: 0)
+        let (c1, _) = makePage(pageTwoApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        let folderFrame = c0.cellViews[0].frame
+        _ = rootLift(c0, cellAt: 0,
+                     windowPoint: windowPoint(forLocal: NSPoint(x: folderFrame.midX, y: folderFrame.midY)))
+        XCTAssertEqual(coordinator.carrySession?.isApp, false, "被携带的是夹")
+
+        // Hover an app's CENTRE on the source page: must never arm (no nested folders).
+        let aCentre = NSPoint(x: c0.cellViews[1].frame.midX, y: c0.cellViews[1].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: aCentre))
+        XCTAssertNil(c0.stackTargetCell, "被携带 folder 在源页永不 arm merge")
+
+        // …and the same holds after a handoff (the engage primitive forwards allowsMerge).
+        coordinator.currentPageDidChange(1)
+        let dCentre = NSPoint(x: c1.cellViews[0].frame.midX, y: c1.cellViews[0].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: dCentre))
+        XCTAssertNil(c1.stackTargetCell, "handoff 后被携带 folder 仍永不 arm merge")
+
+        // Reorder seams still work for a carried folder.
+        let seam = NSPoint(x: c1.cellViews[0].frame.maxX - 4, y: c1.cellViews[0].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertNotNil(c1.externalGapIndex, "夹照常可重排让位")
     }
 }

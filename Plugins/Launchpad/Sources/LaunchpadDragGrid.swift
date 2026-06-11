@@ -120,13 +120,35 @@ final class LaunchpadGridContainerView: NSView {
     /// drop commits it. The armed target is read by the cell's `draw` to paint the merge cue.
     private(set) weak var stackTargetCell: LaunchpadGridCellView?
 
-    /// External drag (an app ejected from a folder, carried over THIS root grid). The carried app is
-    /// NOT among `cells` — it lives in its source folder until commit — so make-way opens a GAP by
-    /// index and merge arms a real `cells` target. No phantom cell view, no `dragOrder` mutation.
-    /// Readable for the handoff tests (design §10-⑥): exactly one container is active at a time.
+    /// External drag (an item carried OUTSIDE any container — ejected from a folder, or lifted
+    /// from a root page in the carry model). For a folder eject the carried app is NOT among
+    /// `cells`; for a root lift it IS, but parked off-screen as `anchorCell` and excluded from
+    /// every layout/classification surface. Make-way opens a GAP by index (ACTIVE indexing — the
+    /// anchor doesn't count) and merge arms a real cell target. Readable for the handoff tests
+    /// (design §10-⑥): exactly one container is active at a time.
     private(set) var externalDragActive = false
-    private(set) var externalGapIndex: Int?       // slot the carried app would occupy (make-way gap)
+    private(set) var externalGapIndex: Int?       // ACTIVE slot the carried item would occupy (make-way gap)
     private var externalDragAppID: String?
+    /// False when the carried item is a folder — folders never merge (no nesting, design §1.5).
+    private var externalAllowsMerge = true
+
+    /// Root-page carry anchor (design §2): the lifted cell STAYS in `cells` — it must keep
+    /// receiving the gesture's mouseDragged/mouseUp; `isHidden` or removeFromSuperview loses
+    /// them permanently (D4 spike) — but is parked far off-screen by FRAME and excluded from
+    /// every layout and classification path via `activeCells`. It never occupies `draggedCell`,
+    /// so `beginExternalDrag`'s mutual-exclusion guard keeps its meaning untouched (§0 ruling 2).
+    private(set) weak var anchorCell: LaunchpadGridCellView?
+    /// Where the anchor parks: far outside any plausible window. NOT hidden, NOT alpha 0 —
+    /// events must keep flowing and the view is not layer-backed.
+    static let carryParkOrigin = NSPoint(x: -100_000, y: -100_000)
+    /// The cells every layout/gap surface actually sees — the parked anchor is "not here".
+    var activeCells: [LaunchpadGridCellView] { cells.filter { $0 !== anchorCell } }
+    /// The gap (ACTIVE indexing) that reproduces the committed board with the anchor's own slot
+    /// left empty — the seed layout at lift, and the settle target while a merge is armed.
+    private var anchorSeedGap: Int? {
+        guard let anchorCell else { return nil }
+        return cells.firstIndex(where: { $0 === anchorCell })
+    }
 
     // Empty-space drag (follow-cursor paging) + click (dismiss) tracking, plus scroll paging.
     private var gapDownPoint: NSPoint?
@@ -150,9 +172,10 @@ final class LaunchpadGridContainerView: NSView {
     /// The laid-out cell views, in committed order. Exposed for drag-to-stack unit tests.
     var cellViews: [LaunchpadGridCellView] { cells }
 
-    /// True while any cell is being dragged — cells read this to suppress hover magnification so the
-    /// lifted icon passing over neighbours doesn't make them twitch.
-    var hasActiveDrag: Bool { draggedCell != nil }
+    /// True while a local drag is live OR this container is the source of a root carry (the
+    /// parked anchor) — cells read this to suppress hover magnification, and the right-click
+    /// guard reads it so a menu's tracking loop can't swallow the drag's mouseUp.
+    var hasActiveDrag: Bool { draggedCell != nil || anchorCell != nil }
 
     /// While a folder overlay is up, the grid is inert: returning `nil` lets the click fall
     /// through to the SwiftUI scrim (which closes the folder) instead of being grabbed by a
@@ -216,11 +239,15 @@ final class LaunchpadGridContainerView: NSView {
 
     override func layout() {
         super.layout()
-        // While an app is being carried over this grid (folder eject), preserve the make-way GAP —
+        // While an item is being carried over this grid, preserve the make-way GAP —
         // a plain re-layout (e.g. triggered by the folder-close animation's re-render) would snap the
         // cells back to their committed slots and the make-way would "spring back".
         if externalDragActive {
             layoutCellsWithGap(animated: false)
+        } else if anchorCell != nil {
+            // Root carry handed off to another page: lay out COMPACT over activeCells so a stray
+            // layout pass can never punch the anchor's hole back into the grid (design §2.2/AC-2).
+            layoutCells(order: activeCells, animated: false)
         } else {
             layoutCells(order: dragOrder ?? cells, animated: false)
         }
@@ -251,16 +278,19 @@ final class LaunchpadGridContainerView: NSView {
                 ctx.timingFunction = settle
                     ? CAMediaTimingFunction(controlPoints: 0.34, 1.18, 0.5, 1)
                     : CAMediaTimingFunction(name: .easeInEaseOut)
-                // Skip the lifted source cell — it follows the cursor (setFrameOrigin), not the grid.
-                for (index, cell) in order.enumerated() where cell !== draggedCell {
+                // Skip the lifted source cell — it follows the cursor (setFrameOrigin), not the
+                // grid — and the parked carry anchor, which must NEVER be written back to a slot
+                // until its reveal (design §2.2: the anchor-exclusion surface).
+                for (index, cell) in order.enumerated() where cell !== draggedCell && cell !== anchorCell {
                     cell.animator().frame = slotRect(index)
                 }
             }
         } else {
             // MUST also skip the dragged cell here — `layout()` uses this path during a drag, and
             // writing the dragged cell back to its slot fights `updateDirectDrag`'s 1:1 follow
-            // (that tug-of-war was a source of the every-frame reorder flicker).
-            for (index, cell) in order.enumerated() where cell !== draggedCell {
+            // (that tug-of-war was a source of the every-frame reorder flicker). Same for the
+            // parked anchor: only the explicit reveal un-parks it.
+            for (index, cell) in order.enumerated() where cell !== draggedCell && cell !== anchorCell {
                 cell.frame = slotRect(index)
             }
         }
@@ -323,6 +353,21 @@ final class LaunchpadGridContainerView: NSView {
     private var lastWindowDragPoint: NSPoint?
 
     func beginDirectDrag(_ cell: LaunchpadGridCellView, atWindowPoint windowPoint: NSPoint) {
+        // New-gesture boundary: this entry fires exactly once per mouse gesture (the cell's
+        // didDrag threshold latch), so the coordinator's cancelled-gesture latch is dropped
+        // HERE, before any carry gate reads it. The latch's only other reset lives inside
+        // onDragBegan → freezeVisibleOrder, which the root-lift gate runs BEFORE — without
+        // this boundary one mid-carry cancel would wedge every later root drag (gate refuses
+        // → reset unreachable → repeat forever).
+        grid?.coordinator?.gestureBegan()
+        // Root-page lift = a CARRY (design §1.5/§2.1): the same phantom model the folder eject
+        // uses, so cross-page travel / edge flips / the virtual tail page all apply. Folder grids
+        // keep the local state machine (in-folder reorder + the eject escalation); a grid with no
+        // coordinator keeps the legacy local path — pinned by the existing test fleet.
+        if grid?.folderContextID == nil, let coordinator = grid?.coordinator {
+            beginCarryLift(cell, atWindowPoint: windowPoint, coordinator: coordinator)
+            return
+        }
         isDragging = true
         draggedCell = cell
         dragOrder = cells
@@ -336,17 +381,114 @@ final class LaunchpadGridContainerView: NSView {
         grid?.onDragBegan()                                    // freeze the visible order (§5.3)
     }
 
-    func updateDirectDrag(atWindowPoint windowPoint: NSPoint) {
-        guard isDragging, let cell = draggedCell else { return }
+    /// Lift a root-page cell straight into a carry session (design §2.1, numbered order): the
+    /// floating window IS the lifted visual, the cell stays in `cells` as an off-screen event
+    /// anchor, and the visible page makes way through the same external-drag classification an
+    /// ejected app uses.
+    private func beginCarryLift(_ cell: LaunchpadGridCellView, atWindowPoint windowPoint: NSPoint,
+                                coordinator: LaunchpadDragCoordinator) {
+        // 1. Gate FIRST (BR-4): a refused lift leaves the container with zero state changes —
+        //    the cell's didDrag has already consumed the gesture.
+        guard coordinator.canBeginCarry,
+              let anchorIndex = cells.firstIndex(where: { $0 === cell }) else { return }
+
+        // 2. Container state. The anchor never occupies draggedCell/dragOrder — a dragOrder
+        //    residue would make layout()'s fallback keep a hole after handoff (AC-2); the
+        //    beginExternalDrag mutual-exclusion guard stays untouched (§0 ruling 2).
+        isDragging = true
+        anchorCell = cell
+        lastDragPoint = nil
         lastWindowDragPoint = windowPoint
-        // Eject in progress (folder is zooming closed): the floating window IS the icon now; just
-        // follow the cursor in screen space, leave this (closing) grid alone.
-        if let coord = grid?.coordinator, coord.ejectActive {
-            if let screen = window?.convertPoint(toScreen: windowPoint) {
-                coord.moveEject(atScreenPoint: screen, atWindowPoint: windowPoint)
-            }
+        disarmStackTarget()
+
+        // 3. Freeze the visible order: the host view stages the snapshot + editability into the
+        //    coordinator and clears any paging residue in the same closure (§2.1-3).
+        grid?.onDragBegan()
+
+        // 4. Floating visual keeps the GRAB POINT: the floating icon centre keeps the offset the
+        //    cell's icon centre had from the cursor, so the lift doesn't visually jump (§2.1-4).
+        //    Container is flipped (y down); screen space is y-up → negate the y delta.
+        //    The cursor's page-local point comes from the PUSHED geometry, never the frame
+        //    chain: `convert` is blind to the SwiftUI paging .offset, so on page > 0 it would
+        //    skew the grab offset by page×pageWidth and the floating icon would ride that far
+        //    from the cursor for the whole carry (design §5). Cold start (no geometry pushed
+        //    yet) is page 0 by construction, where the frame chain IS correct; windowless
+        //    harnesses treat the window point as already container-local.
+        let p = coordinator.pageLocalPoint(fromWindow: windowPoint)
+            ?? (window != nil ? convert(windowPoint, from: nil) : windowPoint)
+        let iconCentre = NSPoint(x: cell.frame.minX + metrics.cellWidth / 2,
+                                 y: cell.frame.minY + 8 + metrics.iconSide / 2)
+        let grabOffset = NSPoint(x: p.x - iconCentre.x, y: iconCentre.y - p.y)
+        let isApp: Bool = { if case .app = cell.cell { return true }; return false }()
+        let screen = window?.convertPoint(toScreen: windowPoint) ?? .zero
+
+        // 5. Open the session: presents the floating icon and engages THIS page with
+        //    beginExternalDrag (the anchor is already excluded from every active surface).
+        guard coordinator.beginCarry(itemID: cell.layoutID, origin: .rootPage, isApp: isApp,
+                                     icon: cell.carryVisual(), iconSide: metrics.iconSide,
+                                     atScreenPoint: screen, aboveLevel: window?.level ?? .popUpMenu,
+                                     grabOffset: grabOffset, sourceContainer: self) else {
+            anchorCell = nil          // defensive rollback; the gate above makes this unreachable
+            isDragging = false
             return
         }
+
+        // 6. Seed the gap at the anchor's own slot: identity layout over activeCells — the board
+        //    doesn't move, the original slot IS the make-way gap (iOS pick-up look, §2.1-5).
+        seedExternalGap(at: anchorIndex)
+
+        // 7. Park the anchor off-screen. NEVER isHidden (mouseDragged/mouseUp would be lost
+        //    permanently — D4 spike) and never alpha 0 (non-layer-backed). isLifted stays false:
+        //    the floating window carries the enlarged visual.
+        cell.setFrameOrigin(Self.carryParkOrigin)
+    }
+
+    /// Seed the make-way gap (root lift: the anchor's own committed slot). With the anchor
+    /// excluded from `activeCells` this is the IDENTITY layout — neighbours don't move.
+    func seedExternalGap(at index: Int) {
+        guard externalDragActive else { return }
+        externalGapIndex = index
+        layoutCellsWithGap(animated: false)
+    }
+
+    /// Commit-path anchor recovery (design §1.4-7, hard-cut): reveal the anchor immediately —
+    /// clear the carry state, APPLY any deferred model (not drop: the source page must not keep a
+    /// stale model), and let the next layout pass place the cell back into a real slot. The
+    /// post-commit SwiftUI apply then rebuilds against the freshly-written store; because the
+    /// reveal runs first (same mouseUp stack), the anchor can never stay parked through it.
+    func endCarryAnchor() {
+        guard anchorCell != nil else { return }
+        anchorCell = nil
+        isDragging = false
+        lastDragPoint = nil
+        lastWindowDragPoint = nil
+        if let pending = pendingGrid {
+            pendingGrid = nil
+            apply(grid: pending)
+        }
+        needsLayout = true
+    }
+
+    /// Cancel-path anchor recovery (design §2.3): same mechanics — with the anchor back in the
+    /// layout surfaces, the next layout pass writes it straight back to its real slot. Instant
+    /// restore, fail-safe.
+    func cancelCarryAnchor() {
+        endCarryAnchor()
+    }
+
+    func updateDirectDrag(atWindowPoint windowPoint: NSPoint) {
+        // Carry forwarding sits ABOVE the draggedCell guard (design §1.5/BR-7): a root carry has
+        // no draggedCell, so the legacy position (inside the guard) would swallow every move.
+        // Covers BOTH origins — the floating window is the icon now; classification is driven by
+        // the coordinator against the CURRENT page's container, not necessarily this one.
+        if let coord = grid?.coordinator, coord.carryActive {
+            lastWindowDragPoint = windowPoint
+            let screen = window?.convertPoint(toScreen: windowPoint) ?? .zero
+            coord.carryMoved(atScreenPoint: screen, atWindowPoint: windowPoint)
+            return
+        }
+        guard isDragging, let cell = draggedCell else { return }
+        lastWindowDragPoint = windowPoint
         let p = convert(windowPoint, from: nil)
         lastDragPoint = p
         var origin = NSPoint(x: p.x - dragGrabOffset.x, y: p.y - dragGrabOffset.y)
@@ -412,6 +554,15 @@ final class LaunchpadGridContainerView: NSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
         guard newWindow == nil else { return }
+        if anchorCell != nil {
+            // Root-carry source unmounting (filtered shrink / overlay teardown): the gesture's
+            // mouseUp is lost with the view, so cancel is the only safe option (§9.1 row 3).
+            // cancelCarry reaches back into cancelCarryAnchor via session.sourceContainer; the
+            // explicit call below is the belt-and-braces for a session already gone. Runs BEFORE
+            // the unregistration: the anchor restore can apply a deferred grid, which re-registers.
+            grid?.coordinator?.cancelCarry(.anchorUnmounted)
+            cancelCarryAnchor()
+        }
         grid?.coordinator?.unregisterPageContainer(self)
         if let cell = draggedCell {
             if let coord = grid?.coordinator, grid?.folderContextID != nil, coord.ejectActive {
@@ -425,6 +576,17 @@ final class LaunchpadGridContainerView: NSView {
     func endDirectDrag() { endDirectDrag(atWindowPoint: lastWindowDragPoint ?? .zero) }
 
     func endDirectDrag(atWindowPoint windowPoint: NSPoint) {
+        // Release routing sits ABOVE the draggedCell guard (design §9.1 row 1 / BR-7): a root
+        // carry has no draggedCell — at the legacy position the mouseUp would be swallowed and
+        // the session wedged. The coordinator lands the DATA synchronously here (§1.4) and
+        // reveals the source anchor itself (session.sourceContainer.endCarryAnchor).
+        if let coord = grid?.coordinator, coord.carryActive {
+            lastWindowDragPoint = windowPoint
+            coord.carryReleased(atWindowPoint: windowPoint)
+            if let cell = draggedCell { teardownDragState(cell) }   // folder origin's local drag state
+            refocusSearchField()
+            return
+        }
         guard let cell = draggedCell else { return }
         lastWindowDragPoint = windowPoint
 
@@ -599,15 +761,28 @@ final class LaunchpadGridContainerView: NSView {
 
     /// Resolve a root drop target from a CONTAINER-LOCAL point — the coordinator maps the window
     /// point through the pushed page geometry (`LaunchpadCarrySpace`), never through `convert`,
-    /// which is blind to the SwiftUI paging offset. The carried app lands at the slot under the
-    /// cursor (not the tail); the cursor's side of the slot midline picks before/after. The
-    /// ejected app is not among `cells` (it's still in the folder), so no self-exclusion.
+    /// which is blind to the SwiftUI paging offset. The carried item lands at the slot under the
+    /// cursor (not the tail); the cursor's side of the slot midline picks before/after. An
+    /// ejected app is not among `cells` (it's still in the folder); a root-carried one IS — its
+    /// parked anchor resolves to a committed neighbour below, never to itself.
     func rootDropTarget(atContainerPoint p: NSPoint) -> LaunchpadDropTarget? {
         guard !cells.isEmpty else { return nil }
         let slot = slotIndex(at: p, count: cells.count)
         guard cells.indices.contains(slot) else { return nil }
-        let id = cells[slot].layoutID
-        return p.x < slotRect(slot).midX ? .before(id) : .after(id)
+        let target = cells[slot]
+        if target === anchorCell {
+            // The carried item's own slot: resolve relative to a committed NEIGHBOUR so the
+            // commit's isNoOp guard reads it as "back where it started" — never as the anchor
+            // itself, and never as a global-tail fallback.
+            if let next = cells[(slot + 1)...].first(where: { $0 !== anchorCell }) {
+                return .before(next.layoutID)
+            }
+            if let previous = cells[..<slot].last(where: { $0 !== anchorCell }) {
+                return .after(previous.layoutID)
+            }
+            return nil
+        }
+        return p.x < slotRect(slot).midX ? .before(target.layoutID) : .after(target.layoutID)
     }
 
     /// Legacy window-point entrance (correct on page 0 only — kept for the cold-start fallback
@@ -618,11 +793,14 @@ final class LaunchpadGridContainerView: NSView {
 
     // MARK: External drag (an app carried over this root grid after being ejected from a folder)
 
-    /// Begin carrying an external app over this grid. Mutually exclusive with a real in-grid drag.
-    func beginExternalDrag(appID: String) {
+    /// Begin carrying an external item over this grid. Mutually exclusive with a real in-grid
+    /// drag (the root-carry anchor never occupies `draggedCell`, so the SOURCE container itself
+    /// passes this guard and can host the seed gap — design §0 ruling 2).
+    func beginExternalDrag(appID: String, allowsMerge: Bool = true) {
         guard draggedCell == nil, !externalDragActive else { return }
         externalDragActive = true
         externalDragAppID = appID
+        externalAllowsMerge = allowsMerge
         externalGapIndex = nil
         clearStackTarget()
     }
@@ -634,23 +812,46 @@ final class LaunchpadGridContainerView: NSView {
     /// The point is CONTAINER-LOCAL, mapped by the coordinator through the pushed page geometry —
     /// `convert` from window space is blind to the SwiftUI paging offset (page>0 misread).
     func updateExternalDrag(atContainerPoint point: NSPoint) {
-        guard externalDragActive, draggedCell == nil, !cells.isEmpty else { return }
+        guard externalDragActive, draggedCell == nil, !cells.isEmpty, !activeCells.isEmpty else { return }
         if let armed = stackTargetCell, armed.frame.insetBy(dx: -6, dy: -6).contains(point) { return }
+        // Classify against the COMMITTED slot owners — `cells` INCLUDING the anchor — so the
+        // seeded identity display and the classification agree (mirrors the local drag, which
+        // classifies against committed `cells` too). The GAP, however, lives in ACTIVE indexing
+        // (the anchor is never laid out), so targets are mapped through `activeCells` below.
         let slot = slotIndex(at: point, count: cells.count)
         guard cells.indices.contains(slot) else { return }
         let target = cells[slot]
-        if mergeRect(forSlot: slot).contains(point) {
+        if target === anchorCell {
+            // The carried item's own committed slot: hovering yourself never arms or reflows —
+            // it re-opens the original gap, so "jiggle in place and release" is a no-op return
+            // and "drag back home" restores the board (design AR-1; local drag's `self` check).
+            clearStackTarget()
+            if externalGapIndex != anchorSeedGap {
+                externalGapIndex = anchorSeedGap
+                layoutCellsWithGap(animated: true)
+            }
+            return
+        }
+        if externalAllowsMerge, mergeRect(forSlot: slot).contains(point) {
             if stackTargetCell !== target {
                 setStackTarget(target)
-                if externalGapIndex != nil { externalGapIndex = nil; layoutCellsWithGap(animated: true) }
+                // Settle to the COMMITTED board so the armed target sits exactly under the
+                // cursor. With a parked anchor the committed board IS the seed-gap layout —
+                // nil (fully compacted) only when no anchor is present (the eject case).
+                let settleGap = anchorSeedGap
+                if externalGapIndex != settleGap {
+                    externalGapIndex = settleGap
+                    layoutCellsWithGap(animated: true)
+                }
             }
             return
         }
         clearStackTarget()
         let m = mergeRect(forSlot: slot)
+        guard let targetActive = activeCells.firstIndex(where: { $0 === target }) else { return }
         let gap: Int
-        if point.x < m.minX { gap = slot }
-        else if point.x > m.maxX { gap = slot + 1 }
+        if point.x < m.minX { gap = targetActive }
+        else if point.x > m.maxX { gap = targetActive + 1 }
         else { return }                                    // central band → reserved for merge
         if gap != externalGapIndex {
             externalGapIndex = gap
@@ -664,22 +865,29 @@ final class LaunchpadGridContainerView: NSView {
         updateExternalDrag(atContainerPoint: window != nil ? convert(windowPoint, from: nil) : windowPoint)
     }
 
-    /// Make-way for the phantom carried item: lay cell `i` at `slotRect(i)`, shifted one slot forward
-    /// once past `externalGapIndex`, leaving an empty slot under the cursor. (When the gap is nil this
-    /// is the identity layout — i.e. the settle.)
+    /// Make-way for the carried item: lay ACTIVE cell `i` at `slotRect(i)`, shifted one slot
+    /// forward once past `externalGapIndex`, leaving an empty slot under the cursor. (When the
+    /// gap is nil this is the identity layout — i.e. the settle.) Iterates `activeCells`: the
+    /// parked anchor must never be written back to a slot (design §2.2), and `draggedCell` keeps
+    /// the shared skip discipline even though it can't coexist with an external drag.
     private func layoutCellsWithGap(animated: Bool) {
         func slot(for index: Int) -> Int {
             guard let gap = externalGapIndex, index >= gap else { return index }
             return index + 1
         }
+        let order = activeCells
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.20
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                for (i, cell) in cells.enumerated() { cell.animator().frame = slotRect(slot(for: i)) }
+                for (i, cell) in order.enumerated() where cell !== draggedCell {
+                    cell.animator().frame = slotRect(slot(for: i))
+                }
             }
         } else {
-            for (i, cell) in cells.enumerated() { cell.frame = slotRect(slot(for: i)) }
+            for (i, cell) in order.enumerated() where cell !== draggedCell {
+                cell.frame = slotRect(slot(for: i))
+            }
         }
     }
 
@@ -690,10 +898,14 @@ final class LaunchpadGridContainerView: NSView {
             if let fid = target.cell.folderID { return .addToFolder(folderID: fid) }
             return .makeFolder(targetAppID: target.layoutID)
         }
-        guard let gap = externalGapIndex, !cells.isEmpty else { return .reorder(nil) }
-        if gap <= 0 { return .reorder(.before(cells[0].layoutID)) }
-        if gap >= cells.count { return .reorder(.after(cells[cells.count - 1].layoutID)) }
-        return .reorder(.after(cells[gap - 1].layoutID))
+        // Gap → id mapping over activeCells: the parked anchor can never become a .before/.after
+        // target, so a self-referential drop is structurally impossible (design §2.2; the seed
+        // gap resolves to a frozen-order neighbour, which the commit's isNoOp guard absorbs).
+        let active = activeCells
+        guard let gap = externalGapIndex, !active.isEmpty else { return .reorder(nil) }
+        if gap <= 0 { return .reorder(.before(active[0].layoutID)) }
+        if gap >= active.count { return .reorder(.after(active[active.count - 1].layoutID)) }
+        return .reorder(.after(active[gap - 1].layoutID))
     }
 
     /// Legacy resolve-and-teardown entrance (windowless test fixtures).
@@ -702,10 +914,13 @@ final class LaunchpadGridContainerView: NSView {
         return resolveExternalDrop()
     }
 
-    /// Clear external-drag state and settle the make-way gap closed.
+    /// Clear external-drag state and settle the make-way gap closed. On a root-carry SOURCE page
+    /// this compacts over activeCells — the carried item "isn't on this page" while it travels;
+    /// the parked anchor itself is untouched (only endCarryAnchor/cancelCarryAnchor reveal it).
     func endExternalDrag() {
         externalDragActive = false
         externalDragAppID = nil
+        externalAllowsMerge = true
         externalGapIndex = nil
         clearStackTarget()
         layoutCellsWithGap(animated: true)
@@ -801,6 +1016,19 @@ final class LaunchpadGridCellView: NSView {
     var layoutID: String { cell.layoutID }
     /// The app icon, for the window-level floating view when this cell is ejected from a folder.
     var primaryIcon: NSImage? { imageView.image }
+
+    /// The floating-window visual for a carried cell (design §2.1-4): an app provides its icon
+    /// image; a folder plate is DRAWN (no image view), so it must be snapshot via cacheDisplay.
+    func carryVisual() -> NSImage? {
+        if !imageView.isHidden { return imageView.image }
+        let rect = iconFrame
+        guard rect.width > 0, rect.height > 0,
+              let rep = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        cacheDisplay(in: rect, to: rep)
+        let image = NSImage(size: rect.size)
+        image.addRepresentation(rep)
+        return image
+    }
 
     private let imageView = NSImageView()        // single icon — apps only (hidden for folders)
     private let label = NSTextField(labelWithString: "")
@@ -1058,7 +1286,10 @@ final class LaunchpadGridCellView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         // Mid-drag right-click would open a menu whose tracking loop swallows the drag's mouseUp,
         // wedging the lifted cell and the deferred grid apply. Ignore it; finish the drag first.
-        guard container?.hasActiveDrag != true else { return }
+        // The coordinator-level gate also covers a cross-page carry hovering a NON-source page,
+        // where this container's own hasActiveDrag is false (design §9.1 row 10).
+        guard container?.hasActiveDrag != true,
+              container?.callbacks?.coordinator?.carryActive != true else { return }
         container?.select(self)   // highlight which app the menu targets (user feedback)
         guard let menu = container?.contextMenu(for: self) else { return }
         NSMenu.popUpContextMenu(menu, with: event, for: self)

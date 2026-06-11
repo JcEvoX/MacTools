@@ -169,11 +169,14 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// (`onDragBegan` fires before any carry can start); adopted by the next session at lift.
     private var pendingFrozenOrder: [LaunchpadDisplayCell] = []
     private var pendingEditable = true
-    /// Set when a live carry is cancelled, cleared when the next gesture begins
-    /// (`freezeVisibleOrder`). A cancelled gesture's orphan events must STAY orphaned
-    /// (design §1.2): without this latch the grid's late-eject fallback (`commitOut` with no
-    /// session) could re-open a session from the same mouse gesture — with stale staged
-    /// editability — and commit the very drop the cancel aborted.
+    /// Set when a live carry is cancelled, cleared at the next gesture boundary
+    /// (`gestureBegan`; `freezeVisibleOrder` keeps clearing it as belt-and-braces). A cancelled
+    /// gesture's orphan events must STAY orphaned (design §1.2): without this latch the grid's
+    /// late-eject fallback (`commitOut` with no session) could re-open a session from the same
+    /// mouse gesture — with stale staged editability — and commit the very drop the cancel
+    /// aborted. It must die WITH that gesture though: the root-lift gate reads it before
+    /// `onDragBegan` can run, so a latch that only `freezeVisibleOrder` clears would be
+    /// permanently unresettable after one mid-carry cancel and wedge every later root drag.
     private var carryCancelledThisGesture = false
 
     private struct WeakContainer { weak var value: LaunchpadGridContainerView? }
@@ -249,7 +252,8 @@ final class LaunchpadDragCoordinator: ObservableObject {
         currentTargetContainer?.endExternalDrag()
         currentTargetPage = page
         currentTargetContainer = container
-        container?.beginExternalDrag(appID: session.itemID)
+        // A carried FOLDER must never arm a merge — no nested folders (design §1.5).
+        container?.beginExternalDrag(appID: session.itemID, allowsMerge: session.isApp)
         session.resumeTracking()
         feedLastPoint(session)
     }
@@ -274,9 +278,25 @@ final class LaunchpadDragCoordinator: ObservableObject {
         }
     }
 
+    /// Window-space → page-local mapping through the pushed geometry (design §5); nil until the
+    /// first push. Containers use this wherever their own frame chain would misread the SwiftUI
+    /// paging offset — e.g. the root lift's grab-offset, which `convert` would skew by
+    /// page×pageWidth on every page but the first.
+    func pageLocalPoint(fromWindow w: NSPoint) -> NSPoint? {
+        carrySpace?.local(fromWindow: w)
+    }
+
     /// Equatable-deduped push from the grid's viewport relay (AppKit window space).
     func syncGeometry(_ new: LaunchpadPageGeometry) {
         guard new != geometry else { return }
+        // Mid-carry geometry mutation (window resize / column reflow) invalidates the calibration
+        // space the whole carry is mapped through — fail safe by cancelling, never by trying to
+        // re-calibrate mid-flight (design §5.2 / §9.1 row 8). Page-COUNT changes alone are fine
+        // (catalog reload mid-carry is tolerated, row 5).
+        if carrySession != nil, geometry.pageWidth > 0,
+           new.pageWidth != geometry.pageWidth || new.perPage != geometry.perPage {
+            cancelCarry(.geometryChanged)
+        }
         geometry = new
         scheduleGeometryProbe()
     }
@@ -296,14 +316,34 @@ final class LaunchpadDragCoordinator: ObservableObject {
         carryCancelledThisGesture = false      // a new gesture starts with a clean slate
     }
 
+    /// New-gesture boundary. `beginDirectDrag` fires exactly once per mouse gesture (the cell's
+    /// `didDrag` threshold latch), so the container reports it here FIRST: the cancelled-gesture
+    /// latch protects one gesture's orphan events and must not leak into the next — left set, it
+    /// would make `canBeginCarry` refuse the next root lift before `onDragBegan` (the legacy
+    /// reset point) could ever run, permanently swallowing root drags after any mid-carry
+    /// cancel. Pure coordinator state — a refused lift still leaves the container untouched
+    /// (BR-4), and the same-gesture late-begin paths (`commitOut` / a re-armed eject) never pass
+    /// through `beginDirectDrag`, so they stay latched.
+    func gestureBegan() {
+        carryCancelledThisGesture = false
+    }
+
+    /// Container-side step-0 gate (design §2.1-1 / BR-4): a refused lift must leave the container
+    /// with ZERO state changes, so the container asks here BEFORE touching its own state.
+    var canBeginCarry: Bool { carrySession == nil && !carryCancelledThisGesture }
+
     /// Begin a carry: raise the floating icon at the cursor and start make-way/merge on the
     /// visible page. Safe to call from a mouse handler — the floating window is pure AppKit, and
     /// the `@Published` flips schedule the SwiftUI folder close asynchronously.
+    /// `grabOffset` keeps the lift from visually jumping (root lift; eject stays centred);
+    /// `sourceContainer` is the root page holding the parked anchor cell (root origin only).
     @discardableResult
     func beginCarry(itemID: String, origin: LaunchpadCarrySession.Origin, isApp: Bool,
                     icon: NSImage?, iconSide: CGFloat,
-                    atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) -> Bool {
-        guard carrySession == nil, !carryCancelledThisGesture else {
+                    atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level,
+                    grabOffset: NSPoint = .zero,
+                    sourceContainer: LaunchpadGridContainerView? = nil) -> Bool {
+        guard canBeginCarry else {
             Self.carryTrace("beginCarry REJECTED id=\(itemID) hasSession=\(carrySession != nil) cancelledThisGesture=\(carryCancelledThisGesture)")
             return false
         }
@@ -314,11 +354,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
             isApp: isApp,
             editableAtBegin: pendingEditable,
             frozenVisibleOrder: pendingFrozenOrder,
-            presenter: floatingPresenterFactory()
+            presenter: floatingPresenterFactory(),
+            grabOffset: grabOffset,
+            sourceContainer: sourceContainer
         )
         pendingFrozenOrder = []
         pendingEditable = true
-        session.presenter.present(icon: icon, side: iconSide * 1.1, atScreenPoint: p, aboveLevel: aboveLevel)
+        session.presenter.present(icon: icon, side: iconSide * 1.1,
+                                  atScreenPoint: NSPoint(x: p.x - grabOffset.x, y: p.y - grabOffset.y),
+                                  aboveLevel: aboveLevel)
         carrySession = session
         engage(pages[currentPage]?.value, page: currentPage, session: session)  // visible page makes way / can merge
         session.dwellTimer = dwellTimerFactory { [weak self] in self?.tickDwell() }
@@ -336,7 +380,8 @@ final class LaunchpadDragCoordinator: ObservableObject {
         guard let session = carrySession, session.isCarrying else { return }
         session.lastScreenPoint = screen
         session.lastWindowPoint = window
-        session.presenter.move(toScreenPoint: screen)
+        session.presenter.move(toScreenPoint: NSPoint(x: screen.x - session.grabOffset.x,
+                                                      y: screen.y - session.grabOffset.y))
         guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
             if case .carrying(.tracking) = session.state {
                 currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
@@ -423,10 +468,16 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
         pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
                                            result: result, landingID: landingID)
+        // Teardown order matters (design §1.4-6..8, hard-cut): the session ends FIRST so the
+        // anchor reveal below — which may run a deferred apply → registration → reattach — finds
+        // no live carry to re-engage; the anchor is revealed BEFORE the gap settles so the
+        // settle's layout already includes the revealed cell (a no-op drop glides it straight
+        // back into its original slot — AR-1: the reveal pipeline runs unconditionally).
+        carrySession = nil
+        session.sourceContainer?.endCarryAnchor()            // root origin: un-park the anchor cell
         currentTargetContainer?.endExternalDrag()            // gap settles closed
         currentTargetContainer = nil
         session.presenter.dismiss()                          // hard-cut settle (flight is step 8)
-        carrySession = nil
         endReason = .committed
         folderEjectActive = false
         carryActive = false
@@ -442,10 +493,13 @@ final class LaunchpadDragCoordinator: ObservableObject {
         Self.carryTrace("cancelCarry reason=\(reason)")
         carryCancelledThisGesture = true
         withdrawDwell(session)
+        // Session ends FIRST: the anchor restore below runs apply/registration paths that must
+        // not re-engage a dying carry (reattach / containerDidApplyCells key on carrySession).
+        carrySession = nil
+        session.sourceContainer?.cancelCarryAnchor()         // root origin: instant in-place restore
         currentTargetContainer?.endExternalDrag()
         currentTargetContainer = nil
         session.presenter.dismiss()
-        carrySession = nil
         endReason = .cancelled
         folderEjectActive = false
         carryActive = false

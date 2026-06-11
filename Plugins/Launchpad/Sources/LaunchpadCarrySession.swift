@@ -34,6 +34,14 @@ final class LaunchpadCarrySession {
     /// have changed (constraint 15 / AR-11).
     let frozenVisibleOrder: [LaunchpadDisplayCell]
     let presenter: LaunchpadFloatingIconPresenting
+    /// Screen-space offset of the cursor from the floating icon's centre, frozen at lift so the
+    /// grab point is preserved (root lift, design §2.1; the folder eject keeps the icon centred
+    /// under the cursor → `.zero`).
+    let grabOffset: NSPoint
+    /// Root-page lift only: the container holding the parked anchor cell, so cancel/commit paths
+    /// can restore the anchor even when the gesture's mouseUp never arrives (design §9.2).
+    /// Weak — the source page container may unmount mid-carry.
+    weak var sourceContainer: LaunchpadGridContainerView?
 
     private(set) var state: State = .carrying(.tracking)
     var lastScreenPoint: NSPoint?
@@ -56,7 +64,9 @@ final class LaunchpadCarrySession {
         isApp: Bool,
         editableAtBegin: Bool,
         frozenVisibleOrder: [LaunchpadDisplayCell],
-        presenter: LaunchpadFloatingIconPresenting
+        presenter: LaunchpadFloatingIconPresenting,
+        grabOffset: NSPoint = .zero,
+        sourceContainer: LaunchpadGridContainerView? = nil
     ) {
         self.itemID = itemID
         self.origin = origin
@@ -64,6 +74,8 @@ final class LaunchpadCarrySession {
         self.editableAtBegin = editableAtBegin
         self.frozenVisibleOrder = frozenVisibleOrder
         self.presenter = presenter
+        self.grabOffset = grabOffset
+        self.sourceContainer = sourceContainer
     }
 
     /// Flip published → classification suspended until the target page's container takes over.

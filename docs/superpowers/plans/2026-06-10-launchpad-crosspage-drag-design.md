@@ -472,7 +472,7 @@ func resolveExternalDrop() -> (result: LaunchpadExternalDropResult, settleLocalR
 
 **F. 仲裁与精度（扩展 LaunchpadDragToStackTests fakeMouse 模式）**：root lift 经容器入口路由到 carry（断言 carryActive + 锚 frame == 停泊点全程不动 + 浮窗存在）、**carry 形态精度对仗用例**（BT-6：锚在场时悬停另一 app 中心 → .makeFolder(目标)；悬停第三 cell 右缝 → .reorder(.after(该 cell))；目标永不等于锚 id）、搜索态长拖被吞不开会话、`coordinator == nil` 回退本地直拖（121 旧测例语义显式锁）、**mid-carry 非源页右键不弹菜单**、**scroll 后 0.1s 内 lift → translation == 0 且 work item 失效**、root mouseUp 经 endDirectDrag 首行分支触发 commit（锁 guard 顺序，BR-7）。
 
-**G. 既有资产声明**：现有 eject 测试经 shim 全绿（commit/token 仍 mouseUp 同步，:225/:335 断言不变——BT-1）；**步骤 7 后旧根页直拖精度测试覆盖语义降格为夹内路径，文件内注释注明**（BT-6）；store/reconciler 测例零改动。GridView 层（displayPageCount/onChange 路由/settle 视觉）SwiftUI 不可单测——按 memory 纪律 `make run` + cliclick + screencapture 真机驱动，清单：page0/pageN 页内重排、边缘连翻三页（实测第二跳与动画稳定性）、满板级联、夹出跨页落点（page>0 修复确认）、虚拟页落尾回落动画、mid-carry Esc/打字/关 overlay、settle 期 Esc、mid-carry 右键、merge settle 闪烁观察。
+**G. 既有资产声明**：现有 eject 测试经 shim 全绿（commit/token 仍 mouseUp 同步，:225/:335 断言不变——BT-1）；**步骤 7 后旧根页直拖精度测试覆盖语义降格为夹内路径，文件内注释注明**（BT-6）；store/reconciler 测例零改动。GridView 层（displayPageCount/onChange 路由/settle 视觉）SwiftUI 不可单测——按 memory 纪律 `make run` + cliclick + screencapture 真机驱动，清单：page0/pageN 页内重排、**pageN 根页 lift 浮窗贴光标**（grab-offset 必须走推送几何——frame-chain convert 在 page>0 偏 page×pageWidth，无窗口单测观测不到该视觉，真机是唯一回归锁）、边缘连翻三页（实测第二跳与动画稳定性）、满板级联、夹出跨页落点（page>0 修复确认）、虚拟页落尾回落动画、mid-carry Esc/打字/关 overlay（**且各 cancel 后下一手势必须能重新 lift**——闩锁不得跨手势）、settle 期 Esc、mid-carry 右键、merge settle 闪烁观察。
 
 ---
 

@@ -327,7 +327,17 @@ struct LaunchpadGridView: View {
             onReorder: handleReorder,
             onMakeFolder: handleMakeFolder,
             onAddToFolder: handleAddToFolder,
-            onDragBegan: { dragOrderSnapshot = filtered },
+            onDragBegan: {
+                // A root drag may escalate into a carry the moment it lifts (design §2.1): stage
+                // the visible order + editability for the session (the commit resolves against
+                // exactly what the user saw, §1.3) and clear paging residue synchronously — a
+                // deferred scroll-snap work item must never fire mid-carry (§2.1-3 / AC-6).
+                dragOrderSnapshot = filtered
+                dragCoordinator.freezeVisibleOrder(filtered, editable: isLayoutEditable)
+                pageScrollEndWork?.cancel()
+                pageScrollEndWork = nil
+                pageDragTranslation = 0
+            },
             onPageSwipe: { direction in
                 guard dragCoordinator.carrySession == nil else { return }   // §9.4 input freeze
                 goToPage(min(currentPage, pageCount - 1) + direction)
