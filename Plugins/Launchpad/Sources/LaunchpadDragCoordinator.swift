@@ -131,6 +131,14 @@ final class LaunchpadDragCoordinator: ObservableObject {
         /// Where the selection should follow (the moved app / the new or destination folder);
         /// nil when nothing was written.
         let landingID: String?
+        /// The id of a folder this commit CREATED (root merge / eject-into-new-folder), or nil.
+        /// Both makeFolder store paths return the fresh folder's UUID as the landing id; an
+        /// addToFolder landing id is an EXISTING folder and a reorder's is the item itself —
+        /// neither should trigger the post-creation auto-open (design §2.6).
+        var createdFolderID: String? {
+            if case .makeFolder = result { return landingID }
+            return nil
+        }
     }
 
     /// True from lift until release/cancel, for ANY carry origin.
@@ -142,6 +150,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// frozen snapshot). The data was already applied synchronously via `storeApplier`.
     @Published private(set) var commitToken = 0
     private(set) var pendingVisualCommit: VisualCommit?
+    /// Bumped when a commit that CREATED a folder finishes its settle reveal (design §2.6,
+    /// R1=B): never mid-flight, where mounting the folder panel would fight the
+    /// `settlingItemID` park visuals. The grid view consumes it to auto-open the new folder
+    /// with its name focused; `revealedFolderID` carries the id. Purely visual and safe to
+    /// lose (the folder data already landed at mouseUp).
+    @Published private(set) var folderRevealToken = 0
+    private(set) var revealedFolderID: String?
+    /// Created-folder id staged at a FLIGHT commit, published by the reveal (`finishSettle`).
+    private var pendingRevealFolderID: String?
 
     /// Edge-dwell page-flip request (design §4.4). Published from the dwell state machine — never
     /// from inside a mouse handler's withAnimation — and consumed by the grid's `.onChange`, which
@@ -604,6 +621,10 @@ final class LaunchpadDragCoordinator: ObservableObject {
             folderEjectActive = false
             carryActive = false                              // virtual tail page retracts now
             commitToken += 1                                 // visual-only; data is already safe
+            // The created-folder reveal rides the settle: staged here, published when the
+            // flight's reveal runs (finishSettle) — natural completion, watchdog or
+            // force-complete alike (the view's guards absorb the force-complete cases).
+            pendingRevealFolderID = pendingVisualCommit?.createdFolderID
             // Watchdog BEFORE the flight: a spy presenter completes synchronously, and the
             // finish below must find (and cancel) the scheduled work, not race its scheduling.
             settleTimeoutWork = settleTimeoutScheduler(settleTimeoutInterval) { [weak self] in
@@ -629,7 +650,18 @@ final class LaunchpadDragCoordinator: ObservableObject {
             folderEjectActive = false
             carryActive = false
             commitToken += 1                                 // visual-only; data is already safe
+            // Hard-cut reveals everything in this same mouseUp stack — publish the created-
+            // folder reveal now (there is no flight whose reveal could carry it later).
+            publishFolderReveal(pendingVisualCommit?.createdFolderID)
         }
+    }
+
+    /// Publish the post-creation auto-open trigger (design §2.6). Tokenised so the grid view's
+    /// `.onChange` fires even for back-to-back creations of distinct folders.
+    private func publishFolderReveal(_ folderID: String?) {
+        guard let folderID else { return }
+        revealedFolderID = folderID
+        folderRevealToken += 1
     }
 
     /// The screen rect the floating icon should fly to: the engaged container's armed/gap slot
@@ -692,6 +724,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
         } else {
             session.presenter.dismiss()
         }
+        // The reveal is done — the landed cell owns its slot, so the folder panel can mount
+        // without fighting the park predicate. Consumed-once: cleared before publishing.
+        let revealFolderID = pendingRevealFolderID
+        pendingRevealFolderID = nil
+        publishFolderReveal(revealFolderID)
     }
 
     /// Abort an in-flight carry (launcher closed / source unmounted / search activated) without

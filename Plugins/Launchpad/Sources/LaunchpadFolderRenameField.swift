@@ -1,0 +1,286 @@
+import AppKit
+import SwiftUI
+
+/// Programmatic handle into the bridged rename field, owned by the grid view (`@State`, so it
+/// survives re-renders). SwiftUI-side hooks that must end or start editing — the panel's
+/// blank-space tap, `closeFolder`, the in-folder `onDragBegan` (grid cells never take first
+/// responder, so blur alone can't end the session), and the context-menu rename — route
+/// through it into the live coordinator.
+@MainActor
+final class LaunchpadFolderRenameController {
+    weak var coordinator: LaunchpadFolderRenameField.Coordinator?
+
+    var isEditing: Bool { coordinator?.isEditing ?? false }
+
+    /// Commit (or cancel) the in-flight rename, if any. Safe to call unconditionally.
+    func endEditing(commit: Bool) {
+        coordinator?.endEditingNow(commit: commit)
+    }
+}
+
+/// The folder panel's title: a real `NSTextField` bridged into SwiftUI, ALWAYS rendered —
+/// it reads as a static title until clicked, then edits inline (macOS-native Launchpad
+/// behaviour, design §2.2). One constant NSView sidesteps the Text↔TextField identity swap
+/// this ZStack-over-AppKit hierarchy is known to mishandle (see the `folderShown` note), and
+/// editing only moves first responder WITHIN the overlay window — no resign-active/key, so
+/// the dismiss observers need no new exemptions. Mirrors the `LaunchpadSearchField` bridge:
+/// Coordinator + `doCommandBySelector` + `hasMarkedText()` for IME safety.
+struct LaunchpadFolderRenameField: NSViewRepresentable {
+    var folderID: String
+    var name: String
+    var placeholder: String
+    /// Folder id whose field should grab focus + select-all (context-menu rename / the
+    /// post-creation auto-open). Consumed via `onFocusRequestHandled`.
+    var focusRequestID: String?
+    var controller: LaunchpadFolderRenameController?
+    /// Refused entry into editing (e.g. mid-carry): the field stays a static title.
+    var editGate: @MainActor () -> Bool = { true }
+    var onCommit: (String) -> Void
+    var onFocusRequestHandled: () -> Void = {}
+
+    /// True when `responder` is a field editor currently editing a rename field — the Esc
+    /// key monitor then lets the event through so `cancelOperation` cancels the rename
+    /// instead of closing the launcher (design §2.4; the marked-text IME exemption stays
+    /// first). Static + responder-typed so the routing rule is unit-testable.
+    @MainActor
+    static func shouldRouteEsc(to responder: NSResponder?) -> Bool {
+        guard let editor = responder as? NSTextView else { return false }
+        // The field editor's delegate IS the control being edited (AppKit wiring). Bridge via
+        // AnyObject: NSTextField's NSTextViewDelegate conformance is ObjC-dynamic, so a direct
+        // `is` reads as an unrelated-type cast to the Swift type checker.
+        return (editor.delegate as AnyObject?) is LaunchpadRenameTextField
+    }
+
+    func makeNSView(context: Context) -> LaunchpadRenameTextField {
+        let field = LaunchpadRenameTextField()
+        field.delegate = context.coordinator
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.alignment = .center
+        field.textColor = .labelColor
+        // Visual parity with the previous `Text(...).font(.title2.weight(.semibold))` title.
+        field.font = .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title2).pointSize,
+                                 weight: .semibold)
+        field.maximumNumberOfLines = 1
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byTruncatingTail
+        field.cell?.isScrollable = true          // long names scroll while editing, never wrap
+        field.stringValue = name
+        field.placeholderString = placeholder
+        field.editGate = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.editGate() ?? true
+        }
+        field.onFocusIn = { [weak coordinator = context.coordinator, weak field] in
+            coordinator?.beginEditing(original: field?.stringValue ?? "")
+        }
+        context.coordinator.field = field
+        controller?.coordinator = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ field: LaunchpadRenameTextField, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        coordinator.field = field
+        controller?.coordinator = coordinator
+        field.placeholderString = placeholder
+        if coordinator.folderID != folderID {
+            // The panel stayed mounted across a close→reopen of a different folder (the 0.34s
+            // unmount grace): any leftover session belongs to the OLD folder — `closeFolder`
+            // already committed it, so just drop the state and show the new name.
+            coordinator.abandonSession()
+            coordinator.folderID = folderID
+            field.stringValue = name
+        } else if !coordinator.isEditing, field.stringValue != name {
+            field.stringValue = name             // reflect store changes; never stomp live typing
+        }
+        if let request = focusRequestID, request == folderID {
+            coordinator.requestProgrammaticFocus()
+        }
+    }
+
+    /// Unmount backstop, SECOND line of defence: an unresolved session commits so no typed
+    /// name is ever lost. The primary paths commit earlier and on the event stack — scrim
+    /// close / typing-to-search via `closeFolder`, whole-window teardown via the overlay
+    /// controller's `close()` resigning first responder (SwiftUI does NOT contract dismantle
+    /// for an NSHostingView deallocated with its window, only for diffing removals). This
+    /// catches what remains, e.g. the folder dissolving underneath the open panel. Data only —
+    /// the window may be going away, so no refocus.
+    static func dismantleNSView(_ field: LaunchpadRenameTextField, coordinator: Coordinator) {
+        coordinator.endEditingNow(commit: true, refocus: false)
+        coordinator.detach()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    /// Forwards AppKit text-control events into the pure `LaunchpadRenameEditSession` and
+    /// applies its resolutions. The handle* methods take plain values so unit tests drive
+    /// the full table without a window or field editor.
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: LaunchpadFolderRenameField
+        weak var field: LaunchpadRenameTextField?
+        var folderID: String
+        private(set) var session: LaunchpadRenameEditSession?
+        /// Last applied resolution — test instrumentation for the forwarding table.
+        private(set) var lastResolution: LaunchpadRenameEditSession.Resolution?
+        private var focusRequestInFlight = false
+
+        init(_ parent: LaunchpadFolderRenameField) {
+            self.parent = parent
+            self.folderID = parent.folderID
+        }
+
+        var isEditing: Bool { session.map { !$0.hasResolved } ?? false }
+
+        // MARK: Session events (unit-testable surface)
+
+        func beginEditing(original: String) {
+            guard !isEditing else { return }
+            session = .begin(originalName: original)
+        }
+
+        func handleTextChange(_ text: String) {
+            session?.textChanged(text)
+        }
+
+        /// `doCommandBySelector` routing. During IME composition the command belongs to the
+        /// candidate window — return false so Return confirms / Esc cancels the composition,
+        /// never resolving the rename (same discipline as the search field).
+        func handleCommand(_ selector: Selector, hasMarkedText: Bool) -> Bool {
+            guard !hasMarkedText, session != nil else { return false }
+            switch selector {
+            case #selector(NSResponder.insertNewline(_:)):
+                apply(resolve { $0.commit() })
+                return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                apply(resolve { $0.cancel() })
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// Native end-editing (blur, refocus after Return/Esc, teardown). The session's latch
+        /// makes the post-Return/post-Esc occurrence inert; a plain blur commits here.
+        func handleEndEditing() {
+            apply(resolve { $0.endEditing() })
+            session = nil
+        }
+
+        /// SwiftUI-side hooks (blank tap / closeFolder / in-folder drag began).
+        func endEditingNow(commit: Bool, refocus: Bool = true) {
+            guard isEditing else { return }
+            apply(resolve { commit ? $0.commit() : $0.cancel() }, refocus: refocus)
+        }
+
+        func detach() {
+            session = nil
+            field = nil
+        }
+
+        func abandonSession() {
+            session = nil
+        }
+
+        // MARK: Programmatic focus (context-menu rename / post-creation auto-open)
+
+        /// Focus + select-all once the field is actually in a window. The panel may be mounting
+        /// in this very SwiftUI transaction, so retry across a few runloop turns before giving
+        /// up; the request is consumed (cleared) either way.
+        func requestProgrammaticFocus() {
+            guard !focusRequestInFlight else { return }
+            focusRequestInFlight = true
+            attemptProgrammaticFocus(retries: 8)
+        }
+
+        private func attemptProgrammaticFocus(retries: Int) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let field = self.field, let window = field.window {
+                    self.focusRequestInFlight = false
+                    self.parent.onFocusRequestHandled()
+                    guard self.parent.editGate() else { return }   // mid-carry: stay a title
+                    window.makeFirstResponder(field)
+                    field.selectText(nil)                          // programmatic entry selects all (§2.3)
+                } else if retries > 0 {
+                    self.attemptProgrammaticFocus(retries: retries - 1)
+                } else {
+                    self.focusRequestInFlight = false
+                    self.parent.onFocusRequestHandled()
+                }
+            }
+        }
+
+        // MARK: Resolution plumbing
+
+        private func resolve(
+            _ event: (inout LaunchpadRenameEditSession) -> LaunchpadRenameEditSession.Resolution?
+        ) -> LaunchpadRenameEditSession.Resolution? {
+            guard var current = session else { return nil }
+            let resolution = event(&current)
+            session = current                    // keep the latched session until end-editing clears it
+            return resolution
+        }
+
+        private func apply(_ resolution: LaunchpadRenameEditSession.Resolution?, refocus: Bool = true) {
+            guard let resolution else { return }
+            lastResolution = resolution
+            switch resolution {
+            case .commit(let text):
+                parent.onCommit(text)
+            case .cancel(let restore):
+                field?.stringValue = restore
+            }
+            // Hand the keyboard back to the search field (Return keeps the folder open, §2.3);
+            // the resulting native end-editing is latched into a no-op by the session.
+            if refocus { refocusSearchField() }
+        }
+
+        private func refocusSearchField() {
+            guard let window = field?.window,
+                  let search = Self.searchField(in: window.contentView) else { return }
+            window.makeFirstResponder(search)
+        }
+
+        private static func searchField(in view: NSView?) -> NSSearchField? {
+            guard let view else { return nil }
+            if let field = view as? NSSearchField { return field }
+            for subview in view.subviews {
+                if let found = searchField(in: subview) { return found }
+            }
+            return nil
+        }
+
+        // MARK: NSTextFieldDelegate
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field else { return }
+            handleTextChange(field.stringValue)
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            handleEndEditing()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            handleCommand(selector, hasMarkedText: textView.hasMarkedText())
+        }
+    }
+}
+
+/// NSTextField subclass so the Esc monitor can recognise the rename field editor by delegate
+/// type, and so entry into editing can be gated (mid-carry the title must stay inert).
+final class LaunchpadRenameTextField: NSTextField {
+    var editGate: @MainActor () -> Bool = { true }
+    var onFocusIn: @MainActor () -> Void = {}
+
+    override func becomeFirstResponder() -> Bool {
+        guard editGate() else { return false }
+        let became = super.becomeFirstResponder()
+        if became { onFocusIn() }
+        return became
+    }
+}

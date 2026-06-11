@@ -34,10 +34,11 @@
 - **落下**：现在 `isLifted=false` 瞬间复位、settle 只有 0.13s easeOut、无 haptic。→ 落下 scale 走同一弹簧、settle 拉到 ~0.2-0.25s spring、commit 成功（`commitDrop` 返回 true）时 haptic。codeRef：`:331`。
 - **让位瞄准**：现在按**光标点**算插入槽，略超前/滞后。→ 改按**被拖图标中心**（cursor − dragGrabOffset 校到 cell 中心）。codeRef：`:362`。
 
-## §5 文件夹命名（Low）
-- 现在硬编码「未命名」、不自动打开新夹、无改名 UI（`renameFolder` 在 store 里有、无 UI）。
-- **要做**：建夹后 `openFolderID = 新夹` 自动打开 + 面板内联可编辑名字（新夹时 first-responder）；按 `LSApplicationCategoryType` 推断建议名替代「未命名」。
-- codeRef：`LaunchpadGridView.swift:308`（handleMakeFolder）。
+## §5 文件夹命名（Low）— ✅ 已落地（2026-06-11，设计见 2026-06-11-launchpad-appearance-design.md §2 / P0a）
+- ✅ 夹面板标题 = 常驻 bridged NSTextField 内联改名（点击即编辑，Return 提交 / Esc 撤销 / 失焦提交）。
+- ✅ folder 右键菜单：打开 / 重命名 / 解散文件夹（R2：无确认）。
+- ✅ 建夹自动打开 + 名字全选聚焦（R1=B）：旧路径即开；carry 路径在 settle reveal 完成后开（`folderRevealToken`）。
+- ⏳ 按 `LSApplicationCategoryType` 推断建议名替代「未命名」：另立任务（R3，排除在本批外）。
 
 ## 已确认「一致」的部分（不用动）
 - 让位重排模型（true insert-and-shift + 边缘 hysteresis + 中心死区）——最像 iOS 的部分。

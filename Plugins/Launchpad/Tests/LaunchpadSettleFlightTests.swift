@@ -457,6 +457,38 @@ final class LaunchpadSettleFlightTests: XCTestCase {
                           "reveal 必须把新夹 cell 写回真实槽位")
     }
 
+    /// 19/P0a step 5 (design §2.6, R1=B): a merge commit's auto-open trigger must ride the
+    /// settle REVEAL — publishing at mouseUp would mount the folder panel under the still-
+    /// flying icon and fight the park visuals.
+    func testMergeFlightPublishesFolderRevealOnlyAtReveal() {
+        coordinator.storeApplier = { action, _ in
+            if case .makeFolder = action { return "FOLDER-NEW" }
+            return nil
+        }
+        let container = makePage(threeApps, page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        releaseIntoMergeFlight(container)
+        XCTAssertEqual(coordinator.pendingVisualCommit?.createdFolderID, "FOLDER-NEW")
+        XCTAssertEqual(coordinator.folderRevealToken, 0, "飞行中不得发布自动开夹")
+        XCTAssertNil(coordinator.revealedFolderID)
+
+        spy.completeNextSettle()
+        XCTAssertEqual(coordinator.folderRevealToken, 1, "reveal 完成处恰好发布一次")
+        XCTAssertEqual(coordinator.revealedFolderID, "FOLDER-NEW")
+    }
+
+    func testReorderFlightPublishesNoFolderReveal() {
+        let container = makePage(threeApps, page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        releaseIntoFlight(container)                      // plain reorder commit (applier → nil)
+        spy.completeNextSettle()
+        XCTAssertEqual(coordinator.folderRevealToken, 0, "重排 reveal 不触发自动开夹")
+    }
+
     func testAddToFolderCommitKeepsParkingTheCarriedItemID() {
         // addToFolder's landing cell is an EXISTING folder — parking it would blank a visible
         // folder for the whole flight. The park id must stay the carried app's.

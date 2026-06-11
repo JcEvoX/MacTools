@@ -232,6 +232,15 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         guard let win = window else { return }
         isTearingDown = true
         removeDismissHandlers()
+        // A folder rename may be mid-edit on ANY whole-window teardown path (Cmd+Tab
+        // resign-active, the Settings window taking key, launching an app from inside a
+        // folder). SwiftUI only contracts `dismantleNSView` for diffing removals — an
+        // NSHostingView deallocated together with its window may never get one — so resign
+        // first responder HERE: the field editor ends editing and the rename coordinator
+        // commits synchronously on this event stack (design §2.3 "unmount → commit, no data
+        // loss"). Idempotent for every other responder (search field has no end-editing
+        // hooks) and the session latch keeps any later dismantle call inert.
+        win.makeFirstResponder(nil)
         win.delegate = nil
         win.orderOut(nil)
         win.close()
@@ -310,6 +319,12 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             // there's no marked text.
             if event.keyCode == 53 {
                 if let editor = self?.window?.firstResponder as? NSTextView, editor.hasMarkedText() {
+                    return event
+                }
+                // Second exemption (design §2.4): a folder rename being edited owns Esc —
+                // the field editor's `cancelOperation` restores the original name. The Esc
+                // ladder: cancel the rename first, only then dismissal.
+                if LaunchpadFolderRenameField.shouldRouteEsc(to: self?.window?.firstResponder) {
                     return event
                 }
                 self?.close()

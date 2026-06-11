@@ -234,15 +234,21 @@ final class LaunchpadLayoutStore: ObservableObject {
         return removed
     }
 
-    /// Rename a folder. An empty name falls back to a default so a folder is never nameless.
-    func renameFolder(_ folderID: String, name: String) {
+    /// Rename a folder. An empty (or whitespace-only) name falls back to `fallback` so a folder
+    /// is never nameless; callers pass the localized default. Renaming to the current name —
+    /// including the trim-equivalent of it — is a no-op and writes nothing (the blur-commits
+    /// rename UI hits this on every "click in, click away" pass; same discipline as
+    /// `reorderChild`). The folder id never changes.
+    func renameFolder(_ folderID: String, name: String, fallback: String = "未命名") {
         guard let current = layout else { return }
         var nodes = current.nodes
         guard let folderIndex = nodes.firstIndex(where: { $0.rootID == folderID }),
-              case .folder(let fid, _, let children) = nodes[folderIndex]
+              case .folder(let fid, let currentName, let children) = nodes[folderIndex]
         else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        nodes[folderIndex] = .folder(id: fid, name: trimmed.isEmpty ? "未命名" : trimmed, children: children)
+        let resolved = trimmed.isEmpty ? fallback : trimmed
+        guard resolved != currentName else { return }   // no visible change → no write
+        nodes[folderIndex] = .folder(id: fid, name: resolved, children: children)
         setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
     }
 

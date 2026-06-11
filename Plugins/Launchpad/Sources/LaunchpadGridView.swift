@@ -65,6 +65,12 @@ struct LaunchpadGridView: View {
     /// never animates reliably in this ZStack-over-AppKit hierarchy (the tuple-derived view has no
     /// stable identity), so the panel is always rendered while open and zoomed via this flag.
     @State private var folderShown = false
+    /// Folder id whose rename field should grab focus + select-all once its panel is mounted —
+    /// set by the context-menu 重命名 and the post-creation auto-open (design §2.5/§2.6).
+    @State private var pendingRenameFocusID: String?
+    /// Stable handle into the bridged rename field, so SwiftUI-side hooks (blank tap, folder
+    /// close, in-folder drag start) can end the edit session explicitly (design §2.3/§2.7).
+    @State private var renameController = LaunchpadFolderRenameController()
     // Must match `LaunchpadGridMetrics` defaults so paging math agrees with the AppKit grid.
     private let cellWidth: CGFloat = 116
     private let cellHeight: CGFloat = 124
@@ -183,6 +189,20 @@ struct LaunchpadGridView: View {
                 currentPage = min(currentPage, pageCount - 1)
             }
             dragOrderSnapshot = nil
+        }
+        // Post-creation auto-open (design §2.6, R1=B): published at the settle REVEAL — never
+        // mid-flight, where mounting the panel would fight the `settlingItemID` park visuals.
+        // Declared after the commitToken handler so a folder-origin close lands first. Guards:
+        // the board may have changed in the 0.25s flight (new carry adopted the gesture, typing
+        // flattened to search, the folder dissolved) — then the reveal is consumed silently.
+        .onChange(of: dragCoordinator.folderRevealToken) { _, _ in
+            guard let id = dragCoordinator.revealedFolderID,
+                  dragCoordinator.carrySession == nil,
+                  isLayoutEditable,
+                  folderCell(id) != nil
+            else { return }
+            pendingRenameFocusID = id
+            openFolderPanel(id: id)
         }
         // Declared AFTER the commitToken handler — on a commit, the landing re-selection above
         // must win before this cancel-shaped fallback could run (§6.4, AR-8).
@@ -331,6 +351,18 @@ struct LaunchpadGridView: View {
             onReorder: handleReorder,
             onMakeFolder: handleMakeFolder,
             onAddToFolder: handleAddToFolder,
+            // Context-menu folder actions (design §2.5, R2): rename opens the panel with the
+            // title focused + selected; dissolve releases the apps back to the grid, no
+            // confirmation (data is never lost — the folder is cheap to rebuild).
+            onRenameFolder: { id in
+                pendingRenameFocusID = id
+                openFolderPanel(id: id)
+            },
+            onDissolveFolder: { id in
+                let firstChild = folderCell(id)?.items.first?.id   // before dissolve: id vanishes after
+                layoutStore.dissolveFolder(id)
+                if let firstChild { relocateSelection(to: firstChild) }   // it inherits the folder's slot
+            },
             onDragBegan: {
                 // A root drag may escalate into a carry the moment it lifts (design §2.1): stage
                 // the visible order + editability for the session (the commit resolves against
@@ -366,11 +398,16 @@ struct LaunchpadGridView: View {
         if let index = filtered.firstIndex(where: { $0.layoutID == cell.layoutID }) { selectedIndex = index }
         switch cell {
         case .app(let item): onActivate(item)
-        case .folder(let id, _, _):
-            openFolderID = id
-            folderShown = false
-            DispatchQueue.main.async { if openFolderID == id { folderShown = true } }  // next tick → zoom
+        case .folder(let id, _, _): openFolderPanel(id: id)
         }
+    }
+
+    /// Mount the folder panel and zoom it in on the next tick (the `folderShown` discipline).
+    /// Shared by cell activation, the context-menu rename and the post-creation auto-open.
+    private func openFolderPanel(id: String) {
+        openFolderID = id
+        folderShown = false
+        DispatchQueue.main.async { if openFolderID == id { folderShown = true } }  // next tick → zoom
     }
 
     private func selectCell(_ layoutID: String) {
@@ -421,6 +458,10 @@ struct LaunchpadGridView: View {
         let folderID = UUID().uuidString
         layoutStore.makeFolder(target: targetID, dragged: draggedID, name: folderDefaultName, id: folderID)
         relocateSelection(to: folderID)
+        // macOS-native: a fresh folder opens with its name selected, ready to type (R1=B).
+        // This legacy (coordinator-less) path has no settle flight, so open immediately.
+        pendingRenameFocusID = folderID
+        openFolderPanel(id: folderID)
     }
 
     /// Drag-to-stack onto an existing folder: app joins it.
@@ -633,6 +674,9 @@ struct LaunchpadGridView: View {
 
     private func closeFolder() {
         guard let id = openFolderID else { return }
+        // Closing with a rename in flight (scrim tap / typing-to-search) commits it first —
+        // the panel may stay mounted for the zoom-out, so dismantle alone is too late (§2.3).
+        renameController.endEditing(commit: true)
         folderShown = false                                    // zoom back out
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
             // Remove only if still closing THIS folder — a reopen (new id, or folderShown back true)
@@ -695,10 +739,19 @@ struct LaunchpadGridView: View {
         let visibleH = CGFloat(visibleRows) * metrics.cellHeight + CGFloat(max(0, visibleRows - 1)) * metrics.rowSpacing
 
         return VStack(spacing: 18) {
-            Text(folder.name)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            // Always-rendered inline-rename title: reads as a static title, edits on click
+            // (design §2.2 — no Text↔TextField identity swap, no extra hover affordance, R4).
+            LaunchpadFolderRenameField(
+                folderID: folder.id,
+                name: folder.name,
+                placeholder: localization.string("folder.rename.placeholder", defaultValue: "文件夹名称"),
+                focusRequestID: pendingRenameFocusID,
+                controller: renameController,
+                editGate: { dragCoordinator.carrySession == nil },   // mid-carry: no rename entry
+                onCommit: { layoutStore.renameFolder(folder.id, name: $0, fallback: folderDefaultName) },
+                onFocusRequestHandled: { pendingRenameFocusID = nil }
+            )
+            .frame(width: min(gridW, 360), height: 26)
 
             // ONE stable view identity for every folder size: an if/else here would swap SwiftUI
             // branches when the row count crosses the cap — and a mid-carry eject SHRINKS the item
@@ -713,6 +766,11 @@ struct LaunchpadGridView: View {
             .frame(width: gridW, height: visibleH)
         }
         .padding(30)
+        // Clicking the panel's own blank space (padding / title gaps) commits an in-flight
+        // rename — a click on "nothing" never reaches the field's blur path by itself (§2.3).
+        // Cells and the field are AppKit views that hit-test first, so they're unaffected.
+        .contentShape(Rectangle())
+        .onTapGesture { renameController.endEditing(commit: true) }
         .frame(maxWidth: 760)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
@@ -768,8 +826,13 @@ struct LaunchpadGridView: View {
             // Freeze the visible ROOT order (+ editability) the moment an in-folder drag begins:
             // if it escalates to an eject carry, the session adopts this snapshot so the commit's
             // captureVisibleOrder resolves against what the user saw, not a list a mid-carry
-            // catalog reload may have changed (design §1.3 / constraint 15).
-            onDragBegan: { dragCoordinator.freezeVisibleOrder(filtered, editable: isLayoutEditable) },
+            // catalog reload may have changed (design §1.3 / constraint 15). A live rename commits
+            // FIRST — grid cells never take first responder, so blur alone can't end it (§2.7) —
+            // and its store write lands before the order freeze so the snapshot sees it.
+            onDragBegan: {
+                renameController.endEditing(commit: true)
+                dragCoordinator.freezeVisibleOrder(filtered, editable: isLayoutEditable)
+            },
             onPageSwipe: { _ in },
             onPageDrag: { _, _, _ in },
             onPageScroll: { _, _ in },

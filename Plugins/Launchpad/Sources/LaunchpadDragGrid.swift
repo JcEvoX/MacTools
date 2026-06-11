@@ -73,6 +73,8 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var onReorder: (String, LaunchpadDropTarget) -> Void
     var onMakeFolder: (String, String) -> Void         // (targetAppID, draggedAppID) → new folder
     var onAddToFolder: (String, String) -> Void        // (folderID, draggedAppID)
+    var onRenameFolder: (String) -> Void = { _ in }    // folderID — context menu 重命名 (19/P0a)
+    var onDissolveFolder: (String) -> Void = { _ in }  // folderID — context menu 解散，无确认 (R2)
     var onDragBegan: () -> Void
     var onPageSwipe: (Int) -> Void
     var onPageDrag: (CGFloat, CGFloat, Bool) -> Void   // translationX, pageWidth, ended (empty-space mouse drag)
@@ -333,10 +335,19 @@ final class LaunchpadGridContainerView: NSView {
     func activate(_ cell: LaunchpadGridCellView) { grid?.onActivate(cell.cell) }
     func select(_ cell: LaunchpadGridCellView) { grid?.onSelect(cell.layoutID) }
 
-    /// App context menu. Folders carry a different menu (rename / dissolve, 19b-4); returning
-    /// `nil` suppresses the menu on a folder cell for now.
+    /// Context menu: apps get the launch/reveal/order/hide set; folders get open / rename /
+    /// dissolve (design §2.5, R2 — dissolve has no confirmation: the apps just return to the
+    /// grid, nothing is lost). Folder cells never exist while searching (folders dissolve into
+    /// flat results) and mid-drag suppression lives at the cell's `rightMouseDown`.
     func contextMenu(for cell: LaunchpadGridCellView) -> NSMenu? {
-        guard case .app(let app) = cell.cell, let grid else { return nil }
+        guard let grid else { return nil }
+        switch cell.cell {
+        case .app(let app): return appContextMenu(app, grid: grid)
+        case .folder: return folderContextMenu(cell.cell, grid: grid)
+        }
+    }
+
+    private func appContextMenu(_ app: LaunchpadAppItem, grid: LaunchpadDragGrid) -> NSMenu {
         let loc = grid.localization
         let menu = NSMenu()
         func add(_ title: String, _ action: Selector) {
@@ -359,13 +370,40 @@ final class LaunchpadGridContainerView: NSView {
         return menu
     }
 
+    private func folderContextMenu(_ cell: LaunchpadDisplayCell, grid: LaunchpadDragGrid) -> NSMenu {
+        let loc = grid.localization
+        let menu = NSMenu()
+        func add(_ title: String, _ action: Selector) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = cell           // carries the folder's display cell (id + name)
+            menu.addItem(item)
+        }
+        add(loc.string("grid.menu.open", defaultValue: "打开"), #selector(menuOpenFolder(_:)))
+        menu.addItem(.separator())
+        add(loc.string("grid.menu.renameFolder", defaultValue: "重命名"), #selector(menuRenameFolder(_:)))
+        add(loc.string("grid.menu.dissolveFolder", defaultValue: "解散文件夹"), #selector(menuDissolveFolder(_:)))
+        return menu
+    }
+
     private func menuApp(_ sender: NSMenuItem) -> LaunchpadAppItem? { sender.representedObject as? LaunchpadAppItem }
+    private func menuFolderID(_ sender: NSMenuItem) -> String? {
+        guard let cell = sender.representedObject as? LaunchpadDisplayCell,
+              case .folder(let id, _, _) = cell else { return nil }
+        return id
+    }
     @objc private func menuOpen(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onActivate(.app($0)) } }
     @objc private func menuReveal(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onReveal($0) } }
     @objc private func menuCopy(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onCopyPath($0) } }
     @objc private func menuMoveFront(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onMoveToFront($0) } }
     @objc private func menuMoveEnd(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onMoveToEnd($0) } }
     @objc private func menuHide(_ sender: NSMenuItem) { menuApp(sender).map { grid?.onHide($0) } }
+    @objc private func menuOpenFolder(_ sender: NSMenuItem) {
+        guard let cell = sender.representedObject as? LaunchpadDisplayCell else { return }
+        grid?.onActivate(cell)
+    }
+    @objc private func menuRenameFolder(_ sender: NSMenuItem) { menuFolderID(sender).map { grid?.onRenameFolder($0) } }
+    @objc private func menuDissolveFolder(_ sender: NSMenuItem) { menuFolderID(sender).map { grid?.onDissolveFolder($0) } }
 
     // MARK: Direct drag (mouse-tracked, like iOS — NOT NSDraggingSession)
     //
