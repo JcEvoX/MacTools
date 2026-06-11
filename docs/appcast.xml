@@ -5,22 +5,27 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.17</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.17</link>
-            <sparkle:version>47</sparkle:version>
-            <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.17 -->
+            <title>Version 1.0.18</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.18</link>
+            <sparkle:version>48</sparkle:version>
+            <sparkle:shortVersionString>1.0.18</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.18 -->
 
 ## What's Changed
 ### Other Changes
-* feat(translator): support multiple OpenAI providers by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/128
+* Make Homebrew cask update workflow manual by @char1eslu in https://github.com/ggbond268/MacTools/pull/131
+* feat(translator): add screenshot OCR translation by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/132
+* Feat: Launchpad custom ordering + iOS-style folders (#19a/#19b) by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/134
+* fix(l10n): remove unnecessary line break in about description by @YangFong in https://github.com/ggbond268/MacTools/pull/133
 
+## New Contributors
+* @YangFong made their first contribution in https://github.com/ggbond268/MacTools/pull/133
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.16...v1.0.17
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.17...v1.0.18
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Fri, 05 Jun 2026 14:53:53 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.17/MacTools.dmg" length="6099364" type="application/octet-stream" sparkle:edSignature="C2X3r7tTZx7ymrVKyVAW4xNYr0PAgqoNU0uky1cX9EU1qtOmNO1vaRxyXCqPtse9Q1VVez3Dv2KdmrTbRTZgCw==" />
+            <pubDate>Thu, 11 Jun 2026 14:00:36 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.18/MacTools.dmg" length="6096378" type="application/octet-stream" sparkle:edSignature="IZHnYsQZ5tzAg1J1IV1uesWUd8sB00p8gupzHWEZwAmqPGnmTV8VgYc34HHFk+JulxAcAqoSDSFp7K6vP3kHAw==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
