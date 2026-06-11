@@ -123,7 +123,8 @@ final class LaunchpadGridContainerView: NSView {
     /// External drag (an app ejected from a folder, carried over THIS root grid). The carried app is
     /// NOT among `cells` — it lives in its source folder until commit — so make-way opens a GAP by
     /// index and merge arms a real `cells` target. No phantom cell view, no `dragOrder` mutation.
-    private var externalDragActive = false
+    /// Readable for the handoff tests (design §10-⑥): exactly one container is active at a time.
+    private(set) var externalDragActive = false
     private(set) var externalGapIndex: Int?       // slot the carried app would occupy (make-way gap)
     private var externalDragAppID: String?
 
@@ -183,6 +184,9 @@ final class LaunchpadGridContainerView: NSView {
             rebuildCells(items: grid.items, selectedID: grid.selectedID)
             needsLayout = true
         }
+        // A container engaged while empty (late mount during a carry) gets the cursor replayed
+        // now that cells exist — see LaunchpadDragCoordinator.containerDidApplyCells.
+        if externalDragActive { grid.coordinator?.containerDidApplyCells(self) }
     }
 
     private func icons(for cell: LaunchpadDisplayCell) -> [NSImage] {
@@ -677,19 +681,23 @@ final class LaunchpadGridContainerView: NSView {
         }
     }
 
-    /// Resolve the release into a store action (merge or reorder). Tears the external drag down.
-    func commitExternalDrag() -> LaunchpadExternalDropResult {
-        let armed = stackTargetCell
-        let gap = externalGapIndex
-        defer { endExternalDrag() }
-        if let target = armed {
+    /// Resolve the current external-drag state into a drop outcome WITHOUT tearing anything down
+    /// (pure peek, design §7.1) — the coordinator commits the data first and ends the drag after.
+    func resolveExternalDrop() -> LaunchpadExternalDropResult {
+        if let target = stackTargetCell {
             if let fid = target.cell.folderID { return .addToFolder(folderID: fid) }
             return .makeFolder(targetAppID: target.layoutID)
         }
-        guard let gap, !cells.isEmpty else { return .reorder(nil) }
+        guard let gap = externalGapIndex, !cells.isEmpty else { return .reorder(nil) }
         if gap <= 0 { return .reorder(.before(cells[0].layoutID)) }
         if gap >= cells.count { return .reorder(.after(cells[cells.count - 1].layoutID)) }
         return .reorder(.after(cells[gap - 1].layoutID))
+    }
+
+    /// Legacy resolve-and-teardown entrance (windowless test fixtures).
+    func commitExternalDrag() -> LaunchpadExternalDropResult {
+        defer { endExternalDrag() }
+        return resolveExternalDrop()
     }
 
     /// Clear external-drag state and settle the make-way gap closed.

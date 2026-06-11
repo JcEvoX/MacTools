@@ -143,7 +143,9 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         XCTAssertFalse(coordinator.hasFloatingWindow, "commit 后浮窗必须拆除")
     }
 
-    func testPageFunnelSwitchesActiveContainer() {
+    // MARK: - Handoff (design §3, step 4)
+
+    func testPageFunnelHandsOffGapToNewContainer() {
         let (c0, _) = makePage(threeApps(), page: 0)
         let (c1, _) = makePage(threeApps(), page: 1)
         pushGeometry()
@@ -154,14 +156,76 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         let centre0 = NSPoint(x: c0.cellViews[0].frame.midX, y: c0.cellViews[0].frame.midY)
         coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre0))
         XCTAssertTrue(c0.stackTargetCell === c0.cellViews[0])
+        XCTAssertTrue(c0.externalDragActive)
 
-        // Pre-handoff (step 4) the new page gets no beginExternalDrag — routing still must follow
-        // the funnel so updates stop reaching the old page (today's behaviour, made explicit).
         coordinator.currentPageDidChange(1)
-        let centre1 = NSPoint(x: c1.cellViews[2].frame.midX, y: c1.cellViews[2].frame.midY)
-        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre1))
-        XCTAssertNil(c1.stackTargetCell, "page 1 容器未收到 beginExternalDrag（handoff 是步骤 4）——不得让位")
-        XCTAssertTrue(c0.stackTargetCell === c0.cellViews[0], "旧页状态冻结，等步骤 4 的 handoff 收口")
+        XCTAssertFalse(c0.externalDragActive, "旧页 gap 必须在 handoff 时收口（gap1 残留缺陷）")
+        XCTAssertNil(c0.stackTargetCell)
+        XCTAssertTrue(c1.externalDragActive, "新页容器必须收到 beginExternalDrag 接管让位")
+
+        // The last cursor point is replayed into the NEW container — its merge/gap opens without
+        // waiting for the next mouse event. The replayed local point is centre0, which maps onto
+        // the same slot geometry in c1.
+        XCTAssertTrue(c1.stackTargetCell === c1.cellViews[0], "handoff 必须重喂 last 点，新页立即让位/arm")
+    }
+
+    func testFlipAwayAndBackReengagesOriginalContainer() {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        let (c1, _) = makePage(threeApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+        coordinator.beginEject(appID: "/Apps/X.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                               atScreenPoint: .zero, aboveLevel: .normal)
+        let centre = NSPoint(x: c0.cellViews[1].frame.midX, y: c0.cellViews[1].frame.midY)
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre))
+
+        coordinator.currentPageDidChange(1)
+        coordinator.currentPageDidChange(0)
+        XCTAssertFalse(c1.externalDragActive, "翻回后 page 1 的让位必须收口")
+        XCTAssertTrue(c0.externalDragActive, "翻回后原页容器重新接管")
+        XCTAssertTrue(c0.stackTargetCell === c0.cellViews[1], "重喂 last 点恢复原 arm")
+    }
+
+    func testLateRegistrationAfterFlipTakesOverViaReattach() {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+        coordinator.beginEject(appID: "/Apps/X.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                               atScreenPoint: .zero, aboveLevel: .normal)
+        let centre = NSPoint(x: c0.cellViews[0].frame.midX, y: c0.cellViews[0].frame.midY)
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre))
+
+        coordinator.currentPageDidChange(1)                  // no page-1 container registered yet
+        XCTAssertFalse(c0.externalDragActive, "旧页让位先收口，即使新页容器还没到")
+
+        let (c1, _) = makePage(threeApps(), page: 1)         // late mount → registers → reattach
+        XCTAssertTrue(c1.externalDragActive, "迟到注册的目标页容器必须经 reattach 补 beginExternalDrag（AT-4）")
+        XCTAssertTrue(c1.stackTargetCell === c1.cellViews[0], "reattach 同样重喂 last 点")
+    }
+
+    func testSamePageContainerSwapReattachesByIdentity() {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+        coordinator.beginEject(appID: "/Apps/X.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                               atScreenPoint: .zero, aboveLevel: .normal)
+        let centre = NSPoint(x: c0.cellViews[0].frame.midX, y: c0.cellViews[0].frame.midY)
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre))
+        XCTAssertTrue(c0.externalDragActive)
+
+        let (c0b, _) = makePage(threeApps(), page: 0)        // same page, NEW container instance
+        XCTAssertFalse(c0.externalDragActive, "同页换容器：旧实例让位收口（身份比较，不是页号）")
+        XCTAssertTrue(c0b.externalDragActive, "新实例接管")
+    }
+
+    func testHandoffIsInertWithoutASession() {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        let (c1, _) = makePage(threeApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(1)
+        coordinator.currentPageDidChange(0)
+        XCTAssertFalse(c0.externalDragActive)
+        XCTAssertFalse(c1.externalDragActive, "无会话时漏斗只更新页号，不得触碰任何容器")
     }
 
     func testColdStartBeforeGeometryPushFallsBackToWindowPath() {

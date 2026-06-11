@@ -159,6 +159,12 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// The container an external drag should classify against — the visible page's grid.
     private var activeContainer: LaunchpadGridContainerView? { pages[currentPage]?.value }
 
+    /// The container a live carry is ENGAGED with (begin/end pairing). Distinct from
+    /// `activeContainer`: the engaged one keeps its make-way gap until a handoff explicitly ends
+    /// it, so a mid-carry page flip can never leave a stale gap behind (design §3, gap1).
+    private(set) weak var currentTargetContainer: LaunchpadGridContainerView?
+    private(set) var currentTargetPage = 0
+
     /// Window-point → page-local arithmetic from the pushed geometry; nil until the first push.
     private var carrySpace: LaunchpadCarrySpace? {
         guard geometry.pageWidth > 0 else { return nil }
@@ -168,9 +174,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
     }
 
     /// Every page container registers itself (not just the visible one) so the page flipped to
-    /// during a carry is already reachable. Pure dictionary write — safe before any cells exist.
+    /// during a carry is already reachable. Pure dictionary write — safe before any cells exist,
+    /// and deliberately called ABOVE the container's deferred-apply guard (design §3.1).
     func registerPageContainer(_ container: LaunchpadGridContainerView, page: Int) {
         pages[page] = WeakContainer(value: container)
+        reattachIfNeeded(container, page: page)
     }
 
     /// Containers unregister when leaving the window (page-count shrink, overlay teardown).
@@ -178,12 +186,61 @@ final class LaunchpadDragCoordinator: ObservableObject {
         for (page, boxed) in pages where boxed.value === container || boxed.value == nil {
             pages.removeValue(forKey: page)
         }
+        if container === currentTargetContainer { currentTargetContainer = nil }
     }
 
     /// Single funnel for page changes (every flip path goes through the `currentPage` @State).
+    /// During a carry this is the HANDOFF point: the old page's gap animates closed, the new
+    /// page's container takes over and is immediately fed the last cursor point so its make-way
+    /// opens without waiting for the next mouse event (design §3.2).
     func currentPageDidChange(_ page: Int) {
         currentPage = page
         scheduleGeometryProbe()
+        guard let session = carrySession, session.isCarrying, page != currentTargetPage else { return }
+        engage(pages[page]?.value, page: page, session: session)
+    }
+
+    /// Fallback handoff keyed on container IDENTITY, not page number — covers a target page whose
+    /// container mounts late (virtual tail page) or is swapped for a new instance after a
+    /// page-count clamp (design §3.3). Shares the begin/end primitive with the funnel; both ends
+    /// are idempotent.
+    private func reattachIfNeeded(_ container: LaunchpadGridContainerView, page: Int) {
+        guard let session = carrySession, session.isCarrying,
+              page == currentTargetPage, container !== currentTargetContainer else { return }
+        engage(container, page: page, session: session)
+    }
+
+    /// The single begin/end pairing point: at any moment at most ONE container is external-drag
+    /// active. Ends the old engagement (gap closes), engages the new container, and replays the
+    /// last cursor point so the new page starts making way immediately.
+    private func engage(_ container: LaunchpadGridContainerView?, page: Int,
+                        session: LaunchpadCarrySession) {
+        currentTargetContainer?.endExternalDrag()
+        currentTargetPage = page
+        currentTargetContainer = container
+        container?.beginExternalDrag(appID: session.itemID)
+        session.resumeTracking()
+        feedLastPoint(session)
+    }
+
+    /// A late-mounting target container registers BEFORE its first cells exist (registration sits
+    /// above the apply body), so the reattach replay lands on an empty grid and is dropped. The
+    /// container calls this after (re)building cells so the engaged page still opens its make-way
+    /// without waiting for the next mouse event.
+    func containerDidApplyCells(_ container: LaunchpadGridContainerView) {
+        guard container === currentTargetContainer,
+              let session = carrySession, session.isCarrying else { return }
+        feedLastPoint(session)
+    }
+
+    /// Replay the carry's last known cursor point into the engaged container's classification.
+    private func feedLastPoint(_ session: LaunchpadCarrySession) {
+        guard let window = session.lastWindowPoint else { return }
+        if let space = carrySpace {
+            currentTargetContainer?.updateExternalDrag(atContainerPoint: space.local(fromWindow: window))
+        } else {
+            currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
+        }
     }
 
     /// Equatable-deduped push from the grid's viewport relay (AppKit window space).
@@ -228,7 +285,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
         pendingEditable = true
         session.presenter.present(icon: icon, side: iconSide * 1.1, atScreenPoint: p, aboveLevel: aboveLevel)
         carrySession = session
-        activeContainer?.beginExternalDrag(appID: itemID)   // visible page starts making way / can merge
+        engage(pages[currentPage]?.value, page: currentPage, session: session)  // visible page makes way / can merge
         endReason = nil
         carryActive = true
         if case .folder = origin { folderEjectActive = true }
@@ -244,12 +301,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
         session.lastScreenPoint = screen
         session.lastWindowPoint = window
         session.presenter.move(toScreenPoint: screen)
+        // While a flip is in flight (.awaitingHandoff) only the floating icon follows — the old
+        // page slides out clean, classification resumes when the target container takes over.
+        guard case .carrying(.tracking) = session.state else { return }
         guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
-            activeContainer?.updateExternalDrag(atWindowPoint: window)
+            currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
             return
         }
         crossCheckGeometry(space: space)
-        activeContainer?.updateExternalDrag(atContainerPoint: space.local(fromWindow: window))
+        currentTargetContainer?.updateExternalDrag(atContainerPoint: space.local(fromWindow: window))
     }
 
     /// mouseUp: resolve the drop, land the DATA synchronously through `storeApplier`, tear the
@@ -263,11 +323,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
         // from the RELEASE point so an in-grid drop never falls back to the tail.
         let releaseTarget: LaunchpadDropTarget?
         if let space = carrySpace {
-            releaseTarget = activeContainer?.rootDropTarget(atContainerPoint: space.local(fromWindow: p))
+            releaseTarget = currentTargetContainer?.rootDropTarget(atContainerPoint: space.local(fromWindow: p))
         } else {
-            releaseTarget = activeContainer?.rootDropTarget(atWindowPoint: p)
+            releaseTarget = currentTargetContainer?.rootDropTarget(atWindowPoint: p)
         }
-        var result = activeContainer?.commitExternalDrag() ?? .reorder(releaseTarget)
+        var result = currentTargetContainer?.resolveExternalDrop() ?? .reorder(releaseTarget)
         if case .reorder(nil) = result { result = .reorder(releaseTarget) }
 
         // DATA lands here, synchronously in mouseUp. Editability uses the value frozen at lift —
@@ -294,6 +354,8 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
         pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
                                            result: result, landingID: landingID)
+        currentTargetContainer?.endExternalDrag()            // gap settles closed
+        currentTargetContainer = nil
         session.presenter.dismiss()                          // hard-cut settle (flight is step 8)
         carrySession = nil
         endReason = .committed
@@ -309,7 +371,8 @@ final class LaunchpadDragCoordinator: ObservableObject {
     func cancelCarry(_ reason: CarryCancelReason) {
         guard let session = carrySession else { return }
         carryCancelledThisGesture = true
-        activeContainer?.endExternalDrag()
+        currentTargetContainer?.endExternalDrag()
+        currentTargetContainer = nil
         session.presenter.dismiss()
         carrySession = nil
         endReason = .cancelled
