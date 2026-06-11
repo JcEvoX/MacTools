@@ -38,6 +38,10 @@ final class LaunchpadCarrySession {
     /// grab point is preserved (root lift, design §2.1; the folder eject keeps the icon centred
     /// under the cursor → `.zero`).
     let grabOffset: NSPoint
+    /// The floating icon's presented side length (lift scale already applied) — the coordinator
+    /// needs it to clamp the icon's centre to the overlay screen without ever clamping the
+    /// CURSOR-side data flow (classification keeps the real point).
+    let presentedIconSide: CGFloat
     /// Root-page lift only: the container holding the parked anchor cell, so cancel/commit paths
     /// can restore the anchor even when the gesture's mouseUp never arrives (design §9.2).
     /// Weak — the source page container may unmount mid-carry.
@@ -66,6 +70,7 @@ final class LaunchpadCarrySession {
         frozenVisibleOrder: [LaunchpadDisplayCell],
         presenter: LaunchpadFloatingIconPresenting,
         grabOffset: NSPoint = .zero,
+        presentedIconSide: CGFloat = 0,
         sourceContainer: LaunchpadGridContainerView? = nil
     ) {
         self.itemID = itemID
@@ -75,6 +80,7 @@ final class LaunchpadCarrySession {
         self.frozenVisibleOrder = frozenVisibleOrder
         self.presenter = presenter
         self.grabOffset = grabOffset
+        self.presentedIconSide = presentedIconSide
         self.sourceContainer = sourceContainer
     }
 

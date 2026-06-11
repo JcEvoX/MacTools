@@ -52,6 +52,11 @@ enum LaunchpadExternalDropResult: Equatable {
 struct LaunchpadDragGrid: NSViewRepresentable {
     var items: [LaunchpadDisplayCell]
     var columns: Int
+    /// Rows per page (page capacity = rows × columns), pushed by the SwiftUI pager so make-way
+    /// overflow on a FULL page can fly out of the right edge instead of into a phantom row the
+    /// container's unbounded row-major math would otherwise invent. 0 = uncapped (folder grids,
+    /// which legitimately grow downward and scroll).
+    var rows: Int = 0
     var selectedID: String?                            // the selected cell's layoutID
     var isCompact: Bool
     var interactionEnabled: Bool = true                // false while a folder overlay is up
@@ -99,7 +104,13 @@ final class LaunchpadGridContainerView: NSView {
     private var grid: LaunchpadDragGrid?
     private var cells: [LaunchpadGridCellView] = []
     private var columns = 7
+    /// Rows per page; 0 = uncapped (folder grids / legacy fixtures keep unbounded row-major math).
+    private var rows = 0
     private var metrics = LaunchpadGridMetrics()
+
+    /// Slots this page can show. Beyond it a make-way gap has pushed a cell "to the next page" —
+    /// its frame goes off the right edge (the viewport clip swallows it) instead of a phantom row.
+    private var pageCapacity: Int { rows > 0 ? rows * columns : Int.max }
 
     /// While a drag session is live, defer rebuilding the cell views (so the dragged view
     /// isn't destroyed mid-flight) and remember the latest model to apply on drag end —
@@ -206,12 +217,14 @@ final class LaunchpadGridContainerView: NSView {
         // rebuilds, whilst an offset/selection-only change during paging takes the fast path.
         let sameItems = cells.map(\.cell) == grid.items
         let sameColumns = columns == max(1, grid.columns)
+        let sameRows = rows == max(0, grid.rows)
         self.grid = grid
         self.columns = max(1, grid.columns)
+        self.rows = max(0, grid.rows)
         self.metrics = grid.metrics
         if sameItems {
             for cell in cells { cell.isSelected = (cell.layoutID == grid.selectedID) }
-            if !sameColumns { needsLayout = true }
+            if !sameColumns || !sameRows { needsLayout = true }
         } else {
             rebuildCells(items: grid.items, selectedID: grid.selectedID)
             needsLayout = true
@@ -896,6 +909,18 @@ final class LaunchpadGridContainerView: NSView {
             guard let gap = externalGapIndex, index >= gap else { return index }
             return index + 1
         }
+        // A gap on a FULL page pushes the last cell past the page capacity. The container's
+        // row-major math knows no page boundary, so an unguarded slotRect would invent a
+        // phantom row BELOW the grid (visible — the strip only clips horizontally at the
+        // viewport). Send the overflow cell out of the RIGHT edge instead: the clip swallows
+        // it, the motion reads as "cascades to the next page", and the post-commit reconcile
+        // slice puts it on the real next page (or back) while it is already off-screen.
+        func frame(forSlot slot: Int) -> CGRect {
+            guard slot >= pageCapacity else { return slotRect(slot) }
+            let lastRow = slotRect(pageCapacity - 1)
+            return CGRect(x: bounds.width + metrics.cellWidth, y: lastRow.minY,
+                          width: metrics.cellWidth, height: metrics.cellHeight)
+        }
         let order = activeCells
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
@@ -903,13 +928,13 @@ final class LaunchpadGridContainerView: NSView {
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 for (i, cell) in order.enumerated()
                 where cell !== draggedCell && !isParkedForSettle(cell) {
-                    cell.animator().frame = slotRect(slot(for: i))
+                    cell.animator().frame = frame(forSlot: slot(for: i))
                 }
             }
         } else {
             for (i, cell) in order.enumerated()
             where cell !== draggedCell && !isParkedForSettle(cell) {
-                cell.frame = slotRect(slot(for: i))
+                cell.frame = frame(forSlot: slot(for: i))
             }
         }
     }
@@ -953,7 +978,13 @@ final class LaunchpadGridContainerView: NSView {
     func settleTargetLocalRect() -> CGRect? {
         guard externalDragActive else { return nil }
         if let target = stackTargetCell { return iconRect(in: target.frame) }
-        if let gap = externalGapIndex { return iconRect(in: slotRect(gap)) }
+        if let gap = externalGapIndex {
+            // A gap at/after the page capacity (full page, last cell's right seam) has no
+            // visible slot on THIS page — slotRect would aim the flight at the phantom row.
+            // Degrade to the hard-cut dismiss, same as the empty-virtual-page nil above.
+            guard gap < pageCapacity else { return nil }
+            return iconRect(in: slotRect(gap))
+        }
         return nil
     }
 
@@ -997,6 +1028,19 @@ final class LaunchpadGridContainerView: NSView {
         externalGapIndex = nil
         clearStackTarget()
         layoutCellsWithGap(animated: true)
+    }
+
+    /// The page-local x spans of the outermost grid COLUMNS (pure peek): the edge turner
+    /// exempts them so hovering an edge column reads as drop aiming, never as a flip request.
+    /// Geometry only — gap state is deliberately ignored (slotIndex clamps every x to the last
+    /// column, so "a gap is open" holds even with the cursor in the bare margin, and keying the
+    /// exemption on it would kill right-edge flipping outright). nil while the page has no
+    /// active cells (virtual tail page): an empty page has no drop slot to aim at — fail open.
+    func outerColumnXSpans() -> (left: ClosedRange<CGFloat>, right: ClosedRange<CGFloat>)? {
+        guard !activeCells.isEmpty else { return nil }
+        let first = slotRect(0)
+        let last = slotRect(columns - 1)
+        return (first.minX...first.maxX, last.minX...last.maxX)
     }
 
     /// Grid slot (row-major index) under a point, clamped to the current item range.
@@ -1222,16 +1266,10 @@ final class LaunchpadGridCellView: NSView {
         }
         if isMergeTarget { drawStackTargetCue() }       // behind the icon / thumbnail
         if isFolder { drawFolderThumbnail() }
-
-        // Folder selection: a slim accent ring ON TOP of the plate — a grey fill behind the frosted
-        // plate read as an ugly grey halo.
-        if isSelected, isFolder {
-            let ring = folderPlateRect.insetBy(dx: -3, dy: -3)
-            let path = NSBezierPath(roundedRect: ring, xRadius: ring.width * 0.28, yRadius: ring.width * 0.28)
-            path.lineWidth = 2.5
-            NSColor.controlAccentColor.withAlphaComponent(0.85).setStroke()
-            path.stroke()
-        }
+        // Folder selection is drawn INTO the plate (drawFolderThumbnail): both outer treatments
+        // tried here before — a grey fill behind the frosted plate (ugly halo) and an accent
+        // ring around it (double frame over the plate's own background) — read as two stacked
+        // shapes. Deepening the plate itself keeps one shape and matches the app wash language.
     }
 
     /// iOS-style folder tile: a frosted rounded "squircle" plate carrying a 3×3 preview of the
@@ -1263,6 +1301,16 @@ final class LaunchpadGridCellView: NSView {
             let sh = NSRect(x: plate.minX + 1, y: plate.maxY - 2.5, width: plate.width - 2, height: 1.5)
             NSColor.black.withAlphaComponent(0.07).setFill()
             NSBezierPath(roundedRect: sh, xRadius: 1, yRadius: 1).fill()
+        }
+
+        // Selected folder: deepen the plate itself along the SAME squircle path — the iOS folder
+        // press look, and the same labelColor-wash language the app selection uses (the app's
+        // wash hugs its icon because an app has no plate; the folder's goes into the plate).
+        // No ring, no second shape — and the carried-folder snapshot (cacheDisplay) now picks up
+        // a slightly deeper plate instead of the old accent ring baked into the floating icon.
+        if isSelected {
+            NSColor.labelColor.withAlphaComponent(0.12).setFill()
+            platePath.fill()
         }
 
         // Mini-icon grid, CENTRED and filled top-left first. 2×2 for ≤4 apps (bigger icons that

@@ -176,6 +176,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
             return item
         }
 
+    /// Test seam for the reveal→dismiss handover: production defers the floating-icon teardown
+    /// one runloop turn. The reveal's freshly (re)built cell paints with THIS turn's CA commit,
+    /// while `orderOut` hits the window server immediately — a synchronous dismiss therefore
+    /// blanks the slot for a frame before the cell's first paint (the merge-folder flicker).
+    /// The icon sits exactly on the slot, so the extra frame is invisible. Tests run it inline.
+    var settleDismissScheduler: @MainActor (@escaping @MainActor () -> Void) -> Void = { work in
+        DispatchQueue.main.async { MainActor.assumeIsolated(work) }
+    }
+
     /// Synchronous mouseUp data path, injected by the overlay controller (it owns both the
     /// coordinator and the layout store). Returns the landing id for the visual channel.
     var storeApplier: (@MainActor (CarryStoreAction, [LaunchpadDisplayCell]) -> String?)?
@@ -401,6 +410,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
             frozenVisibleOrder: pendingFrozenOrder,
             presenter: floatingPresenterFactory(),
             grabOffset: grabOffset,
+            presentedIconSide: iconSide * 1.1,
             sourceContainer: sourceContainer
         )
         pendingFrozenOrder = []
@@ -425,8 +435,16 @@ final class LaunchpadDragCoordinator: ObservableObject {
         guard let session = carrySession, session.isCarrying else { return }
         session.lastScreenPoint = screen
         session.lastWindowPoint = window
-        session.presenter.move(toScreenPoint: NSPoint(x: screen.x - session.grabOffset.x,
-                                                      y: screen.y - session.grabOffset.y))
+        // The floating ICON stays on the overlay's screen even when the locked mouse gesture
+        // wanders past its edges (iOS keeps the dragged icon on-screen). Only the presented
+        // window is clamped — classification and the edge turner keep the REAL cursor point,
+        // or the edge make-way/flip judgement would drift near the borders.
+        var centre = NSPoint(x: screen.x - session.grabOffset.x,
+                             y: screen.y - session.grabOffset.y)
+        if let bounds = carryClampBounds(for: session) {
+            centre = Self.clampedIconCentre(centre, side: session.presentedIconSide, in: bounds)
+        }
+        session.presenter.move(toScreenPoint: centre)
         guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
             if case .carrying(.tracking) = session.state {
                 currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
@@ -442,6 +460,31 @@ final class LaunchpadDragCoordinator: ObservableObject {
         currentTargetContainer?.updateExternalDrag(atContainerPoint: local)
     }
 
+    /// Screen-space bounds the floating icon may occupy: the overlay window's screen (the overlay
+    /// covers it fully, menu bar included, so `frame` — not `visibleFrame`, whose menu-bar/Dock
+    /// cuts would carve unreachable dead zones out of a fullscreen overlay). Compact mode clamps
+    /// to the same screen, NOT the panel: dragging out of the panel and releasing is the legal
+    /// "land at the global tail" gesture, and pinning the icon to the panel edge would kill the
+    /// cursor-following feel. nil (windowless harness / unmounted container) = no clamp — a
+    /// production carry always starts from a mounted container, and tests pin exact coordinates.
+    private func carryClampBounds(for session: LaunchpadCarrySession) -> NSRect? {
+        guard let window = (currentTargetContainer ?? session.sourceContainer)?.window else { return nil }
+        return window.screen?.frame ?? window.frame
+    }
+
+    /// Pure clamp of the floating icon's CENTRE so the icon rect stays inside `bounds`;
+    /// degenerate bounds (narrower than the icon) pin to the midline instead of oscillating.
+    static func clampedIconCentre(_ centre: NSPoint, side: CGFloat, in bounds: NSRect) -> NSPoint {
+        let half = side / 2
+        let x = bounds.width <= side
+            ? bounds.midX
+            : min(max(centre.x, bounds.minX + half), bounds.maxX - half)
+        let y = bounds.height <= side
+            ? bounds.midY
+            : min(max(centre.y, bounds.minY + half), bounds.maxY - half)
+        return NSPoint(x: x, y: y)
+    }
+
     /// Stationary-cursor drive: mouseDragged stops arriving when the cursor holds still, so the
     /// 30Hz tick replays the last point into the dwell machine (never into classification — a
     /// stationary cursor can't change the gap). O(1), no IO (constraint 22).
@@ -452,7 +495,14 @@ final class LaunchpadDragCoordinator: ObservableObject {
     }
 
     private func driveTurner(_ session: LaunchpadCarrySession, local: NSPoint, space: LaunchpadCarrySpace) {
-        let decision = session.turner.update(point: local, pageWidth: space.pageWidth, now: now())
+        // Outer-column exemption (§A5): the cursor sitting on an edge COLUMN is aiming a drop —
+        // only the bare margin / past-the-page strip may arm a flip. Container-local x IS
+        // page-local x ("viewport is the page"); during .awaitingHandoff the old container is
+        // still engaged, but every page shares the same column geometry, so the bands hold.
+        let spans = currentTargetContainer?.outerColumnXSpans()
+        let decision = session.turner.update(
+            point: local, pageWidth: space.pageWidth, now: now(),
+            exempt: .init(left: spans?.left, right: spans?.right))
         guard case .flip(let direction) = decision else { return }
         let target = currentTargetPage + direction
         // The flippable range includes the virtual tail index (== pageCount) while the carry can
@@ -530,7 +580,18 @@ final class LaunchpadDragCoordinator: ObservableObject {
             // paths from re-engaging a dying carry (§1.2 settling row).
             settleGeneration += 1
             let generation = settleGeneration
-            settlingItemID = session.itemID
+            // Park-by-id for the flight: normally the carried item's own id — but a MAKE-FOLDER
+            // commit replaces the target app's cell with a brand-new folder cell (fresh UUID)
+            // and the dragged app keeps no top-level cell at all, so the cell to park is the
+            // NEW FOLDER (landingID; covers the root merge and the eject-into-new-folder, both
+            // of which return the new folder's id). It must stay limited to makeFolder:
+            // addToFolder's landingID is an EXISTING folder cell that must remain visible, and
+            // a reorder's landingID is the item id anyway.
+            if case .makeFolder = result, let landingID {
+                settlingItemID = landingID
+            } else {
+                settlingItemID = session.itemID
+            }
             session.beginSettling(generation: generation)
             // Freeze, don't end: the make-way frames hold still so the post-commit apply — whose
             // committed layout is slot-for-slot identical to the gap layout — lands with zero
@@ -592,7 +653,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
         guard let session = carrySession,
               case .settling(let current) = session.state,
               current == generation else { return }
-        finishSettle(session)
+        // Natural completion / watchdog: the icon already covers the slot, so the dismiss can
+        // wait one turn for the revealed cell's first paint (deferDismiss). Force-complete and
+        // cancel must NOT defer — a re-lift presents the next session's window in the same
+        // stack, and an overlay teardown must not leave a floating window behind.
+        finishSettle(session, deferDismiss: true)
     }
 
     /// Fast-forward an airborne settle (§1.2 settling row): re-lift, any cancel reason, and the
@@ -609,15 +674,24 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// slot, then drop the floating icon — which is sitting exactly on that slot, so the swap is
     /// invisible. Ordering notes: the session ends FIRST (apply/registration during the reveal
     /// must find no live carry); `settlingItemID` clears BEFORE any layout pass so the predicate
-    /// stops excluding the landed cell; the icon dismisses LAST so the cell is already on screen.
-    private func finishSettle(_ session: LaunchpadCarrySession) {
+    /// stops excluding the landed cell; the icon dismisses LAST so the cell is already on screen
+    /// — and on the natural-completion path one runloop turn later still (`deferDismiss`), so
+    /// the revealed cell's first PAINT (this turn's CA commit) lands before `orderOut` reaches
+    /// the window server. Each session owns its own presenter, so a deferred dismiss can never
+    /// touch a newer session's window.
+    private func finishSettle(_ session: LaunchpadCarrySession, deferDismiss: Bool = false) {
         settleTimeoutWork?.cancel()
         settleTimeoutWork = nil
         carrySession = nil
         settlingItemID = nil
         session.sourceContainer?.endCarryAnchor()            // root origin: un-park + apply pendingGrid
         for (_, boxed) in pages { boxed.value?.revealSettledCell() }
-        session.presenter.dismiss()
+        if deferDismiss {
+            let presenter = session.presenter
+            settleDismissScheduler { presenter.dismiss() }
+        } else {
+            session.presenter.dismiss()
+        }
     }
 
     /// Abort an in-flight carry (launcher closed / source unmounted / search activated) without

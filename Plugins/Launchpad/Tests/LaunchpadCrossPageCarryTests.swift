@@ -232,8 +232,9 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         return (c0, c1)
     }
 
-    /// Right-edge page-local point (zone is x > pageWidth − 44 = 856).
-    private func rightEdgeLocal() -> NSPoint { NSPoint(x: 880, y: 300) }
+    /// Right-edge page-local point: zone is x > pageWidth − 28 = 872, AND outside the last
+    /// column's exemption band (7 columns in 900pt → margin 20, last column spans [764, 880]).
+    private func rightEdgeLocal() -> NSPoint { NSPoint(x: 890, y: 300) }
 
     func testEdgeDwellPublishesFlipAndSuspendsClassification() {
         var fakeNow: TimeInterval = 0
@@ -346,6 +347,44 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         coordinator.cancelCarry(.shutdown)
         XCTAssertNil(coordinator.flipRequest, "cancel 必须撤销未消费的翻页请求")
         XCTAssertFalse(coordinator.isDwellTimerRunning, "cancel 必须停 dwell timer")
+    }
+
+    // MARK: - Outer-column exemption (§A5: aiming at an edge column must not flip)
+
+    func testOuterColumnXSpansPeek() {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        // 900pt bounds, 7 columns → grid 860pt, margin 20; columns pitch 124.
+        let spans = c0.outerColumnXSpans()
+        XCTAssertEqual(spans?.left, 20...136, "首列 x 跨度")
+        XCTAssertEqual(spans?.right, 764...880, "末列 x 跨度（几何列宽，与 cell 占用无关）")
+
+        let (empty, _) = makePage([], page: 1)
+        XCTAssertNil(empty.outerColumnXSpans(), "空页（虚拟尾页）无落点意图，不豁免（fail-open）")
+    }
+
+    func testDwellOverLastColumnDoesNotFlipButMarginStillDoes() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        _ = startCarryOnPage0WithClock()
+
+        // The §A5 reproduction: aiming a drop at the last column (x within its span, inside the
+        // 28pt zone) and pausing past the dwell must NOT flip.
+        let overLastColumn = NSPoint(x: 876, y: 300)
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: overLastColumn))
+        fakeNow = 0.71
+        coordinator.tickDwell()
+        XCTAssertNil(coordinator.flipRequest, "末列让位带内驻留 0.7s 不得翻页（§A5）")
+
+        // Pushing past the column into the bare margin re-earns the dwell, then flips.
+        fakeNow = 1.0
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 1.6
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNil(coordinator.flipRequest, "进入边距后需重新满 dwell")
+        fakeNow = 1.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertEqual(coordinator.flipRequest?.targetPage, 1, "真实边距驻留满 0.7s 照常翻页")
     }
 
     func testHandoffIsInertWithoutASession() {

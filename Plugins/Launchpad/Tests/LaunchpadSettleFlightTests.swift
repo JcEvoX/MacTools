@@ -67,6 +67,10 @@ final class LaunchpadSettleFlightTests: XCTestCase {
             self?.capturedTimeouts.append(work)
             return DispatchWorkItem {}      // inert token; the captured work is fired manually
         }
+        // Natural completions defer the dismiss one runloop turn in production (reveal paints
+        // first). Run it inline here so the existing reveal-ordering assertions stay sharp;
+        // the deferral itself is pinned by testNaturalCompletionDefersDismissBehindReveal.
+        coordinator.settleDismissScheduler = { work in work() }
         // Borderless window at the screen origin so window space == screen space and the expected
         // settle rect can be computed by hand.
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -406,5 +410,116 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         XCTAssertNotEqual(landed.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
                           "reveal 广播必须 un-park 落位 cell")
         XCTAssertNil(coordinator.carrySession)
+    }
+
+    // MARK: - Merge settle parks the NEW FOLDER cell (§A1: the landed cell is the folder, not the app)
+
+    /// Lift A and release on B's CENTRE (armed merge) → flight settle with a makeFolder commit.
+    private func releaseIntoMergeFlight(_ container: LaunchpadGridContainerView) {
+        lift(container, cellAt: 0)
+        let bCentre = NSPoint(x: container.cellViews[1].frame.midX,
+                              y: container.cellViews[1].frame.midY)
+        container.updateDirectDrag(atWindowPoint: windowPoint(forLocal: bCentre))
+        XCTAssertNotNil(container.stackTargetCell, "B 中心必须 arm merge")
+        container.endDirectDrag(atWindowPoint: windowPoint(forLocal: bCentre))
+    }
+
+    func testMakeFolderCommitParksNewFolderCellUntilReveal() {
+        let newFolderID = "FOLDER-NEW"
+        coordinator.storeApplier = { [weak self] action, _ in
+            self?.applierCalls += 1
+            if case .makeFolder = action { return newFolderID }   // production: the new folder UUID
+            return nil
+        }
+        let container = makePage(threeApps, page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        releaseIntoMergeFlight(container)
+        XCTAssertEqual(applierCalls, 1)
+        XCTAssertEqual(coordinator.settlingItemID, newFolderID,
+                       "merge 建夹后顶层不存在被拖 app 的 cell——停泊谓词必须改记新夹 id（§A1 闪烁根因）")
+
+        // Post-commit apply lands mid-flight on a non-source page with the NEW model: the fresh
+        // folder cell (new UUID) must park until the reveal, or it pops in under the flying icon.
+        let folderCell = LaunchpadDisplayCell.folder(id: newFolderID, name: "未命名", items: [appB, appA])
+        let target = makePage([folderCell, .app(appC)], page: 1)
+        let landedFolder = target.cellViews[0]
+        XCTAssertEqual(landedFolder.layoutID, newFolderID)
+        XCTAssertEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                       "新夹 cell 必须停泊到 reveal（飞行中现身=先看到夹再看到落点闪烁）")
+        for _ in 0..<3 { target.layout() }
+        XCTAssertEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin)
+
+        spy.completeNextSettle()
+        XCTAssertNil(coordinator.settlingItemID)
+        XCTAssertNotEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "reveal 必须把新夹 cell 写回真实槽位")
+    }
+
+    func testAddToFolderCommitKeepsParkingTheCarriedItemID() {
+        // addToFolder's landing cell is an EXISTING folder — parking it would blank a visible
+        // folder for the whole flight. The park id must stay the carried app's.
+        coordinator.storeApplier = { [weak self] _, _ in
+            self?.applierCalls += 1
+            return "F-EXISTING"
+        }
+        let folder = LaunchpadDisplayCell.folder(id: "F-EXISTING", name: "夹", items: [appB])
+        let container = makePage([.app(appA), folder, .app(appC)], page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        lift(container, cellAt: 0)
+        let fCentre = NSPoint(x: container.cellViews[1].frame.midX,
+                              y: container.cellViews[1].frame.midY)
+        container.updateDirectDrag(atWindowPoint: windowPoint(forLocal: fCentre))
+        XCTAssertNotNil(container.stackTargetCell)
+        container.endDirectDrag(atWindowPoint: windowPoint(forLocal: fCentre))
+
+        XCTAssertEqual(coordinator.settlingItemID, appA.id,
+                       "addToFolder 停泊的是被拖 app（现存夹 cell 必须全程可见）")
+        spy.completeNextSettle()
+        XCTAssertNil(coordinator.settlingItemID)
+    }
+
+    // MARK: - Dismiss defers behind the reveal's paint (§A1 same-page flicker: orderOut beats CA commit)
+
+    func testNaturalCompletionDefersDismissBehindReveal() {
+        var deferredDismissals: [@MainActor () -> Void] = []
+        coordinator.settleDismissScheduler = { deferredDismissals.append($0) }
+        let container = makePage(threeApps, page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        let anchor = releaseIntoFlight(container)
+        spy.completeNextSettle()
+
+        // Reveal is fully synchronous — only the floating window's teardown waits a turn, so
+        // the freshly applied/parked cell's first paint lands before orderOut hits the server.
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertNil(coordinator.settlingItemID)
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "reveal 不得被推迟——只推迟浮窗拆除")
+        XCTAssertEqual(spy.dismissCount, 0, "自然完成路径 dismiss 必须延一拍（先画落位 cell）")
+        XCTAssertEqual(deferredDismissals.count, 1)
+
+        deferredDismissals[0]()
+        XCTAssertEqual(spy.dismissCount, 1)
+    }
+
+    func testForceCompleteDismissesSynchronouslyForRelift() {
+        var deferredDismissals: [@MainActor () -> Void] = []
+        coordinator.settleDismissScheduler = { deferredDismissals.append($0) }
+        let container = makePage(threeApps, page: 0)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        releaseIntoFlight(container)
+        // Re-lift while airborne: the old floating window must die IN THIS STACK — the new
+        // session presents its own window next, and a deferred teardown would double the icon.
+        lift(container, cellAt: 1)
+        XCTAssertEqual(spy.dismissCount, 1, "force-complete 必须同步拆旧浮窗")
+        XCTAssertTrue(deferredDismissals.isEmpty, "force-complete 不走延迟通道")
+        XCTAssertEqual(coordinator.carrySession?.itemID, appB.id)
     }
 }

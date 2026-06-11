@@ -18,7 +18,24 @@ struct LaunchpadEdgePageTurner {
     struct Config {
         var dwell: TimeInterval = 0.7
         var repeatCooldown: TimeInterval = 0.8
-        var edgeWidth: CGFloat = 44
+        /// ~Half a column pitch. 44 overlapped the outermost column's make-way band on common
+        /// fullscreen widths (page margin runs only 4–66pt), so aiming a drop at an edge column
+        /// kept flipping the page (2026-06-11 device feedback §A5).
+        var edgeWidth: CGFloat = 28
+    }
+
+    /// Page-local x spans the caller wants EXCLUDED from edge classification — in practice the
+    /// outermost grid columns of the engaged page (cursor over an edge column = aiming a drop,
+    /// not asking for a flip; iOS's flip strip is likewise the bare margin outside the icons).
+    /// Injected per update so the machine stays a pure function; empty bands = old behaviour.
+    struct ExemptBands {
+        var left: ClosedRange<CGFloat>?
+        var right: ClosedRange<CGFloat>?
+
+        init(left: ClosedRange<CGFloat>? = nil, right: ClosedRange<CGFloat>? = nil) {
+            self.left = left
+            self.right = right
+        }
     }
 
     enum Zone: Equatable {
@@ -49,8 +66,11 @@ struct LaunchpadEdgePageTurner {
     /// `point` is in page-local coordinates; values outside `[0, pageWidth]` are
     /// deliberately classified into the nearer zone — the cursor sitting in the
     /// strip padding or past the screen edge must still count as edge hovering.
-    mutating func update(point: CGPoint, pageWidth: CGFloat, now: TimeInterval) -> Decision {
-        guard let zone = zone(forX: point.x, pageWidth: pageWidth) else {
+    /// An x inside the matching `exempt` band reads as drop aiming and resets to
+    /// idle: re-entering the bare margin must earn the full dwell again.
+    mutating func update(point: CGPoint, pageWidth: CGFloat, now: TimeInterval,
+                         exempt: ExemptBands = ExemptBands()) -> Decision {
+        guard let zone = zone(forX: point.x, pageWidth: pageWidth, exempt: exempt) else {
             state = .idle
             return .none
         }
@@ -84,9 +104,15 @@ struct LaunchpadEdgePageTurner {
         state = .idle
     }
 
-    private func zone(forX x: CGFloat, pageWidth: CGFloat) -> Zone? {
-        if x < config.edgeWidth { return .left }
-        if x > pageWidth - config.edgeWidth { return .right }
+    private func zone(forX x: CGFloat, pageWidth: CGFloat, exempt: ExemptBands) -> Zone? {
+        if x < config.edgeWidth {
+            if let band = exempt.left, band.contains(x) { return nil }
+            return .left
+        }
+        if x > pageWidth - config.edgeWidth {
+            if let band = exempt.right, band.contains(x) { return nil }
+            return .right
+        }
         return nil
     }
 }

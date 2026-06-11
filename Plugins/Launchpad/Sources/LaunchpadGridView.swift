@@ -312,6 +312,10 @@ struct LaunchpadGridView: View {
         return LaunchpadDragGrid(
             items: items,
             columns: columns,
+            // Page capacity for the make-way overflow: rowCount is what sliced `items` above, so
+            // the container's "off the right edge" threshold and the slice agree exactly (a
+            // bounds-derived row count could drift from the indicator-reserve arithmetic).
+            rows: rowCount,
             selectedID: selectedID,
             isCompact: isCompact,
             interactionEnabled: openFolder == nil,    // exactly matches overlay visibility

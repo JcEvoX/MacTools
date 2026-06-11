@@ -108,6 +108,69 @@ final class LaunchpadEdgePageTurnerTests: XCTestCase {
                        "超出 pageWidth 必须归右热区")
     }
 
+    // MARK: - Outer-column exemption bands (§A5: edge column = drop aiming, not a flip)
+
+    /// 900pt page, 7 columns, margin 20 → last column spans [764, 880]; zone is x > 872.
+    private var lastColumnBand: ClosedRange<CGFloat> { 764...880 }
+    private var firstColumnBand: ClosedRange<CGFloat> { 20...136 }
+
+    private func update(_ turner: inout LaunchpadEdgePageTurner, _ point: CGPoint,
+                        at now: TimeInterval,
+                        exempt: LaunchpadEdgePageTurner.ExemptBands)
+        -> LaunchpadEdgePageTurner.Decision {
+        turner.update(point: point, pageWidth: pageW, now: now, exempt: exempt)
+    }
+
+    func testExemptBandSuppressesRightZoneDwell() {
+        var t = LaunchpadEdgePageTurner()
+        let exempt = LaunchpadEdgePageTurner.ExemptBands(right: lastColumnBand)
+        let overLastColumn = CGPoint(x: 876, y: 300)         // in zone (>872) AND in the band
+        XCTAssertEqual(update(&t, overLastColumn, at: 0, exempt: exempt), .none)
+        XCTAssertEqual(t.state, .idle, "末列让位带内 = 瞄准落点，必须回 idle 而非 arm")
+        XCTAssertEqual(update(&t, overLastColumn, at: 0.71, exempt: exempt), .none,
+                       "末列带内驻留再久也不得翻页（§A5 用户复现）")
+        XCTAssertEqual(t.state, .idle)
+    }
+
+    func testLeavingBandIntoMarginNeedsFullDwell() {
+        var t = LaunchpadEdgePageTurner()
+        let exempt = LaunchpadEdgePageTurner.ExemptBands(right: lastColumnBand)
+        _ = update(&t, CGPoint(x: 876, y: 300), at: 0, exempt: exempt)      // aiming over the column
+        _ = update(&t, CGPoint(x: 890, y: 300), at: 1.0, exempt: exempt)    // pushed into the margin
+        XCTAssertEqual(update(&t, CGPoint(x: 890, y: 300), at: 1.6, exempt: exempt), .none,
+                       "从带内推进边距后必须重新满 dwell")
+        XCTAssertEqual(update(&t, CGPoint(x: 890, y: 300), at: 1.71, exempt: exempt),
+                       .flip(direction: 1), "真实边距驻留满 0.7s 照常翻页")
+    }
+
+    func testExemptBandLeftIsSymmetric() {
+        var t = LaunchpadEdgePageTurner()
+        let exempt = LaunchpadEdgePageTurner.ExemptBands(left: firstColumnBand)
+        XCTAssertEqual(update(&t, CGPoint(x: 25, y: 300), at: 0, exempt: exempt), .none)
+        XCTAssertEqual(update(&t, CGPoint(x: 25, y: 300), at: 0.71, exempt: exempt), .none,
+                       "首列带内同样豁免（左缘对称）")
+        XCTAssertEqual(update(&t, CGPoint(x: 10, y: 300), at: 1.0, exempt: exempt), .none)
+        XCTAssertEqual(update(&t, CGPoint(x: 10, y: 300), at: 1.71, exempt: exempt),
+                       .flip(direction: -1), "带外的真实左边距照常翻页")
+    }
+
+    func testOutOfBoundsXIsNeverExempt() {
+        var t = LaunchpadEdgePageTurner()
+        let exempt = LaunchpadEdgePageTurner.ExemptBands(left: firstColumnBand, right: lastColumnBand)
+        XCTAssertEqual(update(&t, CGPoint(x: pageW + 30, y: 300), at: 0, exempt: exempt), .none)
+        XCTAssertEqual(update(&t, CGPoint(x: pageW + 30, y: 300), at: 0.71, exempt: exempt),
+                       .flip(direction: 1),
+                       "页外/屏缘 x 不在列跨度内——全屏一推到底（Fitts）必须仍可翻页")
+    }
+
+    func testEmptyBandsKeepLegacyClassification() {
+        var t = LaunchpadEdgePageTurner()
+        let none = LaunchpadEdgePageTurner.ExemptBands()
+        XCTAssertEqual(update(&t, rightPoint(), at: 0, exempt: none), .none)
+        XCTAssertEqual(update(&t, rightPoint(), at: 0.71, exempt: none), .flip(direction: 1),
+                       "空豁免带（虚拟尾页 fail-open）= 旧行为")
+    }
+
     // MARK: - Animation-constant interlock (BT-4)
 
     func testConfigInvariantsHoldAgainstPageAnimationConstants() {
