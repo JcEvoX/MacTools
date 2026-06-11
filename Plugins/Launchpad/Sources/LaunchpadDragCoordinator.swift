@@ -129,15 +129,19 @@ final class LaunchpadDragCoordinator: ObservableObject {
     }
 
     /// Release after an eject: read the visible page's resolved outcome (merge or reorder), request
-    /// it, and drop the float.
+    /// it, and drop the float. A `.reorder(nil)` from the container means classification never
+    /// settled (the whole carry stayed in columns' central dead-band, where updates set neither a
+    /// gap nor a merge) — re-resolve from the RELEASE point so an in-grid drop never falls back to
+    /// the tail; on a genuinely empty/out-of-grid release the re-resolution is nil again.
     func commitOut(folderID: String, appID: String, atWindowPoint p: NSPoint) {
-        let fallback: LaunchpadDropTarget?
+        let releaseTarget: LaunchpadDropTarget?
         if let space = carrySpace {
-            fallback = activeContainer?.rootDropTarget(atContainerPoint: space.local(fromWindow: p))
+            releaseTarget = activeContainer?.rootDropTarget(atContainerPoint: space.local(fromWindow: p))
         } else {
-            fallback = activeContainer?.rootDropTarget(atWindowPoint: p)
+            releaseTarget = activeContainer?.rootDropTarget(atWindowPoint: p)
         }
-        let result = activeContainer?.commitExternalDrag() ?? .reorder(fallback)
+        var result = activeContainer?.commitExternalDrag() ?? .reorder(releaseTarget)
+        if case .reorder(nil) = result { result = .reorder(releaseTarget) }
         pendingEject = EjectRequest(folderID: folderID, appID: appID, result: result)
         tearDownFloating()
         ejectToken += 1
