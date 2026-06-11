@@ -61,6 +61,13 @@ final class LaunchpadFloatingIconWindowPresenter: LaunchpadFloatingIconPresentin
 
 // MARK: - Commit routing (pure data, design §1.3)
 
+/// An edge-dwell page flip, as data (design §4.4). The token makes consecutive flips to the same
+/// page distinct `onChange` values.
+struct LaunchpadFlipRequest: Equatable {
+    let token: Int
+    let targetPage: Int
+}
+
 /// A release, as data: what was carried, where it came from, what the container resolved.
 struct LaunchpadCarryCommit {
     let itemID: String
@@ -124,6 +131,13 @@ final class LaunchpadDragCoordinator: ObservableObject {
     @Published private(set) var commitToken = 0
     private(set) var pendingVisualCommit: VisualCommit?
 
+    /// Edge-dwell page-flip request (design §4.4). Published from the dwell state machine — never
+    /// from inside a mouse handler's withAnimation — and consumed by the grid's `.onChange`, which
+    /// calls `goToPage` in a tracked transaction. Withdrawn (nil) on release/cancel so a flip
+    /// can't land after the carry is gone (AR-5).
+    @Published private(set) var flipRequest: LaunchpadFlipRequest?
+    private var flipToken = 0
+
     private(set) var carrySession: LaunchpadCarrySession?
     private(set) var endReason: CarryEndReason?
 
@@ -133,6 +147,23 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// Test seam: swap the floating-icon window for a spy (design §10-①).
     var floatingPresenterFactory: @MainActor () -> LaunchpadFloatingIconPresenting =
         { LaunchpadFloatingIconWindowPresenter() }
+
+    /// Injectable clock shared by the dwell state machine (design §10-②).
+    var now: @MainActor () -> TimeInterval = { CACurrentMediaTime() }
+
+    /// Test seam for the stationary-cursor tick: production schedules a 30Hz timer on BOTH the
+    /// `.eventTracking` (live drag loop) and `.common` run-loop modes (constraint 3 — a default-
+    /// mode timer starves during direct drags); tests return nil and pump `tickDwell()` manually.
+    var dwellTimerFactory: @MainActor (@escaping @MainActor () -> Void) -> Timer? = { tick in
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { _ in
+            MainActor.assumeIsolated(tick)
+        }
+        RunLoop.main.add(timer, forMode: .eventTracking)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
+    var isDwellTimerRunning: Bool { carrySession?.dwellTimer != nil }
 
     /// Visible-order snapshot + editability staged by the host view when a drag begins
     /// (`onDragBegan` fires before any carry can start); adopted by the next session at lift.
@@ -286,6 +317,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
         session.presenter.present(icon: icon, side: iconSide * 1.1, atScreenPoint: p, aboveLevel: aboveLevel)
         carrySession = session
         engage(pages[currentPage]?.value, page: currentPage, session: session)  // visible page makes way / can merge
+        session.dwellTimer = dwellTimerFactory { [weak self] in self?.tickDwell() }
         endReason = nil
         carryActive = true
         if case .folder = origin { folderEjectActive = true }
@@ -301,15 +333,40 @@ final class LaunchpadDragCoordinator: ObservableObject {
         session.lastScreenPoint = screen
         session.lastWindowPoint = window
         session.presenter.move(toScreenPoint: screen)
+        guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
+            if case .carrying(.tracking) = session.state {
+                currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
+            }
+            return
+        }
+        let local = space.local(fromWindow: window)
+        driveTurner(session, local: local, space: space)         // fed in BOTH carrying modes (§4.2)
         // While a flip is in flight (.awaitingHandoff) only the floating icon follows — the old
         // page slides out clean, classification resumes when the target container takes over.
         guard case .carrying(.tracking) = session.state else { return }
-        guard let space = carrySpace else {                      // geometry not pushed yet (cold start)
-            currentTargetContainer?.updateExternalDrag(atWindowPoint: window)
-            return
-        }
         crossCheckGeometry(space: space)
-        currentTargetContainer?.updateExternalDrag(atContainerPoint: space.local(fromWindow: window))
+        currentTargetContainer?.updateExternalDrag(atContainerPoint: local)
+    }
+
+    /// Stationary-cursor drive: mouseDragged stops arriving when the cursor holds still, so the
+    /// 30Hz tick replays the last point into the dwell machine (never into classification — a
+    /// stationary cursor can't change the gap). O(1), no IO (constraint 22).
+    func tickDwell() {
+        guard let session = carrySession, session.isCarrying,
+              let window = session.lastWindowPoint, let space = carrySpace else { return }
+        driveTurner(session, local: space.local(fromWindow: window), space: space)
+    }
+
+    private func driveTurner(_ session: LaunchpadCarrySession, local: NSPoint, space: LaunchpadCarrySpace) {
+        let decision = session.turner.update(point: local, pageWidth: space.pageWidth, now: now())
+        guard case .flip(let direction) = decision else { return }
+        let target = currentTargetPage + direction
+        // Clamp to real pages until step 6 adds the virtual tail index (BT-7). An out-of-range
+        // flip is simply dropped — the turner is already in cooldown and will retry on cadence.
+        guard target >= 0, target < geometry.pageCount else { return }
+        session.awaitHandoff(targetPage: target)
+        flipToken += 1
+        flipRequest = LaunchpadFlipRequest(token: flipToken, targetPage: target)
     }
 
     /// mouseUp: resolve the drop, land the DATA synchronously through `storeApplier`, tear the
@@ -317,6 +374,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// resolve/freeze split and flight settle arrive in steps 4/8).
     func carryReleased(atWindowPoint p: NSPoint) {
         guard let session = carrySession, session.isCarrying else { return }
+        withdrawDwell(session)                               // a flip must never land post-release (§1.4-4)
 
         // Resolve exactly as the legacy eject commit did: a `.reorder(nil)` means classification
         // never settled (the whole carry stayed in the columns' central dead-band) — re-resolve
@@ -371,6 +429,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
     func cancelCarry(_ reason: CarryCancelReason) {
         guard let session = carrySession else { return }
         carryCancelledThisGesture = true
+        withdrawDwell(session)
         currentTargetContainer?.endExternalDrag()
         currentTargetContainer = nil
         session.presenter.dismiss()
@@ -378,6 +437,13 @@ final class LaunchpadDragCoordinator: ObservableObject {
         endReason = .cancelled
         folderEjectActive = false
         carryActive = false
+    }
+
+    /// Stop the dwell tick and withdraw any unconsumed flip request — shared by every carry exit.
+    private func withdrawDwell(_ session: LaunchpadCarrySession) {
+        session.dwellTimer?.invalidate()
+        session.dwellTimer = nil
+        if flipRequest != nil { flipRequest = nil }
     }
 
     /// Pure mapping: container resolution + origin → store action (design §1.3). Static so unit

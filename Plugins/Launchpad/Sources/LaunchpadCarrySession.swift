@@ -39,6 +39,12 @@ final class LaunchpadCarrySession {
     var lastScreenPoint: NSPoint?
     var lastWindowPoint: NSPoint?
 
+    /// Edge-hover dwell/cooldown state machine (pure; the coordinator feeds it the same
+    /// page-local point classification uses, from both mouse moves and the 30Hz tick).
+    var turner = LaunchpadEdgePageTurner()
+    /// The stationary-cursor tick driver; owned here so it dies with the session.
+    var dwellTimer: Timer?
+
     var isCarrying: Bool {
         if case .carrying = state { return true }
         return false

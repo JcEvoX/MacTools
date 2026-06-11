@@ -218,6 +218,106 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         XCTAssertTrue(c0b.externalDragActive, "新实例接管")
     }
 
+    // MARK: - Edge-dwell flips (design §4, step 5)
+
+    private func startCarryOnPage0WithClock() -> (c0: LaunchpadGridContainerView, c1: LaunchpadGridContainerView) {
+        let (c0, _) = makePage(threeApps(), page: 0)
+        let (c1, _) = makePage(threeApps(), page: 1)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+        coordinator.beginEject(appID: "/Apps/X.app", sourceFolderID: "F1", icon: nil, iconSide: 64,
+                               atScreenPoint: .zero, aboveLevel: .normal)
+        return (c0, c1)
+    }
+
+    /// Right-edge page-local point (zone is x > pageWidth − 44 = 856).
+    private func rightEdgeLocal() -> NSPoint { NSPoint(x: 880, y: 300) }
+
+    func testEdgeDwellPublishesFlipAndSuspendsClassification() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        let (c0, c1) = startCarryOnPage0WithClock()
+
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNil(coordinator.flipRequest, "进区即 arm，不立即翻")
+
+        fakeNow = 0.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertEqual(coordinator.flipRequest?.targetPage, 1, "驻留 0.7s 应发布右翻请求")
+        XCTAssertEqual(coordinator.carrySession?.state, .carrying(.awaitingHandoff(targetPage: 1)))
+
+        // Classification is suspended while the flip is in flight: a move over a cell centre on
+        // the (still engaged) old page must not arm a merge.
+        let centre = NSPoint(x: c0.cellViews[1].frame.midX, y: c0.cellViews[1].frame.midY)
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre))
+        XCTAssertNil(c0.stackTargetCell, "awaitingHandoff 期间不喂分类")
+
+        // The funnel (GridView's goToPage → currentPage onChange) completes the handoff.
+        coordinator.currentPageDidChange(1)
+        XCTAssertEqual(coordinator.carrySession?.state, .carrying(.tracking), "handoff 后恢复 tracking")
+        XCTAssertTrue(c1.externalDragActive)
+    }
+
+    func testFlipClampedAtLastRealPage() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        let (_, c1) = startCarryOnPage0WithClock()
+        coordinator.currentPageDidChange(1)                  // hand off to the LAST real page
+        XCTAssertTrue(c1.externalDragActive)
+
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 0.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNil(coordinator.flipRequest, "末页右缘越界翻页必须被丢弃（虚拟尾页是步骤 6）")
+        XCTAssertEqual(coordinator.carrySession?.state, .carrying(.tracking), "被丢弃的翻页不得挂起分类")
+    }
+
+    func testStationaryCursorFiresViaDwellTick() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        _ = startCarryOnPage0WithClock()
+
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 0.71
+        coordinator.tickDwell()                              // mouse holds still: the tick is the driver
+        XCTAssertEqual(coordinator.flipRequest?.targetPage, 1, "光标静止时 30Hz tick 必须能独立驱动 dwell")
+    }
+
+    func testReleaseWithdrawsFlipRequest() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { _ in nil }
+        _ = startCarryOnPage0WithClock()
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 0.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNotNil(coordinator.flipRequest)
+
+        coordinator.commitOut(folderID: "F1", appID: "/Apps/X.app",
+                              atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNil(coordinator.flipRequest, "release 必须先撤销未消费的翻页请求（§1.4-4）")
+    }
+
+    func testCancelStopsDwellTimerAndWithdrawsFlip() {
+        var fakeNow: TimeInterval = 0
+        coordinator.now = { fakeNow }
+        coordinator.dwellTimerFactory = { tick in Timer(timeInterval: 999, repeats: true) { _ in } }
+        _ = startCarryOnPage0WithClock()
+        XCTAssertTrue(coordinator.isDwellTimerRunning, "carry 开始即启动 dwell timer")
+
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        fakeNow = 0.71
+        coordinator.moveEject(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: rightEdgeLocal()))
+        XCTAssertNotNil(coordinator.flipRequest)
+
+        coordinator.cancelCarry(.shutdown)
+        XCTAssertNil(coordinator.flipRequest, "cancel 必须撤销未消费的翻页请求")
+        XCTAssertFalse(coordinator.isDwellTimerRunning, "cancel 必须停 dwell timer")
+    }
+
     func testHandoffIsInertWithoutASession() {
         let (c0, _) = makePage(threeApps(), page: 0)
         let (c1, _) = makePage(threeApps(), page: 1)

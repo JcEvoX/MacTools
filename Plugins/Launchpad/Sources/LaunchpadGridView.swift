@@ -190,6 +190,14 @@ struct LaunchpadGridView: View {
             selectedIndex = 0; currentPage = 0
             closeFolder()        // typing dissolves folders into a flat search (animated close)
         }
+        // Edge-dwell page flip (design §4.4): published by the dwell machine from the mouse-
+        // tracking loop, applied here in a tracked transaction (never withAnimation inside a
+        // mouse handler). Double insurance: a request withdrawn at release/cancel reads nil, and
+        // a stale one is ignored unless a carry is actually live.
+        .onChange(of: dragCoordinator.flipRequest) { _, request in
+            guard let request, dragCoordinator.carrySession?.isCarrying == true else { return }
+            goToPage(request.targetPage)
+        }
     }
 
     private var searchBar: some View {
@@ -293,7 +301,10 @@ struct LaunchpadGridView: View {
             onMakeFolder: handleMakeFolder,
             onAddToFolder: handleAddToFolder,
             onDragBegan: { dragOrderSnapshot = filtered },
-            onPageSwipe: { direction in goToPage(min(currentPage, pageCount - 1) + direction) },
+            onPageSwipe: { direction in
+                guard dragCoordinator.carrySession == nil else { return }   // §9.4 input freeze
+                goToPage(min(currentPage, pageCount - 1) + direction)
+            },
             onPageDrag: handlePageDrag,
             onPageScroll: handlePageScroll,
             onDismiss: onDismiss,
@@ -419,7 +430,10 @@ struct LaunchpadGridView: View {
                 Circle()
                     .fill(Color.primary.opacity(page == current ? 0.55 : 0.18))
                     .frame(width: 7, height: 7)
-                    .onTapGesture { goToPage(page) }
+                    .onTapGesture {
+                        guard dragCoordinator.carrySession == nil else { return }   // §9.4 input freeze
+                        goToPage(page)
+                    }
                     // Mirror the cell fix: `.onTapGesture` is mouse-only, so VoiceOver /
                     // AX press needs an explicit action to actually change page.
                     .accessibilityAction { goToPage(page) }
@@ -456,6 +470,7 @@ struct LaunchpadGridView: View {
     /// to the next page's same row, etc.).
     private func handleMove(_ direction: LaunchpadSearchField.MoveDirection) {
         guard openFolder == nil, !filtered.isEmpty else { return }   // folder open → grid nav inert
+        guard dragCoordinator.carrySession == nil else { return }    // §9.4: keyboard nav frozen mid-carry
         let cols = max(1, columnCount)
         let rows = max(1, rowCount)
         let per = perPage
@@ -491,7 +506,9 @@ struct LaunchpadGridView: View {
         guard !filtered.isEmpty else { selectedIndex = 0; currentPage = 0; return }
         let target = min(max(page, 0), pageCount - 1)
         withAnimation(pageSnap) { currentPage = target }
-        // Move selection onto the page so keyboard nav resumes from what's visible.
+        // Move selection onto the page so keyboard nav resumes from what's visible — except
+        // mid-carry: selection follows the carried item by id at commit instead (design §8).
+        guard dragCoordinator.carrySession == nil else { return }
         selectedIndex = min(target * perPage, filtered.count - 1)
     }
 
@@ -503,6 +520,7 @@ struct LaunchpadGridView: View {
     /// Follow-cursor paging: while dragging empty space the page tracks the cursor; on release
     /// it snaps to the adjacent page past a threshold, otherwise springs back.
     private func handlePageDrag(_ translationX: CGFloat, width: CGFloat, ended: Bool) {
+        guard dragCoordinator.carrySession == nil else { return }   // §9.4: edge dwell is the only mid-carry flip channel
         let pageW = max(1, width)                       // real page width from the AppKit grid (no @State race)
         let last = max(0, pageCount - 1)
         let cur = min(currentPage, last)
@@ -520,6 +538,7 @@ struct LaunchpadGridView: View {
     /// the every-frame offset oscillation. The gesture ends when deltas stop for a beat (debounce),
     /// since trackpad phase is unreliable on slow drags.
     private func handlePageScroll(_ delta: CGFloat, _ width: CGFloat) {
+        guard dragCoordinator.carrySession == nil else { return }   // §9.4 input freeze
         pageScrollEndWork?.cancel()
         let pageW = max(1, width)
         let last = max(0, pageCount - 1)
