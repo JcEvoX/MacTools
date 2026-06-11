@@ -303,7 +303,11 @@ final class LaunchpadDragCoordinator: ObservableObject {
     func beginCarry(itemID: String, origin: LaunchpadCarrySession.Origin, isApp: Bool,
                     icon: NSImage?, iconSide: CGFloat,
                     atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level) -> Bool {
-        guard carrySession == nil, !carryCancelledThisGesture else { return false }
+        guard carrySession == nil, !carryCancelledThisGesture else {
+            Self.carryTrace("beginCarry REJECTED id=\(itemID) hasSession=\(carrySession != nil) cancelledThisGesture=\(carryCancelledThisGesture)")
+            return false
+        }
+        Self.carryTrace("beginCarry id=\(itemID) origin=\(origin) editable=\(pendingEditable) frozen=\(pendingFrozenOrder.count) page=\(currentPage) container=\(pages[currentPage]?.value != nil)")
         let session = LaunchpadCarrySession(
             itemID: itemID,
             origin: origin,
@@ -375,7 +379,10 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// floating icon down, then bump the visual token (design §1.4, hard-cut subset — the
     /// resolve/freeze split and flight settle arrive in steps 4/8).
     func carryReleased(atWindowPoint p: NSPoint) {
-        guard let session = carrySession, session.isCarrying else { return }
+        guard let session = carrySession, session.isCarrying else {
+            Self.carryTrace("carryReleased NO-SESSION p=\(p)")
+            return
+        }
         withdrawDwell(session)                               // a flip must never land post-release (§1.4-4)
 
         // Resolve exactly as the legacy eject commit did: a `.reorder(nil)` means classification
@@ -389,6 +396,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
         }
         var result = currentTargetContainer?.resolveExternalDrop() ?? .reorder(releaseTarget)
         if case .reorder(nil) = result { result = .reorder(releaseTarget) }
+        Self.carryTrace("carryReleased p=\(p) target=\(String(describing: releaseTarget)) result=\(result) engaged=\(currentTargetContainer != nil) editable=\(session.editableAtBegin)")
 
         // DATA lands here, synchronously in mouseUp. Editability uses the value frozen at lift —
         // a live isLayoutEditable check could drop a commit landing after typing flattened the
@@ -399,6 +407,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
                 frozenOrder: session.frozenVisibleOrder)
             : .none
         var landingID: String?
+        Self.carryTrace("carryReleased action=\(action) applier=\(storeApplier != nil) frozen=\(session.frozenVisibleOrder.count)")
         if action != .none {
             if let storeApplier {
                 landingID = storeApplier(action, session.frozenVisibleOrder)
@@ -430,6 +439,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// no session is ignored. `reason` gains distinct behaviour in later steps (page clamp etc.).
     func cancelCarry(_ reason: CarryCancelReason) {
         guard let session = carrySession else { return }
+        Self.carryTrace("cancelCarry reason=\(reason)")
         carryCancelledThisGesture = true
         withdrawDwell(session)
         currentTargetContainer?.endExternalDrag()
@@ -518,6 +528,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
     func commitOut(folderID: String, appID: String, atWindowPoint p: NSPoint) {
         if carrySession == nil {
+            Self.carryTrace("commitOut LATE-BEGIN folder=\(folderID) app=\(appID)")
             // Late eject: the release point itself is the first clearly-outside point (no
             // updateDirectDrag classified in between, e.g. windowless tests or a single fast
             // mouse delta), so no session was begun. Open one and commit it immediately — the
@@ -570,6 +581,22 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
     private static let probeQueue = DispatchQueue(label: "launchpad.geometry-probe", qos: .utility)
     private static let probePath = "/tmp/launchpad-geometry-probe.log"
+
+    /// TEMP diagnostic trace for the carry chain (runtime verification of §11 steps 2-6; remove at
+    /// step 9). Same /tmp channel as the probe — dev-app OSLog is not capturable on this machine.
+    static func carryTrace(_ line: String) {
+        let stamped = "\(String(format: "%.3f", CACurrentMediaTime())) \(line)\n"
+        probeQueue.async {
+            let path = "/tmp/launchpad-carry-trace.log"
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: nil)
+            }
+            guard let handle = FileHandle(forWritingAtPath: path), let data = stamped.data(using: .utf8) else { return }
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        }
+    }
     private static func createProbeLog() -> FileHandle? {
         FileManager.default.createFile(atPath: probePath, contents: nil)
         return FileHandle(forWritingAtPath: probePath)
@@ -577,5 +604,6 @@ final class LaunchpadDragCoordinator: ObservableObject {
     #else
     private func scheduleGeometryProbe() {}
     private func crossCheckGeometry(space: LaunchpadCarrySpace) {}
+    static func carryTrace(_ line: String) {}
     #endif
 }

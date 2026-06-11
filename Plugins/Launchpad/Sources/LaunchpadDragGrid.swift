@@ -363,6 +363,7 @@ final class LaunchpadGridContainerView: NSView {
         // folder zooms closed and a floating icon takes over (see LaunchpadDragCoordinator).
         if let folderID = grid?.folderContextID, let coord = grid?.coordinator, draggedClearlyOutsideFolder(cell),
            let screen = window?.convertPoint(toScreen: windowPoint) {
+            LaunchpadDragCoordinator.carryTrace("ARM eject app=\(cell.layoutID) window=\(windowPoint)")
             coord.beginEject(appID: cell.layoutID, sourceFolderID: folderID, icon: cell.primaryIcon,
                              iconSide: metrics.iconSide, atScreenPoint: screen, aboveLevel: window?.level ?? .popUpMenu)
         }
@@ -432,6 +433,7 @@ final class LaunchpadGridContainerView: NSView {
         // INSIDE falls through to a normal in-folder reorder (the revert).
         if let coordinator = grid?.coordinator, let folderID = grid?.folderContextID,
            coordinator.ejectActive || draggedClearlyOutsideFolder(cell) {
+            LaunchpadDragCoordinator.carryTrace("endDirectDrag COMMIT branch ejectActive=\(coordinator.ejectActive) clearlyOutside=\(draggedClearlyOutsideFolder(cell)) p=\(windowPoint)")
             coordinator.commitOut(folderID: folderID, appID: cell.layoutID, atWindowPoint: windowPoint)
             teardownDragState(cell)
             refocusSearchField()
