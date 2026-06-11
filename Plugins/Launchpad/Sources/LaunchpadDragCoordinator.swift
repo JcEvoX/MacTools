@@ -11,7 +11,9 @@ protocol LaunchpadFloatingIconPresenting: AnyObject {
     var isPresenting: Bool { get }
     func present(icon: NSImage?, side: CGFloat, atScreenPoint p: NSPoint, aboveLevel: NSWindow.Level)
     func move(toScreenPoint p: NSPoint)
-    /// Fly to the resolved slot, then call `completion`. Hard-cut until step 8: lands instantly.
+    /// Fly to the resolved slot, then call `completion` (design §7.2). The caller guards the
+    /// completion with a generation token, so a late/lost completion can never tear down a newer
+    /// session — and a watchdog timeout reveals the landed cell even if it never arrives.
     func settle(to screenRect: NSRect, completion: @escaping @MainActor () -> Void)
     func dismiss()
 }
@@ -48,9 +50,19 @@ final class LaunchpadFloatingIconWindowPresenter: LaunchpadFloatingIconPresentin
     }
 
     func settle(to screenRect: NSRect, completion: @escaping @MainActor () -> Void) {
-        window?.setFrame(screenRect, display: false)
-        dismiss()
-        completion()
+        guard let window else { completion(); return }
+        // Real flight (design §4/§7.2): a borderless NSWindow animates its FRAME through
+        // NSAnimationContext + the window animator proxy — same gentle-overshoot curve the grid's
+        // own settle uses, so the icon and the make-way share one feel. `dismiss()` mid-flight
+        // (force-complete) just orders the window out; the late completion is then a no-op at the
+        // caller (generation token).
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.25
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.18, 0.5, 1)
+            window.animator().setFrame(screenRect, display: true)
+        }, completionHandler: {
+            MainActor.assumeIsolated(completion)
+        })
     }
 
     func dismiss() {
@@ -140,6 +152,29 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
     private(set) var carrySession: LaunchpadCarrySession?
     private(set) var endReason: CarryEndReason?
+
+    /// While a settle flight is airborne: the landed item's layoutID. Containers read it in their
+    /// layout-skip predicate and in `apply` (park the freshly rebuilt cell off-screen), so the
+    /// grid cell can never appear UNDER the still-flying floating icon (double image, §7.3).
+    private(set) var settlingItemID: String?
+    /// Monotonic settle generation: flight completion / watchdog / force-complete all carry the
+    /// generation they were armed with, and a mismatch is a stale callback to ignore (AR-6 — a
+    /// late animation completion must never un-park a NEWER session's cell or drop its icon).
+    private var settleGeneration = 0
+    private var settleTimeoutWork: DispatchWorkItem?
+
+    /// Watchdog for a lost flight completion (animation interrupted, window closed mid-flight):
+    /// after this interval the reveal fires unconditionally — the landed icon must never stay
+    /// parked off-screen forever (design §7.3-4).
+    var settleTimeoutInterval: TimeInterval = 0.5
+    /// Test seam: production schedules on the main queue; tests capture the work and fire it
+    /// deterministically (no sleeping, design §10).
+    var settleTimeoutScheduler: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> DispatchWorkItem =
+        { delay, work in
+            let item = DispatchWorkItem { MainActor.assumeIsolated(work) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+            return item
+        }
 
     /// Synchronous mouseUp data path, injected by the overlay controller (it owns both the
     /// coordinator and the layout store). Returns the landing id for the visual channel.
@@ -326,11 +361,17 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// through `beginDirectDrag`, so they stay latched.
     func gestureBegan() {
         carryCancelledThisGesture = false
+        // A new drag gesture starting while a settle flight is airborne: force-complete it NOW —
+        // BEFORE the container stages any lift state — so the dying session's reveal cleans the
+        // OLD anchor, never the cell the new gesture is about to park (§1.2 settling × lift).
+        forceCompleteSettleIfNeeded()
     }
 
     /// Container-side step-0 gate (design §2.1-1 / BR-4): a refused lift must leave the container
     /// with ZERO state changes, so the container asks here BEFORE touching its own state.
-    var canBeginCarry: Bool { carrySession == nil && !carryCancelledThisGesture }
+    /// A SETTLING session does not refuse — iOS lets you re-grab immediately; `beginCarry`
+    /// force-completes the flight first (§1.2 settling × lift).
+    var canBeginCarry: Bool { carrySession?.isCarrying != true && !carryCancelledThisGesture }
 
     /// Begin a carry: raise the floating icon at the cursor and start make-way/merge on the
     /// visible page. Safe to call from a mouse handler — the floating window is pure AppKit, and
@@ -347,6 +388,10 @@ final class LaunchpadDragCoordinator: ObservableObject {
             Self.carryTrace("beginCarry REJECTED id=\(itemID) hasSession=\(carrySession != nil) cancelledThisGesture=\(carryCancelledThisGesture)")
             return false
         }
+        // Re-lift while the previous settle is still flying (§1.2 settling × lift): fast-forward
+        // its reveal and tear its floating icon down, then open the new session. Grid-routed
+        // lifts already did this at `gestureBegan`; this covers the direct entries (late eject).
+        forceCompleteSettleIfNeeded()
         Self.carryTrace("beginCarry id=\(itemID) origin=\(origin) editable=\(pendingEditable) frozen=\(pendingFrozenOrder.count) page=\(currentPage) container=\(pages[currentPage]?.value != nil)")
         let session = LaunchpadCarrySession(
             itemID: itemID,
@@ -420,9 +465,9 @@ final class LaunchpadDragCoordinator: ObservableObject {
         flipRequest = LaunchpadFlipRequest(token: flipToken, targetPage: target)
     }
 
-    /// mouseUp: resolve the drop, land the DATA synchronously through `storeApplier`, tear the
-    /// floating icon down, then bump the visual token (design §1.4, hard-cut subset — the
-    /// resolve/freeze split and flight settle arrive in steps 4/8).
+    /// mouseUp: resolve the drop, land the DATA synchronously through `storeApplier`, then start
+    /// the purely visual settle — a 0.25s floating-icon flight into the resolved slot when a
+    /// flyable rect exists, the legacy hard-cut teardown otherwise (design §1.4/§7).
     func carryReleased(atWindowPoint p: NSPoint) {
         guard let session = carrySession, session.isCarrying else {
             Self.carryTrace("carryReleased NO-SESSION p=\(p)")
@@ -441,7 +486,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
         }
         var result = currentTargetContainer?.resolveExternalDrop() ?? .reorder(releaseTarget)
         if case .reorder(nil) = result { result = .reorder(releaseTarget) }
-        Self.carryTrace("carryReleased p=\(p) target=\(String(describing: releaseTarget)) result=\(result) engaged=\(currentTargetContainer != nil) editable=\(session.editableAtBegin)")
+        // Peek the flight target while the gap/merge state is still alive (pure peek, §7.1) —
+        // the freeze below clears it. nil = no flyable slot: an ENGAGED-BUT-EMPTY container
+        // (production: the virtual tail page, whose collapse + §6.2 snap-back would race the
+        // flight — see settleTargetLocalRect), no engaged container at all, a windowless
+        // harness, or classification that never settled. All of those degrade to the hard-cut
+        // dismiss further down — the deliberate choice over an in-place fade: the icon vanishes
+        // at the cursor and the landed cell reveals in the same mouseUp stack.
+        let settleScreenRect = settleTargetScreenRect()
+        Self.carryTrace("carryReleased p=\(p) target=\(String(describing: releaseTarget)) result=\(result) engaged=\(currentTargetContainer != nil) editable=\(session.editableAtBegin) settleRect=\(String(describing: settleScreenRect))")
 
         // DATA lands here, synchronously in mouseUp. Editability uses the value frozen at lift —
         // a live isLayoutEditable check could drop a commit landing after typing flattened the
@@ -468,20 +521,103 @@ final class LaunchpadDragCoordinator: ObservableObject {
 
         pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
                                            result: result, landingID: landingID)
-        // Teardown order matters (design §1.4-6..8, hard-cut): the session ends FIRST so the
-        // anchor reveal below — which may run a deferred apply → registration → reattach — finds
-        // no live carry to re-engage; the anchor is revealed BEFORE the gap settles so the
-        // settle's layout already includes the revealed cell (a no-op drop glides it straight
-        // back into its original slot — AR-1: the reveal pipeline runs unconditionally).
+
+        if let settleScreenRect {
+            // FLIGHT settle (design §1.4-6..9): data is already safe; everything below is pure
+            // visual choreography. The session survives in `.settling` — every input-freeze gate
+            // keys on `carrySession != nil`, so manual page flips stay frozen for the 0.25s
+            // flight (§8/BR-3b) — while `isCarrying == false` keeps registration/funnel/apply
+            // paths from re-engaging a dying carry (§1.2 settling row).
+            settleGeneration += 1
+            let generation = settleGeneration
+            settlingItemID = session.itemID
+            session.beginSettling(generation: generation)
+            // Freeze, don't end: the make-way frames hold still so the post-commit apply — whose
+            // committed layout is slot-for-slot identical to the gap layout — lands with zero
+            // motion (§7.3-1). The source anchor stays parked (endCarryAnchor is the reveal's
+            // job): its deferred apply must stay deferred too, or the stale pre-commit model
+            // would reflow the board mid-flight and the fresh one snap it right back.
+            currentTargetContainer?.freezeExternalDrag()
+            currentTargetContainer = nil
+            endReason = .committed
+            folderEjectActive = false
+            carryActive = false                              // virtual tail page retracts now
+            commitToken += 1                                 // visual-only; data is already safe
+            // Watchdog BEFORE the flight: a spy presenter completes synchronously, and the
+            // finish below must find (and cancel) the scheduled work, not race its scheduling.
+            settleTimeoutWork = settleTimeoutScheduler(settleTimeoutInterval) { [weak self] in
+                self?.settleFinished(generation)
+            }
+            session.presenter.settle(to: settleScreenRect) { [weak self] in
+                self?.settleFinished(generation)
+            }
+        } else {
+            // HARD-CUT settle (degenerate branch — preserved verbatim from step 7): no flyable
+            // rect, so reveal everything in the mouseUp stack. Order matters: the session ends
+            // FIRST so the anchor reveal below — which may run a deferred apply → registration →
+            // reattach — finds no live carry to re-engage; the anchor is revealed BEFORE the gap
+            // settles so the settle's layout already includes the revealed cell (a no-op drop
+            // glides it straight back into its original slot — AR-1: the reveal pipeline runs
+            // unconditionally).
+            carrySession = nil
+            session.sourceContainer?.endCarryAnchor()        // root origin: un-park the anchor cell
+            currentTargetContainer?.endExternalDrag()        // gap settles closed
+            currentTargetContainer = nil
+            session.presenter.dismiss()
+            endReason = .committed
+            folderEjectActive = false
+            carryActive = false
+            commitToken += 1                                 // visual-only; data is already safe
+        }
+    }
+
+    /// The screen rect the floating icon should fly to: the engaged container's armed/gap slot
+    /// (container-local, pure peek) → window space through the pushed CarrySpace arithmetic
+    /// ("viewport is the page" — container coords ARE page-local coords for the visible page) →
+    /// screen space through `NSWindow.convertToScreen` (a window-level conversion the SwiftUI
+    /// paging offset can't pollute). nil whenever any link is missing — the release then takes
+    /// the hard-cut branch.
+    private func settleTargetScreenRect() -> NSRect? {
+        guard let container = currentTargetContainer,
+              let window = container.window,
+              let space = carrySpace,
+              let local = container.settleTargetLocalRect() else { return nil }
+        return window.convertToScreen(space.windowRect(fromLocal: local))
+    }
+
+    /// Flight completion, watchdog, and force-complete all converge here. The generation kills
+    /// stale callbacks: a completion armed before a force-complete — or for an earlier session —
+    /// must never tear down a newer session's floating icon or un-park its cells (AR-6).
+    private func settleFinished(_ generation: Int) {
+        guard let session = carrySession,
+              case .settling(let current) = session.state,
+              current == generation else { return }
+        finishSettle(session)
+    }
+
+    /// Fast-forward an airborne settle (§1.2 settling row): re-lift, any cancel reason, and the
+    /// overlay closing all complete the visuals immediately. The data landed at mouseUp — nothing
+    /// here writes or loses anything.
+    private func forceCompleteSettleIfNeeded() {
+        guard let session = carrySession, case .settling = session.state else { return }
+        Self.carryTrace("settle force-complete gen=\(settleGeneration)")
+        finishSettle(session)
+    }
+
+    /// The reveal (design §7.3-3/4), fully synchronous: end the session, clear the park predicate,
+    /// give the source anchor its one-shot deferred apply, lay every parked cell into its real
+    /// slot, then drop the floating icon — which is sitting exactly on that slot, so the swap is
+    /// invisible. Ordering notes: the session ends FIRST (apply/registration during the reveal
+    /// must find no live carry); `settlingItemID` clears BEFORE any layout pass so the predicate
+    /// stops excluding the landed cell; the icon dismisses LAST so the cell is already on screen.
+    private func finishSettle(_ session: LaunchpadCarrySession) {
+        settleTimeoutWork?.cancel()
+        settleTimeoutWork = nil
         carrySession = nil
-        session.sourceContainer?.endCarryAnchor()            // root origin: un-park the anchor cell
-        currentTargetContainer?.endExternalDrag()            // gap settles closed
-        currentTargetContainer = nil
-        session.presenter.dismiss()                          // hard-cut settle (flight is step 8)
-        endReason = .committed
-        folderEjectActive = false
-        carryActive = false
-        commitToken += 1                                     // visual-only; data is already safe
+        settlingItemID = nil
+        session.sourceContainer?.endCarryAnchor()            // root origin: un-park + apply pendingGrid
+        for (_, boxed) in pages { boxed.value?.revealSettledCell() }
+        session.presenter.dismiss()
     }
 
     /// Abort an in-flight carry (launcher closed / source unmounted / search activated) without
@@ -490,6 +626,15 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// no session is ignored. `reason` gains distinct behaviour in later steps (page clamp etc.).
     func cancelCarry(_ reason: CarryCancelReason) {
         guard let session = carrySession else { return }
+        if case .settling = session.state {
+            // The drop already committed at mouseUp — a cancel mid-flight (overlay closing,
+            // typing, geometry change) only FAST-FORWARDS the visuals: reveal now, drop the
+            // floating icon, keep `.committed`. No write happens, none is lost (§1.2/§9.1 row 7),
+            // and no orphan-gesture latch: the settling gesture's mouseUp already arrived.
+            Self.carryTrace("cancelCarry reason=\(reason) during settling → force-complete")
+            finishSettle(session)
+            return
+        }
         Self.carryTrace("cancelCarry reason=\(reason)")
         carryCancelledThisGesture = true
         withdrawDwell(session)

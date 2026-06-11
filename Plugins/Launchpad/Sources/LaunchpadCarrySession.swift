@@ -89,8 +89,8 @@ final class LaunchpadCarrySession {
         state = .carrying(.tracking)
     }
 
-    /// mouseUp received and data committed; the floating icon is now pure visual flight.
-    /// Defined for step 8 (flight settle); the hard-cut commit never enters it.
+    /// mouseUp received and data committed; the floating icon is now pure visual flight. The
+    /// degenerate hard-cut release (no flyable rect) never enters it — the session just ends.
     func beginSettling(generation: Int) {
         state = .settling(generation: generation)
     }

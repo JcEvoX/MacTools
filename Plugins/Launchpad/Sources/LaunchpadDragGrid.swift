@@ -150,6 +150,15 @@ final class LaunchpadGridContainerView: NSView {
         return cells.firstIndex(where: { $0 === anchorCell })
     }
 
+    /// Third leg of the layout-skip predicate (design §2.2/§7.3, AC-3): while the floating icon
+    /// is flying to its slot, the landed cell — freshly rebuilt by the post-commit apply, or the
+    /// still-parked source anchor — must never be written back to a slot by ANY layout pass.
+    /// Only the coordinator's reveal (clearing `settlingItemID`) un-parks it.
+    private func isParkedForSettle(_ cell: LaunchpadGridCellView) -> Bool {
+        guard let settling = grid?.coordinator?.settlingItemID else { return false }
+        return cell.layoutID == settling
+    }
+
     // Empty-space drag (follow-cursor paging) + click (dismiss) tracking, plus scroll paging.
     private var gapDownPoint: NSPoint?
     private var gapMoved = false
@@ -206,6 +215,14 @@ final class LaunchpadGridContainerView: NSView {
         } else {
             rebuildCells(items: grid.items, selectedID: grid.selectedID)
             needsLayout = true
+        }
+        // Park the settling cell (design §7.3-2): the post-commit rebuild creates (or reuses) the
+        // landed cell, but it must stay OFF-SCREEN until the floating icon finishes its flight —
+        // surfacing it early would double the icon (grid cell + flying window). The layout-skip
+        // predicate keeps it parked through every pass; the coordinator's reveal un-parks it.
+        if let settling = grid.coordinator?.settlingItemID,
+           let parked = cells.first(where: { $0.layoutID == settling }) {
+            parked.setFrameOrigin(Self.carryParkOrigin)
         }
         // A container engaged while empty (late mount during a carry) gets the cursor replayed
         // now that cells exist — see LaunchpadDragCoordinator.containerDidApplyCells.
@@ -279,9 +296,10 @@ final class LaunchpadGridContainerView: NSView {
                     ? CAMediaTimingFunction(controlPoints: 0.34, 1.18, 0.5, 1)
                     : CAMediaTimingFunction(name: .easeInEaseOut)
                 // Skip the lifted source cell — it follows the cursor (setFrameOrigin), not the
-                // grid — and the parked carry anchor, which must NEVER be written back to a slot
-                // until its reveal (design §2.2: the anchor-exclusion surface).
-                for (index, cell) in order.enumerated() where cell !== draggedCell && cell !== anchorCell {
+                // grid — the parked carry anchor, and the settling (still-flying) cell: none may
+                // be written back to a slot until their reveal (design §2.2: the exclusion surface).
+                for (index, cell) in order.enumerated()
+                where cell !== draggedCell && cell !== anchorCell && !isParkedForSettle(cell) {
                     cell.animator().frame = slotRect(index)
                 }
             }
@@ -289,8 +307,9 @@ final class LaunchpadGridContainerView: NSView {
             // MUST also skip the dragged cell here — `layout()` uses this path during a drag, and
             // writing the dragged cell back to its slot fights `updateDirectDrag`'s 1:1 follow
             // (that tug-of-war was a source of the every-frame reorder flicker). Same for the
-            // parked anchor: only the explicit reveal un-parks it.
-            for (index, cell) in order.enumerated() where cell !== draggedCell && cell !== anchorCell {
+            // parked anchor and the settling cell: only the explicit reveal un-parks them.
+            for (index, cell) in order.enumerated()
+            where cell !== draggedCell && cell !== anchorCell && !isParkedForSettle(cell) {
                 cell.frame = slotRect(index)
             }
         }
@@ -451,11 +470,13 @@ final class LaunchpadGridContainerView: NSView {
         layoutCellsWithGap(animated: false)
     }
 
-    /// Commit-path anchor recovery (design §1.4-7, hard-cut): reveal the anchor immediately —
-    /// clear the carry state, APPLY any deferred model (not drop: the source page must not keep a
-    /// stale model), and let the next layout pass place the cell back into a real slot. The
-    /// post-commit SwiftUI apply then rebuilds against the freshly-written store; because the
-    /// reveal runs first (same mouseUp stack), the anchor can never stay parked through it.
+    /// Commit-path anchor recovery (design §1.4-7/§7.3): clear the carry state, APPLY any
+    /// deferred model (not drop: the source page must not keep a stale model), and let the next
+    /// layout pass place the cell back into a real slot. On the hard-cut branch this runs in the
+    /// mouseUp stack; on a flight settle it runs at the REVEAL — the deferred apply then already
+    /// holds the post-commit model, so the source page reflows exactly once, never through the
+    /// stale pre-commit snapshot mid-flight. While `settlingItemID` is set the cell stays parked
+    /// regardless (the layout predicate), so calling this never surfaces it early.
     func endCarryAnchor() {
         guard anchorCell != nil else { return }
         anchorCell = nil
@@ -880,12 +901,14 @@ final class LaunchpadGridContainerView: NSView {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.20
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                for (i, cell) in order.enumerated() where cell !== draggedCell {
+                for (i, cell) in order.enumerated()
+                where cell !== draggedCell && !isParkedForSettle(cell) {
                     cell.animator().frame = slotRect(slot(for: i))
                 }
             }
         } else {
-            for (i, cell) in order.enumerated() where cell !== draggedCell {
+            for (i, cell) in order.enumerated()
+            where cell !== draggedCell && !isParkedForSettle(cell) {
                 cell.frame = slotRect(slot(for: i))
             }
         }
@@ -912,6 +935,56 @@ final class LaunchpadGridContainerView: NSView {
     func commitExternalDrag() -> LaunchpadExternalDropResult {
         defer { endExternalDrag() }
         return resolveExternalDrop()
+    }
+
+    /// Where the floating icon's flight should land, in CONTAINER coordinates (pure peek — design
+    /// §7.1). An armed merge target answers its icon rect (the iOS absorb feel); an open make-way
+    /// gap answers the empty slot's icon rect (the gap layout leaves slot `externalGapIndex`
+    /// itself empty). nil when classification never settled — AND, deliberately, for an
+    /// engaged-but-EMPTY page: the only empty engaged container in production is the VIRTUAL tail
+    /// page (no sparse pages exist), which collapses the moment the release flips
+    /// `carryActive = false` — the commitToken handler then snap-animates `currentPage` back to
+    /// the last real page (§6.2) WHILE a 0.25s flight would still be airborne. A slot-0 flight
+    /// would chase a viewport that is sliding away, and the landed cell reveals at the LAST REAL
+    /// page's tail anyway (a root reorder never grows pageCount; a folder eject grows it only
+    /// when the last real page was exactly full — undecidable here without re-deriving the store
+    /// mutation). So every empty-page release answers nil and the coordinator degrades it to the
+    /// hard-cut dismiss instead of an aimless flight.
+    func settleTargetLocalRect() -> CGRect? {
+        guard externalDragActive else { return nil }
+        if let target = stackTargetCell { return iconRect(in: target.frame) }
+        if let gap = externalGapIndex { return iconRect(in: slotRect(gap)) }
+        return nil
+    }
+
+    /// The icon area inside a slot/cell frame — mirrors the cell's own `iconFrame` placement.
+    private func iconRect(in slot: CGRect) -> CGRect {
+        CGRect(x: slot.minX + (metrics.cellWidth - metrics.iconSide) / 2,
+               y: slot.minY + 8,
+               width: metrics.iconSide, height: metrics.iconSide)
+    }
+
+    /// Commit-path external-drag teardown while a settle flight is airborne (design §1.4-3/§7.3-1,
+    /// BR-5): clear the flags but do NOT re-layout — the make-way frames freeze in place. The
+    /// post-commit apply lays out the new committed model, which is slot-for-slot identical to
+    /// the frozen gap layout, so the handover happens with zero motion. (`endExternalDrag` stays
+    /// the cancel/handoff collapse, which DOES animate the gap closed.)
+    func freezeExternalDrag() {
+        externalDragActive = false
+        externalDragAppID = nil
+        externalAllowsMerge = true
+        externalGapIndex = nil
+        clearStackTarget()
+    }
+
+    /// Settle-flight reveal (design §7.3-3): the coordinator has already cleared
+    /// `settlingItemID`, so the layout predicate no longer excludes the landed cell — one plain
+    /// pass writes it straight into its slot, exactly under the just-landed floating icon.
+    /// Idempotent and cheap; broadcast to every registered page (the landed cell lives on exactly
+    /// one; a merge-into-folder leaves no cell anywhere, and the pass is then a no-op).
+    func revealSettledCell() {
+        needsLayout = true
+        layoutSubtreeIfNeeded()
     }
 
     /// Clear external-drag state and settle the make-way gap closed. On a root-carry SOURCE page
@@ -947,8 +1020,10 @@ final class LaunchpadGridContainerView: NSView {
         // ScrollView so a folder taller than the visible cap can be two-finger scrolled.
         if grid?.folderContextID != nil { super.scrollWheel(with: event); return }
         // Scroll events aren't anchored to the mouse-down view, so they still arrive mid-carry —
-        // edge dwell is the only flip channel while one is live (§9.4).
-        if grid?.coordinator?.carryActive == true { return }
+        // edge dwell is the only flip channel while one is live (§9.4). Gate on the SESSION, not
+        // `carryActive`: the settle flight (mouse already up) must also freeze paging, or the
+        // floating icon lands on a page that just slid away (§8/BR-3b).
+        if grid?.coordinator?.carrySession != nil { return }
         if event.hasPreciseScrollingDeltas {
             // Trackpad two-finger swipe: follow-the-finger paging — the SAME live-track + snap
             // as the empty-space mouse drag, so the two gestures feel identical.
