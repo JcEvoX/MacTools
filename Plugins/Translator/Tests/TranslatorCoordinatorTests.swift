@@ -145,6 +145,29 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertTrue(panel.updatedSnapshots.contains { $0.phase == .success })
     }
 
+    func testSelectTranslationDoesNotShowPanelBeforeCaptureCompletes() async {
+        let capture = DeferredSelectedTextCapture(result: selectedText("hello"))
+        let panel = RecordingTranslatorPanelController()
+        let coordinator = makeCoordinator(
+            captures: [capture],
+            providerFactory: { .provider(RecordingTranslationProvider(resultText: "你好")) },
+            panelController: panel
+        )
+
+        coordinator.startSelectTranslation()
+        await capture.waitUntilStarted()
+
+        XCTAssertTrue(panel.shownSnapshots.isEmpty)
+        XCTAssertTrue(panel.updatedSnapshots.contains {
+            $0.phase == .capturing && $0.captureStage == .selectedText
+        })
+
+        capture.resume()
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(panel.shownSnapshots.first?.phase, .translating)
+    }
+
     func testMultipleProvidersUpdateIndependentResultsAndFirstSuccess() async throws {
         let firstProvider = RecordingTranslationProvider(resultText: "你好")
         let secondProvider = RecordingTranslationProvider(error: TestTranslationError(message: "服务失败"))
@@ -322,7 +345,7 @@ final class TranslatorCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.snapshot.translation?.text, "截图译文")
     }
 
-    func testScreenshotTranslationSurfacesRegionSelectionStateBeforeCaptureCompletes() async {
+    func testScreenshotTranslationDoesNotShowPanelBeforeRegionCaptureCompletes() async {
         let screenshotCapturer = DeferredScreenshotRegionCapturer(
             result: .success(
                 image: NSImage(size: NSSize(width: 20, height: 20)),
@@ -344,12 +367,15 @@ final class TranslatorCoordinatorTests: XCTestCase {
         coordinator.startScreenshotTranslation()
         await screenshotCapturer.waitUntilStarted()
 
-        XCTAssertTrue(panel.shownSnapshots.contains {
+        XCTAssertTrue(panel.shownSnapshots.isEmpty)
+        XCTAssertTrue(panel.updatedSnapshots.contains {
             $0.phase == .capturing && $0.captureStage == .screenshotRegion
         })
 
-        await coordinator.handle(.close)
         screenshotCapturer.resume()
+        await panel.waitUntilShown(.success)
+
+        XCTAssertEqual(panel.shownSnapshots.first?.captureStage, .ocr)
     }
 
     func testScreenshotTranslationDoesNotResolveProviderBeforeOCRTextExists() async {

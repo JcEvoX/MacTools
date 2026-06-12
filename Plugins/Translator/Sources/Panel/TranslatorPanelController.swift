@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class TranslatorPanelController: TranslatorPanelControlling {
-    private static let panelSize = NSSize(width: 520, height: 520)
+    private static let panelSize = NSSize(width: 606, height: 380)
     private static let screenPadding: CGFloat = 16
 
     private var panelWindow: TranslatorPanelWindow?
