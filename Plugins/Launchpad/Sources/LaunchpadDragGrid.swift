@@ -297,15 +297,12 @@ final class LaunchpadGridContainerView: NSView {
         }
     }
 
-    /// The frame of grid slot `index` (row-major), in container coordinates.
+    /// The frame of grid slot `index` (row-major), in container coordinates. The math
+    /// lives in `LaunchpadLayoutMath.slotRect` — shared with the settings layout
+    /// preview so the two can only move together (anti-drift, same as `Chrome`).
     private func slotRect(_ index: Int) -> CGRect {
-        let gridWidth = CGFloat(columns) * metrics.cellWidth + CGFloat(max(0, columns - 1)) * metrics.columnSpacing
-        let leftInset = max(0, (bounds.width - gridWidth) / 2).rounded(.down)
-        let col = index % columns, row = index / columns
-        return CGRect(
-            x: leftInset + CGFloat(col) * (metrics.cellWidth + metrics.columnSpacing),
-            y: CGFloat(row) * (metrics.cellHeight + metrics.rowSpacing),
-            width: metrics.cellWidth, height: metrics.cellHeight
+        LaunchpadLayoutMath.slotRect(
+            index: index, columns: columns, containerWidth: bounds.width, metrics: metrics
         )
     }
 
@@ -794,12 +791,7 @@ final class LaunchpadGridContainerView: NSView {
         // Scales with the icon (design §1.1): 8 at the long-standing 64pt (regression
         // unchanged), floored at 6 so a 48pt icon keeps a usable 36×36 hot zone.
         let inset: CGFloat = max(6, metrics.iconSide * 0.125)
-        return CGRect(
-            x: s.minX + (metrics.cellWidth - metrics.iconSide) / 2 + inset,
-            y: s.minY + metrics.iconTopInset + inset,
-            width: metrics.iconSide - inset * 2,
-            height: metrics.iconSide - inset * 2
-        )
+        return iconRect(in: s).insetBy(dx: inset, dy: inset)
     }
 
     private func setStackTarget(_ cell: LaunchpadGridCellView) {
@@ -1040,11 +1032,10 @@ final class LaunchpadGridContainerView: NSView {
         return nil
     }
 
-    /// The icon area inside a slot/cell frame — mirrors the cell's own `iconFrame` placement.
+    /// The icon area inside a slot/cell frame — the cell's own `iconFrame`, offset into
+    /// container coordinates (shared source: `LaunchpadGridMetrics.iconFrameInCell`).
     private func iconRect(in slot: CGRect) -> CGRect {
-        CGRect(x: slot.minX + (metrics.cellWidth - metrics.iconSide) / 2,
-               y: slot.minY + metrics.iconTopInset,
-               width: metrics.iconSide, height: metrics.iconSide)
+        metrics.iconFrameInCell.offsetBy(dx: slot.minX, dy: slot.minY)
     }
 
     /// Commit-path external-drag teardown while a settle flight is airborne (design §1.4-3/§7.3-1,
@@ -1238,19 +1229,15 @@ final class LaunchpadGridCellView: NSView {
     private var didDrag = false
     private let dragThreshold: CGFloat = 6
 
-    /// The icon area both the app image view and the folder thumbnail occupy.
-    private var iconFrame: CGRect {
-        CGRect(x: (metrics.cellWidth - metrics.iconSide) / 2, y: metrics.iconTopInset,
-               width: metrics.iconSide, height: metrics.iconSide)
-    }
+    /// The icon area both the app image view and the folder thumbnail occupy. Sourced
+    /// from `LaunchpadGridMetrics.iconFrameInCell` — shared with the settings layout
+    /// preview (anti-drift: one formula, two consumers).
+    private var iconFrame: CGRect { metrics.iconFrameInCell }
 
     /// The label strip below the icon. With labels hidden (`showsLabels == false`) the
     /// height collapses to 0 and the field is hidden — accessibility label and toolTip
-    /// still carry the name (design §1.2).
-    private var labelFrame: CGRect {
-        CGRect(x: 2, y: metrics.iconTopInset + metrics.iconSide + metrics.labelGap,
-               width: metrics.cellWidth - 4, height: metrics.labelHeight)
-    }
+    /// still carry the name (design §1.2). Shared source: `labelFrameInCell`.
+    private var labelFrame: CGRect { metrics.labelFrameInCell }
 
     /// The icon area enlarged ~1.1× while armed as a merge target.
     private var mergeIconFrame: CGRect {

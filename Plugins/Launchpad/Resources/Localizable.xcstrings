@@ -579,6 +579,40 @@
         }
       }
     },
+    "settings.appearance.preview.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Layout preview: %1$d columns by %2$d rows, %3$d apps per page with the current settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "排列预览：当前设置每页 %1$d 列 %2$d 行，共 %3$d 个"
+          }
+        }
+      }
+    },
+    "settings.appearance.preview.caption": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d columns × %2$d rows · %3$d per page"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d 列 × %2$d 行 · 每页 %3$d 个"
+          }
+        }
+      }
+    },
     "settings.appearance.showNames.description": {
       "extractionState": "manual",
       "localizations": {

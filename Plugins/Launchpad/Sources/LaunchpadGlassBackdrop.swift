@@ -93,6 +93,46 @@ struct LaunchpadGlassBackdrop: NSViewRepresentable {
     }
 }
 
+/// Recipe → preview fill, shared by the settings glass-preview card and the layout-preview
+/// canvas (ruling G6: ONE implementation, the layout preview absorbs the glass recipe).
+/// The same switch the real overlay's `backgroundLayer` performs, minus the dismiss tap
+/// layer; within-window blending so it samples the mock desktop gradient behind it.
+struct LaunchpadRecipeGlassFill: View {
+    var recipe: LaunchpadBackgroundRecipe
+
+    var body: some View {
+        ZStack {
+            switch recipe {
+            case .legacyUltraThin:
+                Rectangle().fill(.ultraThinMaterial)
+            case .glass(let material, let dimOpacity, let forcesDark):
+                LaunchpadGlassBackdrop(
+                    material: material,
+                    blendingMode: .withinWindow,
+                    forcesDarkAppearance: forcesDark
+                )
+                Rectangle().fill(.black.opacity(dimOpacity))
+            }
+        }
+    }
+}
+
+/// Desktop-ish gradient both settings previews lay under their glass — one source so the
+/// two cards can't drift apart (the blur needs something colourful and legible to chew on).
+struct LaunchpadDesktopMockGradient: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.26, green: 0.42, blue: 0.86),
+                Color(red: 0.56, green: 0.36, blue: 0.78),
+                Color(red: 0.93, green: 0.62, blue: 0.40),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
 /// Compact floating-panel geometry shared across files so the two clips can never drift:
 /// the host layer mask (`LaunchpadOverlayController.open()`, clips SwiftUI content) and the
 /// backdrop `maskImage` (clips the behind-window blur) must use the same radius.

@@ -327,4 +327,53 @@ final class LaunchpadLayoutMathTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(tiny.width, 0)
         XCTAssertGreaterThanOrEqual(tiny.height, 0)
     }
+
+    // MARK: Shared slot / cell-local frames (live grid + settings preview)
+
+    /// Pins the cell-local hardcodes the live cell view was built around (icon centred
+    /// at y = 8; label 2pt side insets, 8 below the icon). `LaunchpadGridCellView` and
+    /// the settings preview both read THESE — changing them is a conscious act that
+    /// moves both surfaces together, never a silent preview drift.
+    func testCellLocalIconAndLabelFramesPinTheHistoricalLayout() {
+        let shown = LaunchpadGridMetrics()   // 64pt, labels shown
+        XCTAssertEqual(shown.iconFrameInCell, CGRect(x: 26, y: 8, width: 64, height: 64),
+                       "icon 居中：(116 − 64) / 2 = 26，y = iconTopInset")
+        XCTAssertEqual(shown.labelFrameInCell, CGRect(x: 2, y: 80, width: 112, height: 32),
+                       "label：x = 2，y = 8 + 64 + 8，宽 = cellWidth − 4")
+
+        let hidden = LaunchpadGridMetrics.resolve(LaunchpadAppearance(showsLabels: false))
+        XCTAssertEqual(hidden.iconFrameInCell, CGRect(x: 14, y: 8, width: 64, height: 64),
+                       "隐名 cellWidth = 92 → (92 − 64) / 2 = 14")
+        XCTAssertEqual(hidden.labelFrameInCell.height, 0, "隐名 label 高度收为 0")
+    }
+
+    /// Pins `slotRect`'s centring contract — floored whole-point left inset, row-major
+    /// pitch — byte-compatible with the formula that lived inline in
+    /// `LaunchpadGridContainerView.slotRect` before the extraction.
+    func testSlotRectPinsFlooredCentringAndRowMajorPitch() {
+        let metrics = LaunchpadGridMetrics()
+        // 11 columns @116 + 10 gaps @8 → grid 1356; (1416 − 1356) / 2 = 30.
+        let first = LaunchpadLayoutMath.slotRect(
+            index: 0, columns: 11, containerWidth: 1416, metrics: metrics)
+        XCTAssertEqual(first, CGRect(x: 30, y: 0, width: 116, height: 124))
+
+        let second = LaunchpadLayoutMath.slotRect(
+            index: 1, columns: 11, containerWidth: 1416, metrics: metrics)
+        XCTAssertEqual(second.minX, first.minX + 124, "横向 pitch = cellWidth + columnSpacing")
+
+        let nextRow = LaunchpadLayoutMath.slotRect(
+            index: 11, columns: 11, containerWidth: 1416, metrics: metrics)
+        XCTAssertEqual(nextRow.minX, first.minX, "row-major 换行回到首列")
+        XCTAssertEqual(nextRow.minY, 140, "纵向 pitch = cellHeight + rowSpacing")
+
+        // Fractional leftover floors to a whole point: (1417 − 1356) / 2 = 30.5 → 30.
+        let odd = LaunchpadLayoutMath.slotRect(
+            index: 0, columns: 11, containerWidth: 1417, metrics: metrics)
+        XCTAssertEqual(odd.minX, 30, "inset 向下取整（与真实容器一致）")
+
+        // Narrower than the grid: inset clamps at 0 instead of going negative.
+        let cramped = LaunchpadLayoutMath.slotRect(
+            index: 0, columns: 11, containerWidth: 1000, metrics: metrics)
+        XCTAssertEqual(cramped.minX, 0)
+    }
 }

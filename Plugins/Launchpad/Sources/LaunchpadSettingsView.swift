@@ -196,15 +196,17 @@ struct LaunchpadSettingsView: View {
         )
     }
 
-    /// Appearance group (features 7+8). Changes take effect the next time the launcher
+    /// Appearance group (features 7+8+9). Changes take effect the next time the launcher
     /// is summoned (the overlay snapshots the resolved metrics at `open()`); the layout
-    /// preview (design §4, P3) will land as this card's first row.
+    /// preview in the first row tracks every published preference live — pure math, no IO.
     private var appearanceSection: some View {
         section(
             title: localization.string("settings.appearance.title", defaultValue: "外观"),
             icon: "paintbrush"
         ) {
             VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                LaunchpadLayoutPreviewView(preferences: preferences, localization: localization)
+                Divider()
                 row(
                     title: localization.string(
                         "settings.appearance.showNames.title",
@@ -360,19 +362,12 @@ struct LaunchpadSettingsView: View {
     /// Inline glass preview (G6): the settings window taking key always closes the overlay,
     /// so tuning would otherwise be blind. A desktop-ish gradient underlay + the SAME recipe
     /// glass (within-window, so it samples the gradient) + the dim layer — live, since it
-    /// binds the published preferences directly. The layout-preview feature (design §4)
-    /// absorbs this recipe as its canvas background later; keep it the single implementation.
+    /// binds the published preferences directly. Gradient and recipe fill are shared with
+    /// the layout preview's canvas (`LaunchpadDesktopMockGradient` / `LaunchpadRecipeGlassFill`
+    /// in LaunchpadGlassBackdrop.swift) — one implementation, per ruling G6.
     private var backgroundPreviewCard: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.26, green: 0.42, blue: 0.86),
-                    Color(red: 0.56, green: 0.36, blue: 0.78),
-                    Color(red: 0.93, green: 0.62, blue: 0.40),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            LaunchpadDesktopMockGradient()
             // Soft shapes give the blur something legible to chew on.
             Circle()
                 .fill(.white.opacity(0.55))
@@ -382,7 +377,7 @@ struct LaunchpadSettingsView: View {
                 .fill(Color(red: 0.18, green: 0.65, blue: 0.45).opacity(0.8))
                 .frame(width: 34, height: 34)
                 .offset(x: 52, y: 16)
-            previewGlass
+            LaunchpadRecipeGlassFill(recipe: preferences.backgroundRecipe)
         }
         .frame(width: 220, height: 80)
         .clipShape(RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.card, style: .continuous))
@@ -394,21 +389,6 @@ struct LaunchpadSettingsView: View {
                 defaultValue: "背景玻璃效果预览"
             )
         )
-    }
-
-    @ViewBuilder
-    private var previewGlass: some View {
-        switch preferences.backgroundRecipe {
-        case .legacyUltraThin:
-            Rectangle().fill(.ultraThinMaterial)
-        case .glass(let material, let dimOpacity, let forcesDark):
-            LaunchpadGlassBackdrop(
-                material: material,
-                blendingMode: .withinWindow,
-                forcesDarkAppearance: forcesDark
-            )
-            Rectangle().fill(.black.opacity(dimOpacity))
-        }
     }
 
     private var gridSection: some View {

@@ -41,6 +41,31 @@ extension LaunchpadGridMetrics {
             labelHeight: showsLabels ? 32 : 0
         )
     }
+
+    /// The icon area inside a cell, in CELL-LOCAL coordinates — the single source for
+    /// the live `LaunchpadGridCellView` AND the settings layout preview. Extracted for
+    /// the same anti-drift reason as `Chrome`: a mirrored copy of this formula in the
+    /// preview would drift silently the day the cell layout changes.
+    var iconFrameInCell: CGRect {
+        CGRect(
+            x: (cellWidth - iconSide) / 2,
+            y: iconTopInset,
+            width: iconSide,
+            height: iconSide
+        )
+    }
+
+    /// The label strip below the icon, cell-local (2pt side insets, `labelGap` under
+    /// the icon). With labels hidden the height collapses to 0 — the live cell hides
+    /// the field, the preview drops the bar.
+    var labelFrameInCell: CGRect {
+        CGRect(
+            x: 2,
+            y: iconTopInset + iconSide + labelGap,
+            width: cellWidth - 4,
+            height: labelHeight
+        )
+    }
 }
 
 /// Pure layout math shared by the real launcher views and (P3) the settings preview —
@@ -136,6 +161,30 @@ enum LaunchpadLayoutMath {
     /// 760 (the plate now hugs its content); at 96pt it is 832 (pinned in tests).
     static func folderPanelMaxWidth(metrics: LaunchpadGridMetrics) -> CGFloat {
         5 * metrics.cellWidth + 4 * metrics.columnSpacing + 60
+    }
+
+    /// The frame of grid slot `index` (row-major) inside a top-aligned container of
+    /// `containerWidth`: the grid block is horizontally centred with a FLOORED left
+    /// inset (whole-point cell origins, exactly like the live container). Shared by
+    /// `LaunchpadGridContainerView.slotRect` and the settings preview model — one
+    /// source, so the preview matches the live grid to the point.
+    static func slotRect(
+        index: Int,
+        columns: Int,
+        containerWidth: CGFloat,
+        metrics: LaunchpadGridMetrics
+    ) -> CGRect {
+        let columns = max(1, columns)
+        let gridWidth = CGFloat(columns) * metrics.cellWidth
+            + CGFloat(columns - 1) * metrics.columnSpacing
+        let leftInset = max(0, (containerWidth - gridWidth) / 2).rounded(.down)
+        let col = index % columns, row = index / columns
+        return CGRect(
+            x: leftInset + CGFloat(col) * (metrics.cellWidth + metrics.columnSpacing),
+            y: CGFloat(row) * (metrics.cellHeight + metrics.rowSpacing),
+            width: metrics.cellWidth,
+            height: metrics.cellHeight
+        )
     }
 
     /// Page capacity — `LaunchpadGridView.updateLayout(size:)` made pure, algorithm
