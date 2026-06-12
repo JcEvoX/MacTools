@@ -27,15 +27,20 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         LaunchpadAppItem(id: path, name: name, url: URL(fileURLWithPath: path))
     }
 
+    /// `metrics`/`columns` default to the historical layout; the appearance-parameterized
+    /// regressions (design §3.5-4) override both.
     private func makePage(
         _ items: [LaunchpadDisplayCell],
-        page: Int?
+        page: Int?,
+        metrics: LaunchpadGridMetrics = LaunchpadGridMetrics(),
+        columns: Int = 7
     ) -> (container: LaunchpadGridContainerView, grid: LaunchpadDragGrid) {
         let grid = LaunchpadDragGrid(
             items: items,
-            columns: 7,
+            columns: columns,
             selectedID: nil,
             isCompact: false,
+            metrics: metrics,
             iconProvider: { _ in NSImage() },
             onActivate: { _ in },
             onReveal: { _ in },
@@ -461,6 +466,64 @@ final class LaunchpadCrossPageCarryTests: XCTestCase {
         c0.layout()
         XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
                           "commit 后锚必须 reveal（不许永久隐身）")
+    }
+
+    // MARK: - Appearance-parameterized handoff + landing (design §3.5-4: 48-hidden / 96-shown)
+
+    /// The full cross-page story — lift, handoff, target-page make-way, seam landing,
+    /// park/reveal — re-run on resolved non-default metrics. Every cursor point derives
+    /// from the ACTUAL cell frames the metrics laid out, so grab offsets, merge hot
+    /// zones and seam classification are all exercised at the new geometry.
+    private func runRootCarryHandoffAndLanding(appearance: LaunchpadAppearance) {
+        var applied: [CarryStoreAction] = []
+        coordinator.storeApplier = { action, _ in applied.append(action); return nil }
+        let m = LaunchpadGridMetrics.resolve(appearance)
+        let columns = LaunchpadLayoutMath.pageGrid(
+            viewport: CGSize(width: 900, height: 600), metrics: m, fixedColumns: nil).columns
+        let (c0, _) = makePage(threeApps(), page: 0, metrics: m, columns: columns)
+        let (c1, _) = makePage(pageTwoApps(), page: 1, metrics: m, columns: columns)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        let frame0 = c0.cellViews[0].frame
+        let anchor = rootLift(c0, cellAt: 0,
+                              windowPoint: windowPoint(forLocal: NSPoint(x: frame0.midX, y: frame0.midY)))
+        XCTAssertTrue(coordinator.carryActive,
+                      "root lift 必须开 carry（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+        XCTAssertTrue(c0.externalDragActive)
+        XCTAssertEqual(c0.externalGapIndex, 0, "seedGap = 锚原槽")
+
+        coordinator.currentPageDidChange(1)                  // handoff to page 1
+        XCTAssertFalse(c0.externalDragActive, "源页让位收口")
+        XCTAssertTrue(c1.externalDragActive, "目标页接管让位")
+        c0.layout()
+        XCTAssertEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                       "handoff 后锚仍停泊")
+
+        // Land at E's right seam: the seam point reads the metrics-scaled frames, so a
+        // merge hot zone that grew/shrank wrongly would misclassify this as a merge.
+        let seam = NSPoint(x: c1.cellViews[1].frame.maxX - 4, y: c1.cellViews[1].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertNil(c1.stackTargetCell,
+                     "E 右缝必须是 reorder，不得 arm merge（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+        XCTAssertNotNil(c1.externalGapIndex, "目标页让位 gap 必须打开")
+        c0.endDirectDrag(atWindowPoint: windowPoint(forLocal: seam))
+
+        XCTAssertEqual(applied, [.move(id: "/Apps/A.app", target: .after("/Apps/E.app"))],
+                       "跨页落点数据语义与默认 metrics 一致")
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertFalse(c1.externalDragActive, "commit 后目标页让位收口")
+        c0.layout()
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "commit 后锚必须 reveal")
+    }
+
+    func testRootCarryHandoffAndLandingAt48HiddenLabels() {
+        runRootCarryHandoffAndLanding(appearance: LaunchpadAppearance(iconSide: 48, showsLabels: false))
+    }
+
+    func testRootCarryHandoffAndLandingAt96ShownLabels() {
+        runRootCarryHandoffAndLanding(appearance: LaunchpadAppearance(iconSide: 96, showsLabels: true))
     }
 
     func testRootCarryVirtualTailReleaseLandsAtGlobalTail() {

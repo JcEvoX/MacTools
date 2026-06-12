@@ -75,10 +75,12 @@ enum LaunchpadLayoutMath {
 
     /// The compact panel's frame on `visible` (the screen's `visibleFrame`).
     ///
-    /// P1 wiring keeps `legacyCap: true` — byte-compatible with the historical
-    /// `min(960, w × 0.72) × min(680, h × 0.82)` centred formula. P2 flips the cap off
-    /// and wires `scalePercent`/`metrics` (design §3.3, ruling A5 — removing the hard
-    /// cap is a deliberate behaviour change that must NOT ship with the P1 plumbing).
+    /// Production (P2) runs the scaled branch: `scalePercent` of the visible width, a
+    /// 4×3-grid floor that rises with the icon size, a 95% ceiling — and NO 960×680
+    /// hard cap (design §3.3, ruling A5 — a deliberate behaviour change: large screens
+    /// get a proportionally larger panel; the window-size slider is the dial). The
+    /// `legacyCap: true` branch keeps the historical `min(960, w × 0.72) ×
+    /// min(680, h × 0.82)` formula reproducible for the equivalence tests.
     static func compactFrame(
         visible: NSRect,
         scalePercent: Int = 72,
@@ -94,7 +96,14 @@ enum LaunchpadLayoutMath {
             let s = CGFloat(scalePercent) / 100
             // Floor: a 4-column × 3-row grid plus chrome must always fit (§3.3), so a
             // bigger icon raises the floor and the panel can never shrink below 4×3.
-            let minW = 4 * metrics.cellWidth + 3 * metrics.columnSpacing + 48
+            // The width floor back-adds a FOURTH columnSpacing on purpose: `pageGrid`'s
+            // byte-compat `columnsThatFit` divides by the full pitch (cellWidth +
+            // columnSpacing) without crediting the last column's missing trailing gap,
+            // so "4 cells + 3 gaps" floors at only 3 columns. The rows formula already
+            // gets this credit from its `+ rowSpacing` numerator, hence 2 rowSpacings
+            // suffice there. (48 = 2 × compact horizontalPadding; 112 = compact vertical
+            // chrome 86 + the 26pt page-indicator reserve.)
+            let minW = 4 * (metrics.cellWidth + metrics.columnSpacing) + 48
             let minH = 3 * metrics.cellHeight + 2 * metrics.rowSpacing + 112
             width = min(max(visible.width * s, minW), visible.width * 0.95)
             height = min(max(visible.height * min(s + 0.10, 0.92), minH), visible.height * 0.95)
@@ -120,17 +129,28 @@ enum LaunchpadLayoutMath {
         )
     }
 
+    /// Folder-panel plate width cap (design §1.1: 5 columns + the 30pt padding ring),
+    /// replacing the historical `maxWidth: 760` literal a 96pt icon row would overflow
+    /// (5 × 148 + 32 = 772 > 760). Pass the FOLDER metrics (labels always shown, ruling
+    /// A1). At the default 64pt this is 672 — a deliberate P2 appearance change from
+    /// 760 (the plate now hugs its content); at 96pt it is 832 (pinned in tests).
+    static func folderPanelMaxWidth(metrics: LaunchpadGridMetrics) -> CGFloat {
+        5 * metrics.cellWidth + 4 * metrics.columnSpacing + 60
+    }
+
     /// Page capacity — `LaunchpadGridView.updateLayout(size:)` made pure, algorithm
     /// byte-compatible. `fixedColumns == nil` fits columns to the width.
     ///
-    /// `clampsOverflowingFixedColumns` reserves ruling A4 for P2 (a fixed column count
-    /// that cannot fit the width gets silently clamped to what fits); the P1 wiring
-    /// passes the default `false`, preserving today's overflow behaviour exactly.
+    /// `clampsOverflowingFixedColumns` defaults to `true` since P2 (ruling A4): a fixed
+    /// column count that cannot fit the width — reachable now that icons scale to 96pt —
+    /// is silently clamped to what fits (the settings preview's "N × M" caption is the
+    /// user-facing signal). Pass `false` only to reproduce the pre-P2 overflow behaviour
+    /// (kept for the legacy-equivalence proof in tests).
     static func pageGrid(
         viewport: CGSize,
         metrics: LaunchpadGridMetrics,
         fixedColumns: Int?,
-        clampsOverflowingFixedColumns: Bool = false
+        clampsOverflowingFixedColumns: Bool = true
     ) -> (columns: Int, rows: Int) {
         func columnsThatFit(_ width: CGFloat) -> Int {
             let usable = max(width, metrics.cellWidth)

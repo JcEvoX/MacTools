@@ -91,4 +91,96 @@ final class LaunchpadPreferencesTests: XCTestCase {
         XCTAssertTrue(prefs.hiddenAppIDs.isEmpty)
         XCTAssertEqual(store.values["hiddenAppIDs"] as? [String], [])
     }
+
+    // MARK: - Appearance keys (design §3.1, P2)
+
+    func testAppearanceDefaultsWhenStorageEmpty() {
+        let prefs = LaunchpadPreferences(storage: FakePluginStorage())
+        XCTAssertEqual(prefs.iconSize, 64, "未设值 → 默认 64pt")
+        XCTAssertFalse(prefs.hidesAppNames, "取反键：未设值 = false = 显示名字（零迁移）")
+        XCTAssertEqual(prefs.compactScalePercent, 72, "未设值 → 默认 72%")
+    }
+
+    func testAppearanceRoundTrip() {
+        let store = FakePluginStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.iconSize = 96
+        prefs.hidesAppNames = true
+        prefs.compactScalePercent = 55
+        XCTAssertEqual(store.values["iconSize"] as? Int, 96)
+        XCTAssertEqual(store.values["hidesAppNames"] as? Bool, true)
+        XCTAssertEqual(store.values["compactScalePercent"] as? Int, 55)
+
+        // A fresh instance over the same storage reads the values back.
+        let reloaded = LaunchpadPreferences(storage: store)
+        XCTAssertEqual(reloaded.iconSize, 96)
+        XCTAssertTrue(reloaded.hidesAppNames)
+        XCTAssertEqual(reloaded.compactScalePercent, 55)
+    }
+
+    func testIconSizeClampAndStepOnWritePersistValidValue() {
+        let store = FakePluginStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.iconSize = 999                      // way above max
+        XCTAssertEqual(prefs.iconSize, 96)
+        XCTAssertEqual(store.values["iconSize"] as? Int, 96)
+
+        prefs.iconSize = 30                       // below min
+        XCTAssertEqual(prefs.iconSize, 48)
+
+        prefs.iconSize = 50                       // off-step → snapped to the 4pt grid
+        XCTAssertEqual(prefs.iconSize, 52)
+        XCTAssertEqual(store.values["iconSize"] as? Int, 52)
+    }
+
+    func testInvalidStoredAppearanceValuesNormalizedOnLoad() {
+        let store = FakePluginStorage()
+        store.values["iconSize"] = 47             // hand-edited: off-step + below min
+        store.values["compactScalePercent"] = 99  // above max
+        let prefs = LaunchpadPreferences(storage: store)
+        XCTAssertEqual(prefs.iconSize, 48)
+        XCTAssertEqual(prefs.compactScalePercent, 90)
+    }
+
+    func testCompactScaleClampOnWrite() {
+        let store = FakePluginStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.compactScalePercent = 10
+        XCTAssertEqual(prefs.compactScalePercent, 55)
+        XCTAssertEqual(store.values["compactScalePercent"] as? Int, 55)
+        prefs.compactScalePercent = 100
+        XCTAssertEqual(prefs.compactScalePercent, 90)
+    }
+
+    func testNormalizedIconSize() {
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(0), 64, "0 哨兵 → 默认")
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(47), 48)
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(97), 96)
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(64), 64)
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(50), 52, "步进对齐：四舍五入到 4 的倍数")
+        XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(49), 48)
+        // Every value already on the step survives unchanged.
+        for v in stride(from: 48, through: 96, by: 4) {
+            XCTAssertEqual(LaunchpadPreferences.normalizedIconSize(v), v)
+        }
+    }
+
+    func testNormalizedCompactScale() {
+        XCTAssertEqual(LaunchpadPreferences.normalizedCompactScale(0), 72, "0 哨兵 → 默认")
+        XCTAssertEqual(LaunchpadPreferences.normalizedCompactScale(54), 55)
+        XCTAssertEqual(LaunchpadPreferences.normalizedCompactScale(91), 90)
+        XCTAssertEqual(LaunchpadPreferences.normalizedCompactScale(72), 72)
+    }
+
+    /// `appearance` is the single read-only projection `resolve(_:)` consumes.
+    func testAppearanceDerivation() {
+        let prefs = LaunchpadPreferences(storage: FakePluginStorage())
+        XCTAssertEqual(prefs.appearance, LaunchpadAppearance(iconSide: 64, showsLabels: true),
+                       "默认派生 = 历史外观（byte-compat 锚点的输入端）")
+
+        prefs.iconSize = 80
+        prefs.hidesAppNames = true
+        XCTAssertEqual(prefs.appearance, LaunchpadAppearance(iconSide: 80, showsLabels: false),
+                       "showsLabels = !hidesAppNames，iconSide 跟随 iconSize")
+    }
 }

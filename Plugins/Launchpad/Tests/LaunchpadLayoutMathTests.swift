@@ -46,10 +46,14 @@ final class LaunchpadLayoutMathTests: XCTestCase {
         for size in sizes {
             for pref in preferences {
                 let expected = legacyLayout(size: size, columnsPreference: pref)
+                // `clampsOverflowingFixedColumns: false` — the historical algorithm never
+                // clamped, so the equivalence proof must run the legacy branch (production
+                // has clamped by default since P2, ruling A4 — pinned separately below).
                 let actual = LaunchpadLayoutMath.pageGrid(
                     viewport: size,
                     metrics: LaunchpadGridMetrics(),
-                    fixedColumns: pref == LaunchpadPreferences.autoColumns ? nil : pref
+                    fixedColumns: pref == LaunchpadPreferences.autoColumns ? nil : pref,
+                    clampsOverflowingFixedColumns: false
                 )
                 XCTAssertEqual(actual.columns, expected.columns,
                                "columns 漂移 @\(size) pref=\(pref)")
@@ -80,17 +84,36 @@ final class LaunchpadLayoutMathTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(grid.rows, 1)
     }
 
-    /// Overflowing fixed columns: default (P1 wiring) preserves today's no-clamp
-    /// behaviour; the opt-in flag reserved for P2 (ruling A4) clamps to what fits.
-    func testPageGridFixedColumnOverflowClampIsOptIn() {
+    /// Overflowing fixed columns clamp silently BY DEFAULT since P2 (ruling A4): a
+    /// fixed count the viewport can't hold collapses to what fits; a count that fits
+    /// is honoured exactly; the legacy no-clamp branch stays reachable via `false`.
+    func testPageGridFixedColumnOverflowClampsByDefault() {
         let viewport = CGSize(width: 500, height: 600)
-        let unclamped = LaunchpadLayoutMath.pageGrid(
-            viewport: viewport, metrics: LaunchpadGridMetrics(), fixedColumns: 8)
-        XCTAssertEqual(unclamped.columns, 8, "P1 默认不 clamp——保持现状行为")
         let clamped = LaunchpadLayoutMath.pageGrid(
+            viewport: viewport, metrics: LaunchpadGridMetrics(), fixedColumns: 8)
+        XCTAssertEqual(clamped.columns, 4, "默认 clamp：8 列放不进 500pt 宽时收到 4（拍板 A4）")
+
+        let fits = LaunchpadLayoutMath.pageGrid(
+            viewport: viewport, metrics: LaunchpadGridMetrics(), fixedColumns: 3)
+        XCTAssertEqual(fits.columns, 3, "放得下的固定列数不受 clamp 影响")
+
+        let legacy = LaunchpadLayoutMath.pageGrid(
             viewport: viewport, metrics: LaunchpadGridMetrics(), fixedColumns: 8,
-            clampsOverflowingFixedColumns: true)
-        XCTAssertEqual(clamped.columns, 4, "P2 开关：8 列放不进 500pt 宽时收到 4")
+            clampsOverflowingFixedColumns: false)
+        XCTAssertEqual(legacy.columns, 8, "显式 false 保留 P2 前的溢出行为（等价证明用）")
+    }
+
+    /// The clamp is what keeps "fixed 12 columns × 96pt icons" from overflowing a
+    /// fullscreen viewport — the concrete A4 scenario the icon-size slider introduces.
+    func testPageGridClampHandlesBigIconsWithMaxFixedColumns() {
+        let metrics = LaunchpadGridMetrics.resolve(LaunchpadAppearance(iconSide: 96))
+        let grid = LaunchpadLayoutMath.pageGrid(
+            viewport: CGSize(width: 1416, height: 842),     // fullscreen 1512×982 viewport
+            metrics: metrics,
+            fixedColumns: 12)                               // 12 × 148 + 11 × 8 = 1864pt > 1416
+        XCTAssertEqual(grid.columns, Int(1416 / (metrics.cellWidth + metrics.columnSpacing)),
+                       "12 列 96pt 图标放不下时收到可容纳列数")
+        XCTAssertLessThan(grid.columns, 12)
     }
 
     /// Bigger icons never increase capacity (48...96 property-style sweep).
@@ -164,19 +187,102 @@ final class LaunchpadLayoutMathTests: XCTestCase {
                        legacyCompactFrame(visible: visible))
     }
 
-    /// The P2 branch (cap removed, ruling A5) honours the 4×3 floor — pinned now so
-    /// wiring it later can't silently regress; NOT consumed by any P1 call site.
+    /// The production (P2) branch: the default 72% reproduces the historical frame
+    /// wherever the old 960×680 cap did not bind (laptop-class screens) — the "default
+    /// keeps today's look" half of ruling A5; the cap removal half is pinned below.
+    func testCompactFrameScaledDefaultReproducesLegacyWhereCapDidNotBind() {
+        let visible = NSRect(x: 0, y: 38, width: 1200, height: 662)   // 1200×0.72 < 960
+        let scaled = LaunchpadLayoutMath.compactFrame(
+            visible: visible, scalePercent: 72, metrics: LaunchpadGridMetrics(), legacyCap: false)
+        XCTAssertEqual(scaled, legacyCompactFrame(visible: visible),
+                       "默认 72% 在 cap 不约束的屏幕上必须复现现帧")
+    }
+
+    /// Ruling A5's behaviour change, pinned: on a large screen the scaled branch grows
+    /// past the old 960×680 cap (otherwise the new slider would be a no-op there), and
+    /// a bigger percentage yields a wider frame.
+    func testCompactFrameScaledBranchOutgrowsLegacyCapOnBigScreens() {
+        let visible = NSRect(x: 100, y: 50, width: 2560, height: 1377)
+        let scaled = LaunchpadLayoutMath.compactFrame(
+            visible: visible, scalePercent: 72, metrics: LaunchpadGridMetrics(), legacyCap: false)
+        XCTAssertGreaterThan(scaled.width, 960, "硬 cap 已移除：大屏 72% 必须超过旧 960 上限")
+        XCTAssertGreaterThan(scaled.height, 680)
+
+        let bigger = LaunchpadLayoutMath.compactFrame(
+            visible: visible, scalePercent: 90, metrics: LaunchpadGridMetrics(), legacyCap: false)
+        XCTAssertGreaterThan(bigger.width, scaled.width, "滑杆增大 → 帧单调变宽")
+    }
+
+    /// The P2 branch (cap removed, ruling A5) honours the 4×3 floor — pinned in P1 so
+    /// wiring it could not silently regress; now also the production branch. The width
+    /// floor must back-add the FOURTH columnSpacing (`columnsThatFit` divides by the
+    /// full pitch, so "4 cells + 3 gaps" floors at only 3 columns — the P2 review bug).
     func testCompactFrameScaledBranchHonoursFourByThreeFloor() {
         let metrics = LaunchpadGridMetrics.resolve(LaunchpadAppearance(iconSide: 96))
         let visible = NSRect(x: 0, y: 0, width: 1200, height: 800)
         let frame = LaunchpadLayoutMath.compactFrame(
             visible: visible, scalePercent: 55, metrics: metrics, legacyCap: false)
-        let minW = 4 * metrics.cellWidth + 3 * metrics.columnSpacing + 48
+        let minW = 4 * (metrics.cellWidth + metrics.columnSpacing) + 48
         let minH = 3 * metrics.cellHeight + 2 * metrics.rowSpacing + 112
         XCTAssertGreaterThanOrEqual(frame.width, minW)
         XCTAssertGreaterThanOrEqual(frame.height, minH)
         XCTAssertLessThanOrEqual(frame.width, visible.width * 0.95)
         XCTAssertLessThanOrEqual(frame.height, visible.height * 0.95)
+    }
+
+    /// The floor's PROMISE, not its formula: a floored compact frame must actually
+    /// render ≥ 4 columns × 3 rows once it round-trips through the production chain
+    /// compactFrame → gridViewport(.compact) → pageGrid. (The P1 pin only asserted
+    /// frame.width ≥ a mirrored minW, so a floor short by one columnSpacing stayed
+    /// green while rendering 3 columns — this chained sweep is the regression guard.)
+    func testCompactFrameFloorYieldsFourByThreeThroughTheProductionChain() {
+        for showsLabels in [true, false] {
+            for side in [CGFloat(48), 64, 96] {
+                let metrics = LaunchpadGridMetrics.resolve(
+                    LaunchpadAppearance(iconSide: side, showsLabels: showsLabels))
+                // Size the screen so the floor BINDS (×1.2: 55% of it sits below any
+                // sane floor, while the 95% ceiling still clears the floor) — computed
+                // from the 4×3 grid's true need, NOT from the production constant.
+                let need = CGSize(
+                    width: 4 * (metrics.cellWidth + metrics.columnSpacing) + 48,
+                    height: 3 * metrics.cellHeight + 2 * metrics.rowSpacing + 112)
+                let visible = NSRect(x: 0, y: 0,
+                                     width: ceil(need.width * 1.2),
+                                     height: ceil(need.height * 1.2))
+                let frame = LaunchpadLayoutMath.compactFrame(
+                    visible: visible, scalePercent: 55, metrics: metrics, legacyCap: false)
+                let viewport = LaunchpadLayoutMath.gridViewport(
+                    mode: .compact, windowSize: frame.size)
+                let grid = LaunchpadLayoutMath.pageGrid(
+                    viewport: viewport, metrics: metrics, fixedColumns: nil)
+                XCTAssertGreaterThanOrEqual(
+                    grid.columns, 4,
+                    "地板帧必须真渲染 ≥4 列（icon \(side) labels \(showsLabels)）")
+                XCTAssertGreaterThanOrEqual(
+                    grid.rows, 3,
+                    "地板帧必须真渲染 ≥3 行（icon \(side) labels \(showsLabels)）")
+            }
+        }
+    }
+
+    // MARK: folderPanelMaxWidth (P2: the 760 literal replaced by a derived cap)
+
+    /// Pins the folder plate's derived width: 672 at the default 64pt (the documented,
+    /// deliberate change from the historical 760 literal) and 832 at 96pt (the case the
+    /// literal could not hold: a 5 × 148 row is 772 > 760). Folder metrics always show
+    /// labels (ruling A1), so only the icon side varies here.
+    func testFolderPanelMaxWidthPinsDerivedWidths() {
+        XCTAssertEqual(
+            LaunchpadLayoutMath.folderPanelMaxWidth(metrics: LaunchpadGridMetrics()), 672,
+            "默认 64pt：5×116 + 4×8 + 60 = 672（取代 760 的既定外观变化）")
+        XCTAssertEqual(
+            LaunchpadLayoutMath.folderPanelMaxWidth(
+                metrics: LaunchpadGridMetrics.resolve(LaunchpadAppearance(iconSide: 96))), 832,
+            "96pt：5×148 + 4×8 + 60 = 832")
+        XCTAssertEqual(
+            LaunchpadLayoutMath.folderPanelMaxWidth(
+                metrics: LaunchpadGridMetrics.resolve(LaunchpadAppearance(iconSide: 48))), 592,
+            "48pt：5×100 + 4×8 + 60 = 592")
     }
 
     // MARK: Chrome + gridViewport

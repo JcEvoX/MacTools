@@ -55,13 +55,16 @@ final class LaunchpadDragToStackTests: XCTestCase {
         coordinator: LaunchpadDragCoordinator? = nil,
         folderContextID: String? = nil,
         pageIndex: Int? = nil,
+        metrics: LaunchpadGridMetrics = LaunchpadGridMetrics(),
+        columns: Int = 7,
         onActivate: @escaping (LaunchpadDisplayCell) -> Void = { _ in }
     ) -> LaunchpadGridContainerView {
         let grid = LaunchpadDragGrid(
             items: items,
-            columns: 7,
+            columns: columns,
             selectedID: nil,
             isCompact: false,
+            metrics: metrics,
             iconProvider: { _ in NSImage() },
             onActivate: onActivate,
             onReveal: { _ in },
@@ -167,6 +170,43 @@ final class LaunchpadDragToStackTests: XCTestCase {
         XCTAssertEqual(rec.reorders.first?.id, a.id)
         XCTAssertEqual(rec.reorders.first?.target, .after(c.id),
                        "落点必须精确为 .after(C) — before/after 颠倒或差一位会在这里暴露")
+    }
+
+    /// Appearance-parameterized merge hot zone (design §3.5-4: 48-hidden / 96-shown):
+    /// `mergeRect` scales with the icon (inset max(6, iconSide×0.125)), so the centre
+    /// must still arm and a seam drop must still resolve to an exact reorder at both
+    /// ends of the user-reachable metrics range — not just at the default 64pt.
+    func testCentreArmAndSeamReorderTrackMetrics() {
+        for appearance in [LaunchpadAppearance(iconSide: 48, showsLabels: false),
+                           LaunchpadAppearance(iconSide: 96, showsLabels: true)] {
+            let m = LaunchpadGridMetrics.resolve(appearance)
+            let columns = LaunchpadLayoutMath.pageGrid(
+                viewport: CGSize(width: 900, height: 600), metrics: m, fixedColumns: nil).columns
+            let rec = Recorder()
+            let a = app("/Apps/A.app", "A"), b = app("/Apps/B.app", "B"), c = app("/Apps/C.app", "C")
+            let container = makeContainer([.app(a), .app(b), .app(c)], rec,
+                                          metrics: m, columns: columns)
+            let cells = container.cellViews
+
+            // Capture the seam BEFORE updateDrag re-layouts (slot geometry is stable).
+            let rightOfC = NSPoint(x: cells[2].frame.maxX - 4, y: cells[2].frame.midY)
+            container.beginDirectDrag(cells[0], atWindowPoint: .zero)        // drag A
+            container.updateDrag(at: centre(of: cells[1]))
+            XCTAssertTrue(container.stackTargetCell === cells[1],
+                          "B 图标中心必须 arm merge（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+
+            // Move on to C's right SEAM (a different cell, so the same-cell anti-jitter
+            // keep-alive does not apply): merge clears, the reorder gap opens.
+            container.updateDrag(at: rightOfC)
+            XCTAssertNil(container.stackTargetCell,
+                         "C 右缝必须清除 merge、回到 reorder（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+
+            container.commitDrop(dragged: cells[0])
+            XCTAssertEqual(rec.madeFolders.count, 0, "缝隙落点不得建夹")
+            XCTAssertEqual(rec.reorders.count, 1)
+            XCTAssertEqual(rec.reorders.first?.target, .after(c.id),
+                           "缝隙落点必须精确为 .after(C)（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+        }
     }
 
     func testDraggedFolderNeverArms() {

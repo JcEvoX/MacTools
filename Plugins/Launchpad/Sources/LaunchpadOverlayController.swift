@@ -63,6 +63,19 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
     /// `preferences`, which could drift mid-session and desync frame vs. content (Codex P2).
     private var sessionMode: LaunchpadPreferences.WindowMode = .fullscreen
+    /// Grid metrics resolved from the appearance preferences at `open()` (design §1.4).
+    ///
+    /// INVARIANT — metrics are constant for the whole overlay session: every consumer
+    /// (SwiftUI pager, AppKit page grids, folder panel, carry floating window, compact
+    /// frame) reads THIS snapshot, so a settings change can only take effect on the next
+    /// summon. Mid-carry appearance changes are therefore unreachable by construction
+    /// (the settings window taking key closes the overlay via `resignKeyObserver`);
+    /// the only mid-session geometry mutations left are window resize / screen swaps,
+    /// already fail-safed by `cancelCarry(.geometryChanged)` in `syncGeometry`.
+    private var sessionMetrics = LaunchpadGridMetrics()
+    /// Compact scale captured at `open()` alongside `sessionMode` — screen-change frame
+    /// recomputation must not read live preferences either (same snapshot discipline).
+    private var sessionCompactScale = LaunchpadPreferences.defaultCompactScale
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "LaunchpadOverlay"
@@ -161,6 +174,8 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         previousApp = (front == .current) ? nil : front
         catalog.reload()
         sessionMode = preferences.windowMode      // snapshot for this session
+        sessionMetrics = LaunchpadGridMetrics.resolve(preferences.appearance)
+        sessionCompactScale = preferences.compactScalePercent
         let screen = activeScreen()
         let isCompact = sessionMode == .compact
         let frame = targetFrame(on: screen)
@@ -196,6 +211,9 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             dragCoordinator: dragCoordinator,
             columns: preferences.columns,
             isCompact: isCompact,
+            // The session metrics snapshot (design §1.4): the SwiftUI pager, the AppKit
+            // page grids and the folder panel all derive from this one injection.
+            metrics: sessionMetrics,
             hiddenAppIDs: preferences.hiddenAppIDs,
             // Snapshot, same discipline as `sessionMode`: settings changes apply on the
             // next summon (the settings window taking key closes the overlay anyway).
@@ -298,10 +316,16 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// floating panel (compact). Used for both initial placement and screen changes.
     private func targetFrame(on screen: NSScreen) -> NSRect {
         guard sessionMode == .compact else { return screen.frame }
-        // `legacyCap: true` reproduces the historical min(960/680) formula byte for
-        // byte. P2 flips it off and wires scalePercent + session metrics (design §3.3,
-        // ruling A5 — that cap removal is a deliberate, separately-shipped change).
-        return LaunchpadLayoutMath.compactFrame(visible: screen.visibleFrame, legacyCap: true)
+        // P2 (ruling A5): the scaled branch — user-tunable percentage, a 4×3 grid floor
+        // that rises with the icon size, and NO 960×680 hard cap any more (deliberate
+        // behaviour change: on large screens the default 72% now reads larger than the
+        // old capped frame; the new window-size slider is the dial for that).
+        return LaunchpadLayoutMath.compactFrame(
+            visible: screen.visibleFrame,
+            scalePercent: sessionCompactScale,
+            metrics: sessionMetrics,
+            legacyCap: false
+        )
     }
 
     // MARK: - Dismissal (Codex P0 #4)

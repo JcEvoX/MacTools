@@ -100,13 +100,21 @@ final class LaunchpadSettleFlightTests: XCTestCase {
 
     /// Root page container HOSTED IN A REAL WINDOW (the flight branch needs `container.window`
     /// for `convertToScreen`); onDragBegan mirrors production wiring (freeze the visible order).
-    private func makePage(_ items: [LaunchpadDisplayCell], page: Int) -> LaunchpadGridContainerView {
+    /// `metrics`/`columns` default to the historical layout; the appearance-parameterized
+    /// regressions (design §3.5-4) override both.
+    private func makePage(
+        _ items: [LaunchpadDisplayCell],
+        page: Int,
+        metrics: LaunchpadGridMetrics = LaunchpadGridMetrics(),
+        columns: Int = 7
+    ) -> LaunchpadGridContainerView {
         let coordinator = self.coordinator!
         let grid = LaunchpadDragGrid(
             items: items,
-            columns: 7,
+            columns: columns,
             selectedID: nil,
             isCompact: false,
+            metrics: metrics,
             iconProvider: { _ in NSImage() },
             onActivate: { _ in },
             onReveal: { _ in },
@@ -214,6 +222,60 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         XCTAssertEqual(spy.dismissCount, 1, "reveal 之后才拆浮窗")
         XCTAssertEqual(anchor.frame, framesBefore[0],
                        "reveal 必须把锚写回真实槽位（单测无 SwiftUI apply，即其原槽）")
+    }
+
+    // MARK: - Appearance-parameterized flight target (design §3.5-4: 48-hidden / 96-shown)
+
+    /// The settle target rect is pure metrics math (slot → icon rect → CarrySpace window
+    /// rect → screen): the P2 appearance system makes non-default metrics user-reachable,
+    /// so the whole release-flight protocol must hold and the target must be EXACTLY the
+    /// resolved geometry's icon rect — computed here from the metrics, never from the
+    /// production helper under test.
+    private func runFlightTargetRect(appearance: LaunchpadAppearance) {
+        let m = LaunchpadGridMetrics.resolve(appearance)
+        // The column count production's updateLayout would fit into the 900pt page.
+        let columns = LaunchpadLayoutMath.pageGrid(
+            viewport: CGSize(width: 900, height: 600), metrics: m, fixedColumns: nil).columns
+        let container = makePage(threeApps, page: 0, metrics: m, columns: columns)
+        pushGeometry()
+        coordinator.currentPageDidChange(0)
+
+        let anchor = lift(container, cellAt: 0)
+        let cFrame = container.cellViews[2].frame
+        let seam = NSPoint(x: cFrame.maxX - 4, y: cFrame.midY)
+        container.updateDirectDrag(atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertEqual(container.externalGapIndex, 2,
+                       "C 右缝在任意 metrics 下都该开末位 gap（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+        container.endDirectDrag(atWindowPoint: windowPoint(forLocal: seam))
+
+        // Expected: gap slot 2's icon rect under THESE metrics. slotRect mirrors the
+        // container (centred grid, floor-rounded inset); CarrySpace flips y against the
+        // viewport top (700); the borderless window sits at the screen origin.
+        let gridWidth = CGFloat(columns) * m.cellWidth + CGFloat(columns - 1) * m.columnSpacing
+        let leftInset = max(0, (900 - gridWidth) / 2).rounded(.down)
+        let iconX = leftInset + 2 * (m.cellWidth + m.columnSpacing) + (m.cellWidth - m.iconSide) / 2
+        let expected = NSRect(x: 100 + iconX, y: 700 - (m.iconTopInset + m.iconSide),
+                              width: m.iconSide, height: m.iconSide)
+        XCTAssertEqual(spy.settleTargets, [expected],
+                       "落点矩形必须跟随 resolve 出的几何（@\(m.iconSide)pt labels=\(m.showsLabels)）")
+
+        // The park/reveal protocol is metrics-independent — assert it anyway so a
+        // geometry-conditional regression can't hide behind the default-metrics run.
+        XCTAssertEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                       "飞行期间锚必须停泊")
+        spy.completeNextSettle()
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertEqual(spy.dismissCount, 1)
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "reveal 必须把锚写回真实槽位")
+    }
+
+    func testFlightTargetRectAt48HiddenLabels() {
+        runFlightTargetRect(appearance: LaunchpadAppearance(iconSide: 48, showsLabels: false))
+    }
+
+    func testFlightTargetRectAt96ShownLabels() {
+        runFlightTargetRect(appearance: LaunchpadAppearance(iconSide: 96, showsLabels: true))
     }
 
     // MARK: - Stale generation (AR-6)

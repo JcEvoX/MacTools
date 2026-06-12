@@ -20,6 +20,7 @@ struct LaunchpadSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             windowSection
+            appearanceSection
             backgroundSection
             gridSection
             sortSection
@@ -136,6 +137,117 @@ struct LaunchpadSettingsView: View {
                     }
                     .labelsHidden()
                     .frame(width: 110)
+                }
+                // Window-size slider (ruling A6): only meaningful in compact mode, so it
+                // shows conditionally — same expand pattern as the fixed-columns stepper.
+                if preferences.windowMode == .compact {
+                    Divider()
+                    row(
+                        title: localization.string("settings.window.size.title", defaultValue: "窗口大小"),
+                        description: localization.string(
+                            "settings.window.size.description",
+                            defaultValue: "紧凑窗口占屏幕的比例"
+                        )
+                    ) {
+                        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                            Slider(
+                                value: compactScaleBinding,
+                                in: Double(LaunchpadPreferences.minCompactScale)
+                                    ... Double(LaunchpadPreferences.maxCompactScale),
+                                step: 5
+                            )
+                            .frame(minWidth: 120, idealWidth: 160, maxWidth: 200)
+                            Text(
+                                localization.format(
+                                    "settings.window.size.value",
+                                    defaultValue: "%d%%",
+                                    preferences.compactScalePercent
+                                )
+                            )
+                            .font(PluginSettingsTheme.Typography.monospacedValue)
+                            .frame(width: 44, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Appearance (design §3.2)
+
+    private var showsAppNamesBinding: Binding<Bool> {
+        Binding(
+            get: { !preferences.hidesAppNames },
+            set: { preferences.hidesAppNames = !$0 }
+        )
+    }
+
+    private var iconSizeBinding: Binding<Double> {
+        Binding(
+            get: { Double(preferences.iconSize) },
+            set: { preferences.iconSize = Int($0.rounded()) }
+        )
+    }
+
+    private var compactScaleBinding: Binding<Double> {
+        Binding(
+            get: { Double(preferences.compactScalePercent) },
+            set: { preferences.compactScalePercent = Int($0.rounded()) }
+        )
+    }
+
+    /// Appearance group (features 7+8). Changes take effect the next time the launcher
+    /// is summoned (the overlay snapshots the resolved metrics at `open()`); the layout
+    /// preview (design §4, P3) will land as this card's first row.
+    private var appearanceSection: some View {
+        section(
+            title: localization.string("settings.appearance.title", defaultValue: "外观"),
+            icon: "paintbrush"
+        ) {
+            VStack(spacing: PluginSettingsTheme.Spacing.rowVertical) {
+                row(
+                    title: localization.string(
+                        "settings.appearance.showNames.title",
+                        defaultValue: "显示应用名称"
+                    ),
+                    description: localization.string(
+                        "settings.appearance.showNames.description",
+                        defaultValue: "关闭后仅显示图标，排列更紧凑"
+                    )
+                ) {
+                    Toggle("", isOn: showsAppNamesBinding)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+                Divider()
+                row(
+                    title: localization.string(
+                        "settings.appearance.iconSize.title",
+                        defaultValue: "图标大小"
+                    ),
+                    description: localization.string(
+                        "settings.appearance.iconSize.description",
+                        defaultValue: "每页行列数随之变化"
+                    )
+                ) {
+                    HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                        Slider(
+                            value: iconSizeBinding,
+                            in: Double(LaunchpadPreferences.minIconSize)
+                                ... Double(LaunchpadPreferences.maxIconSize),
+                            step: Double(LaunchpadPreferences.iconSizeStep)
+                        )
+                        .frame(minWidth: 160, idealWidth: 200, maxWidth: 240)
+                        Text(
+                            localization.format(
+                                "settings.appearance.iconSize.value",
+                                defaultValue: "%d pt",
+                                preferences.iconSize
+                            )
+                        )
+                        .font(PluginSettingsTheme.Typography.monospacedValue)
+                        .frame(width: 52, alignment: .trailing)
+                    }
                 }
             }
         }

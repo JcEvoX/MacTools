@@ -36,9 +36,9 @@ struct LaunchpadGridView: View {
     var isCompact: Bool = false
     /// Session grid metrics, injected by the overlay controller (single source, design
     /// §1.4): paging math, the AppKit page grids and the folder panel all read THIS —
-    /// never a private mirror. Default = the historical appearance, so callers that
-    /// don't inject (and P1 as a whole) are byte-compatible.
-    var metrics = LaunchpadGridMetrics()
+    /// never a private mirror. No default on purpose (P2): construction must inject the
+    /// session snapshot, so a new call site can't silently fall back to 64pt/labels-on.
+    var metrics: LaunchpadGridMetrics
     /// Ids hidden from the grid (snapshot at open; the live set below seeds from it).
     var hiddenAppIDs: Set<String> = []
     /// Glass background recipe, snapshotted at `open()` like `windowMode` (design §5.4 —
@@ -580,8 +580,8 @@ struct LaunchpadGridView: View {
 
     private func updateLayout(size: CGSize) {
         // Pure capacity math lives in LaunchpadLayoutMath.pageGrid (shared with the
-        // settings preview, design §1.2). Fixed-column overflow clamping (ruling A4)
-        // stays OFF until P2 — today's behaviour, preserved exactly.
+        // settings preview, design §1.2). Fixed columns that can't fit the width (e.g.
+        // 12 × 96pt icons) are silently clamped to what fits (ruling A4, P2 default).
         let grid = LaunchpadLayoutMath.pageGrid(
             viewport: size,
             metrics: metrics,
@@ -778,17 +778,27 @@ struct LaunchpadGridView: View {
     }
 
     private func folderPanel(_ folder: (id: String, name: String, items: [LaunchpadAppItem])) -> some View {
-        // Reuses the injected session metrics (design §1.4) — no ad-hoc construction.
+        // Folder-local metrics: the session's icon size, but labels ALWAYS shown (ruling
+        // A1 — finding an app inside a folder depends on its name; only the root grid
+        // follows the hide-names switch). Re-derived through the single resolve entry
+        // point, so when labels are globally shown this IS the injected session metrics.
+        let folderMetrics = LaunchpadGridMetrics.resolve(
+            LaunchpadAppearance(iconSide: metrics.iconSide, showsLabels: true))
         let cols = min(max(folder.items.count, 1), 5)              // Mac is wide; cap at 5 per row
         let rows = max(1, (folder.items.count + cols - 1) / cols)
-        let gridW = CGFloat(cols) * metrics.cellWidth + CGFloat(cols - 1) * metrics.columnSpacing
-        let gridH = CGFloat(rows) * metrics.cellHeight + CGFloat(max(0, rows - 1)) * metrics.rowSpacing
+        let gridW = CGFloat(cols) * folderMetrics.cellWidth + CGFloat(cols - 1) * folderMetrics.columnSpacing
+        let gridH = CGFloat(rows) * folderMetrics.cellHeight + CGFloat(max(0, rows - 1)) * folderMetrics.rowSpacing
         // Cap the panel so a big folder can't outgrow the launcher (a compact panel is ~560-680pt
         // tall; fullscreen leaves ~700+ after chrome). Past the cap the grid scrolls; the grid's
         // scrollWheel bubbles up (folder grids don't page) so two-finger scrolling just works.
         let maxVisibleRows = isCompact ? 3 : 4
         let visibleRows = min(rows, maxVisibleRows)
-        let visibleH = CGFloat(visibleRows) * metrics.cellHeight + CGFloat(max(0, visibleRows - 1)) * metrics.rowSpacing
+        let visibleH = CGFloat(visibleRows) * folderMetrics.cellHeight + CGFloat(max(0, visibleRows - 1)) * folderMetrics.rowSpacing
+        // Plate width cap, metrics-derived (design §1.1: 5 columns + the 30pt padding) —
+        // replaces the historical 760 literal, which a 96pt icon row would overflow.
+        // At the default 64pt this renders 672pt wide, a deliberate P2 appearance change
+        // (the plate now hugs its content). Derivation + pins live in LaunchpadLayoutMath.
+        let panelMaxWidth = LaunchpadLayoutMath.folderPanelMaxWidth(metrics: folderMetrics)
 
         return VStack(spacing: 18) {
             // Always-rendered inline-rename title: reads as a static title, edits on click
@@ -811,7 +821,7 @@ struct LaunchpadGridView: View {
             // the grid mid-drag and the unmount hook would instantly cancel the eject it serves.
             // A ScrollView whose content fits is inert (scrolling disabled below the cap).
             ScrollView(.vertical) {
-                folderGrid(folder, cols: cols, metrics: metrics)
+                folderGrid(folder, cols: cols, metrics: folderMetrics)
                     .frame(width: gridW, height: gridH)
             }
             .scrollDisabled(rows <= maxVisibleRows)
@@ -825,12 +835,9 @@ struct LaunchpadGridView: View {
         .onTapGesture { renameController.endEditing(commit: true) }
         // NOTE: this cap IS the rendered plate width, not a never-binding ceiling — a
         // maxWidth-only frame fills its proposal up to the cap, and the material
-        // background below is applied to THIS frame. Both window modes propose > 760,
-        // so every folder plate renders exactly 760pt wide today. Deriving the cap from
-        // metrics (design §1.1: 5 columns + padding) is therefore a visible width change
-        // and is deferred to P2, where it ships as a deliberate, screenshot-verified
-        // appearance change. P1 keeps the historical literal byte-for-byte.
-        .frame(maxWidth: 760)
+        // background below is applied to THIS frame. Both window modes propose more, so
+        // every folder plate renders exactly `panelMaxWidth` wide (derivation above).
+        .frame(maxWidth: panelMaxWidth)
         // TODO(G5): on macOS 26+ adopt `.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))`
         // here (folder panel + compact floating panel only — the fullscreen backdrop stays an
         // NSVisualEffectView per HIG). `#available` gated, separate commit, Tahoe screenshots.

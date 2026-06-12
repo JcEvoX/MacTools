@@ -330,6 +330,36 @@ final class LaunchpadCarryAnchorTests: XCTestCase {
         }
     }
 
+    // MARK: - Mid-carry geometry mutation fail-safe (appearance design §1.5-5)
+
+    /// A perPage change mid-carry (window resize / column reflow re-pushing geometry)
+    /// invalidates the calibration space — the coordinator must cancel, dismiss the
+    /// floating icon and restore the anchor, never try to re-calibrate in flight.
+    /// Appearance-driven metrics changes are unreachable mid-session (the overlay
+    /// snapshots metrics at open()), so this resize path is the only live mutation.
+    func testMidCarryPerPageChangeCancelsAndDismissesFloatingIcon() {
+        let container = makePage(threeApps, page: 0)
+        coordinator.syncGeometry(LaunchpadPageGeometry(
+            pageWidth: 900, gridHeight: 600, pageCount: 2, perPage: 20,
+            viewportMinX: 0, viewportTopY: 600))
+        let anchor = lift(container, cellAt: 1)
+        XCTAssertTrue(coordinator.carryActive)
+        XCTAssertTrue(spy.isPresenting)
+
+        // Same pageWidth, perPage 20 → 12 (the design's reference mutation).
+        coordinator.syncGeometry(LaunchpadPageGeometry(
+            pageWidth: 900, gridHeight: 600, pageCount: 2, perPage: 12,
+            viewportMinX: 0, viewportTopY: 600))
+
+        XCTAssertNil(coordinator.carrySession, "mid-carry perPage 变化必须 cancel（fail-safe）")
+        XCTAssertEqual(coordinator.endReason, .cancelled)
+        XCTAssertEqual(spy.dismissCount, 1, "浮窗必须随 cancel 拆除")
+        container.layout()
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "cancel 后锚必须复原（不许永久隐身）")
+        XCTAssertEqual(applierCalls, 0, "几何突变 cancel 零写盘")
+    }
+
     // MARK: - Grab offset through pushed geometry (design §2.1-4 / §5)
 
     /// The lift's grab offset must come from the PUSHED geometry, never the container frame

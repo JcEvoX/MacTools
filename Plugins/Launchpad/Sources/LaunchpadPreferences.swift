@@ -1,4 +1,5 @@
 import Combine
+import CoreGraphics
 import MacToolsPluginKit
 
 /// User-tunable launcher settings, persisted in the plugin's scoped `PluginStorage`
@@ -52,6 +53,19 @@ final class LaunchpadPreferences: ObservableObject {
     static let minColumns = 4
     static let maxColumns = 12
 
+    /// Icon size bounds (design §3.1, ruling A2): 48...96pt in 4pt steps, default 64.
+    /// `integer(forKey:)` returns 0 when unset → the 0 sentinel maps to the default.
+    static let defaultIconSize = 64
+    static let minIconSize = 48
+    static let maxIconSize = 96
+    static let iconSizeStep = 4
+
+    /// Compact-panel width as a percentage of the screen's visibleFrame (ruling A6):
+    /// 55...90%, default 72 (reproduces the historical 0.72 look on laptop screens).
+    static let defaultCompactScale = 72
+    static let minCompactScale = 55
+    static let maxCompactScale = 90
+
     @Published var windowMode: WindowMode {
         didSet { storage.set(windowMode.rawValue, forKey: Keys.windowMode) }
     }
@@ -77,6 +91,44 @@ final class LaunchpadPreferences: ObservableObject {
 
     @Published var hotCorner: HotCorner {
         didSet { storage.set(hotCorner.rawValue, forKey: Keys.hotCorner) }
+    }
+
+    // MARK: Appearance (design §3.1, features 7+8)
+
+    /// Icon side in points. Single-write-path clamp + step alignment, same discipline
+    /// as `columns` — no out-of-range or off-step value is ever persisted.
+    @Published var iconSize: Int {
+        didSet {
+            let valid = Self.normalizedIconSize(iconSize)
+            guard valid == iconSize else { iconSize = valid; return }
+            storage.set(iconSize, forKey: Keys.iconSize)
+        }
+    }
+
+    /// Negated key on purpose (design §3.1): `bool(forKey:)` returns false when unset,
+    /// so an unset key means "names shown" — today's behaviour, zero migration.
+    @Published var hidesAppNames: Bool {
+        didSet { storage.set(hidesAppNames, forKey: Keys.hidesAppNames) }
+    }
+
+    /// Compact-panel scale in whole percent (PluginStorage has no double accessor).
+    @Published var compactScalePercent: Int {
+        didSet {
+            let valid = Self.normalizedCompactScale(compactScalePercent)
+            guard valid == compactScalePercent else { compactScalePercent = valid; return }
+            storage.set(compactScalePercent, forKey: Keys.compactScalePercent)
+        }
+    }
+
+    /// The single input to `LaunchpadGridMetrics.resolve(_:)` (and, later, the settings
+    /// layout preview). Read-only derivation — features 7/8 own the writes above.
+    /// The overlay snapshots the resolved metrics at `open()` (same session discipline
+    /// as `windowMode`): appearance changes apply on the NEXT summon, never mid-session.
+    var appearance: LaunchpadAppearance {
+        LaunchpadAppearance(
+            iconSide: CGFloat(Self.normalizedIconSize(iconSize)),
+            showsLabels: !hidesAppNames
+        )
     }
 
     // MARK: Glass background (design §5)
@@ -117,6 +169,9 @@ final class LaunchpadPreferences: ObservableObject {
         static let columns = "columns"
         static let hidden = "hiddenAppIDs"
         static let hotCorner = "hotCorner"
+        static let iconSize = "iconSize"
+        static let hidesAppNames = "hidesAppNames"
+        static let compactScalePercent = "compactScalePercent"
         static let backgroundStyle = "backgroundStyle"
         static let backgroundMaterial = "backgroundMaterial"
         static let backgroundDimPercent = "backgroundDimPercent"
@@ -124,6 +179,22 @@ final class LaunchpadPreferences: ObservableObject {
 
     static func normalizedColumns(_ value: Int) -> Int {
         value == autoColumns ? autoColumns : min(max(value, minColumns), maxColumns)
+    }
+
+    /// 0 (unset sentinel) → default; otherwise clamp to 48...96 and snap to the 4pt
+    /// step (round-to-nearest, so a hand-edited 50 becomes 52, never an off-step size).
+    static func normalizedIconSize(_ value: Int) -> Int {
+        guard value != 0 else { return defaultIconSize }
+        let clamped = min(max(value, minIconSize), maxIconSize)
+        let snapped = minIconSize
+            + ((clamped - minIconSize + iconSizeStep / 2) / iconSizeStep) * iconSizeStep
+        return min(snapped, maxIconSize)
+    }
+
+    /// 0 (unset sentinel) → default 72; otherwise clamp to 55...90.
+    static func normalizedCompactScale(_ value: Int) -> Int {
+        guard value != 0 else { return defaultCompactScale }
+        return min(max(value, minCompactScale), maxCompactScale)
     }
 
     init(storage: PluginStorage) {
@@ -134,6 +205,11 @@ final class LaunchpadPreferences: ObservableObject {
         self.columns = Self.normalizedColumns(storage.integer(forKey: Keys.columns))
         self.hiddenAppIDs = Set(storage.stringArray(forKey: Keys.hidden) ?? [])
         self.hotCorner = HotCorner(rawValue: storage.string(forKey: Keys.hotCorner) ?? "") ?? .off
+        // 0-when-unset is safe as a sentinel here: both valid ranges start well above 0.
+        self.iconSize = Self.normalizedIconSize(storage.integer(forKey: Keys.iconSize))
+        self.hidesAppNames = storage.bool(forKey: Keys.hidesAppNames)
+        self.compactScalePercent = Self.normalizedCompactScale(
+            storage.integer(forKey: Keys.compactScalePercent))
         // Unknown raw values (a downgrade wrote a future style) fall back to the default,
         // same pattern as `windowMode`.
         self.backgroundStyle = LaunchpadBackgroundStyle(
