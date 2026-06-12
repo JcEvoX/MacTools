@@ -197,6 +197,57 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
     }
 
+    func testInstalledCatalogItemsUseSummaryAsDetailText() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let store = makeStore()
+        let installedRecord = try store.installPackage(from: sourceURL)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+        let snapshot = makeCatalogSnapshot(entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0")])
+
+        manager.rebuildManagementItems(catalogSnapshot: snapshot)
+
+        let item = try XCTUnwrap(manager.pluginManagementItems.first)
+        XCTAssertEqual(item.state, .enabled)
+        XCTAssertEqual(item.detailText, "示例插件")
+        XCTAssertNotEqual(item.detailText, installedRecord.packageURL.path)
+    }
+
+    func testInstalledItemDetailKeepsStatusSpecificMessages() {
+        let packageURL = URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin", isDirectory: true)
+        let enabledItem = makeManagementItem(state: .enabled, packageURL: packageURL)
+        let disabledItem = makeManagementItem(state: .disabled, packageURL: packageURL)
+        let restartingItem = makeManagementItem(
+            state: .enabled,
+            packageURL: packageURL,
+            requiresRestartToFullyUnload: true
+        )
+        let updatingItem = makeManagementItem(
+            state: .updateAvailable(installedVersion: "1.0.0", catalogVersion: "2.0.0"),
+            packageURL: packageURL
+        )
+
+        XCTAssertEqual(enabledItem.detailText, "示例插件")
+        XCTAssertEqual(disabledItem.detailText, "示例插件")
+        XCTAssertNotEqual(enabledItem.detailText, packageURL.path)
+        XCTAssertNotEqual(disabledItem.detailText, packageURL.path)
+        XCTAssertEqual(
+            restartingItem.detailText,
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterUpdate",
+                defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            )
+        )
+        XCTAssertEqual(
+            updatingItem.detailText,
+            AppL10n.pluginsFormat(
+                "plugin.detail.updateAvailableFormat",
+                defaultValue: "已安装 %@，可更新到 %@。",
+                "1.0.0",
+                "2.0.0"
+            )
+        )
+    }
+
     func testManagementItemsCarryReleaseChannelFromManifestAndCatalog() throws {
         let sourceURL = try makePackage(id: "com.example.demo", releaseChannel: "beta")
         let store = makeStore()
@@ -332,6 +383,23 @@ final class DynamicPluginManagerTests: XCTestCase {
                 size: 42
             ),
             releaseChannel: releaseChannel
+        )
+    }
+
+    private func makeManagementItem(
+        state: PluginManagementItem.State,
+        packageURL: URL,
+        requiresRestartToFullyUnload: Bool = false
+    ) -> PluginManagementItem {
+        PluginManagementItem(
+            id: "com.example.demo",
+            title: "Demo",
+            summary: "示例插件",
+            version: "1.0.0",
+            state: state,
+            packageURL: packageURL,
+            requiresRestartToFullyUnload: requiresRestartToFullyUnload,
+            releaseNotesURL: nil
         )
     }
 

@@ -81,13 +81,13 @@ struct PluginManagementItem: Identifiable, Equatable {
                 return AppL10n.plugins("plugin.detail.restartRequiredAfterUpdate", defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。")
             }
 
-            return packageURL?.path ?? summary ?? ""
+            return summary ?? ""
         case .disabled:
             if requiresRestartToFullyUnload {
                 return AppL10n.plugins("plugin.detail.restartRequiredAfterRemoval", defaultValue: "已移出界面，重启后彻底释放已加载代码。")
             }
 
-            return packageURL?.path ?? summary ?? ""
+            return summary ?? ""
         case let .updateAvailable(installedVersion, catalogVersion):
             return AppL10n.pluginsFormat(
                 "plugin.detail.updateAvailableFormat",
