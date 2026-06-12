@@ -190,16 +190,22 @@ final class MenuBarStatusItemController: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            let movedWindowIdentifier = (notification.object as? NSWindow).map { ObjectIdentifier($0) }
             MainActor.assumeIsolated {
-                self?.snapshotVisibleControlItemPreferredPositionIfNeeded(for: notification)
+                self?.snapshotVisibleControlItemPreferredPositionIfNeeded(
+                    forMovedWindowIdentifier: movedWindowIdentifier
+                )
             }
         }
     }
 
-    private func snapshotVisibleControlItemPreferredPositionIfNeeded(for notification: Notification) {
+    private func snapshotVisibleControlItemPreferredPositionIfNeeded(
+        forMovedWindowIdentifier movedWindowIdentifier: ObjectIdentifier?
+    ) {
         guard
-            let movedWindow = notification.object as? NSWindow,
-            movedWindow === statusItem.button?.window
+            let movedWindowIdentifier,
+            let statusItemWindow = statusItem.button?.window,
+            movedWindowIdentifier == ObjectIdentifier(statusItemWindow)
         else {
             return
         }
