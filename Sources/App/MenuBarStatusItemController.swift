@@ -38,6 +38,8 @@ final class MenuBarStatusItemController: NSObject {
     private var globalEventMonitor: Any?
     private var appActivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
+    private var appTerminationObserver: NSObjectProtocol?
+    private var statusItemWindowMoveObserver: NSObjectProtocol?
     private var animationTimer: DispatchSourceTimer?
     private var animationLoadSampleTimer: Timer?
     private let animationLoadMonitor = MenuBarIconAnimationLoadMonitor()
@@ -78,6 +80,7 @@ final class MenuBarStatusItemController: NSObject {
                 self?.removeDismissMonitorsIfNeeded()
             }
         )
+        observeStatusItemPositionPersistence()
         configureStatusItem()
         observePluginHost()
         observeIconSettings()
@@ -102,6 +105,12 @@ final class MenuBarStatusItemController: NSObject {
             animationLoadSampleTimer?.invalidate()
             if let appearanceObserver {
                 DistributedNotificationCenter.default().removeObserver(appearanceObserver)
+            }
+            if let appTerminationObserver {
+                NotificationCenter.default.removeObserver(appTerminationObserver)
+            }
+            if let statusItemWindowMoveObserver {
+                NotificationCenter.default.removeObserver(statusItemWindowMoveObserver)
             }
         }
     }
@@ -167,12 +176,44 @@ final class MenuBarStatusItemController: NSObject {
         configureAnimationIfNeeded(payload)
     }
 
+    private func observeStatusItemPositionPersistence() {
+        appTerminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
+        }
+
+        statusItemWindowMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                self?.snapshotVisibleControlItemPreferredPositionIfNeeded(for: notification)
+            }
+        }
+    }
+
+    private func snapshotVisibleControlItemPreferredPositionIfNeeded(for notification: Notification) {
+        guard
+            let movedWindow = notification.object as? NSWindow,
+            movedWindow === statusItem.button?.window
+        else {
+            return
+        }
+
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
+    }
+
     private func resetStatusItemPosition() {
         dismissPanels()
 
         let oldItem = statusItem
         NSStatusBar.system.removeStatusItem(oldItem)
         MenuBarControlItemDefaults.resetVisibleControlItemPosition()
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
 
         let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
