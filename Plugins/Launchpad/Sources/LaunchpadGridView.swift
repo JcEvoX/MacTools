@@ -207,7 +207,14 @@ struct LaunchpadGridView: View {
                     .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
             }
         }
-        .onAppear { selectedIndex = 0; currentPage = 0; sessionHidden = hiddenAppIDs }
+        .onAppear {
+            selectedIndex = 0; currentPage = 0; sessionHidden = hiddenAppIDs
+            // The coordinator outlives this view (controller-owned): a previous session torn
+            // down with its folder open would otherwise leave the Esc ladder's middle rung
+            // armed forever — every later Esc would be swallowed by a folder that no longer
+            // exists. Fresh session, fresh mirror.
+            dragCoordinator.folderPanelDidChange(open: false)
+        }
         // Mid-drag: the app left the folder → zoom the folder closed NOW while the drag continues
         // (kept mounted so the folder cell stays the live mouse-event target until release). Driven
         // by the coordinator's @Published flag so this runs in a tracked SwiftUI transaction.
@@ -222,6 +229,7 @@ struct LaunchpadGridView: View {
             if case .folder = visual.origin {       // finish unmounting the (already zoomed) folder
                 openFolderID = nil
                 folderShown = false
+                dragCoordinator.folderPanelDidChange(open: false)
             }
             // One animation for re-select + virtual-page collapse: the dot retracting and the
             // viewport falling back to the last real page read as a single motion (§6.2).
@@ -244,6 +252,19 @@ struct LaunchpadGridView: View {
             else { return }
             pendingRenameFocusID = id
             openFolderPanel(id: id)
+        }
+        // Esc with a folder open (design §2.4 middle rung): the controller's key monitor can't
+        // reach SwiftUI state, so it publishes a request and the view runs the real close path
+        // (commit a live rename, zoom out). A stale request with no folder open is a no-op
+        // (`closeFolder` guards on `openFolderID`).
+        .onChange(of: dragCoordinator.folderCloseRequestToken) { _, _ in
+            closeFolder()
+        }
+        // Safety net for the coordinator's folder-visibility mirror: the panel can die without
+        // `closeFolder()` ever running (the open folder emptied or dissolved underneath) — re-sync
+        // from the derived value so the Esc ladder can never get stuck on the folder rung.
+        .onChange(of: openFolder?.id) { _, id in
+            if id == nil { dragCoordinator.folderPanelDidChange(open: false) }
         }
         // Declared AFTER the commitToken handler — on a commit, the landing re-selection above
         // must win before this cancel-shaped fallback could run (§6.4, AR-8).
@@ -452,6 +473,7 @@ struct LaunchpadGridView: View {
     private func openFolderPanel(id: String) {
         openFolderID = id
         folderShown = false
+        dragCoordinator.folderPanelDidChange(open: true)   // arms the Esc ladder's middle rung
         DispatchQueue.main.async { if openFolderID == id { folderShown = true } }  // next tick → zoom
     }
 
@@ -720,6 +742,9 @@ struct LaunchpadGridView: View {
 
     private func closeFolder() {
         guard let id = openFolderID else { return }
+        // Disarm the Esc middle rung immediately (not at the unmount 0.34s later): a second
+        // Esc during the zoom-out should already reach the close-overlay rung.
+        dragCoordinator.folderPanelDidChange(open: false)
         // Closing with a rename in flight (scrim tap / typing-to-search) commits it first —
         // the panel may stay mounted for the zoom-out, so dismantle alone is too late (§2.3).
         renameController.endEditing(commit: true)
@@ -869,6 +894,7 @@ struct LaunchpadGridView: View {
             onActivate: { cell in
                 if case .app(let appItem) = cell {
                     openFolderID = nil          // clear up front, in case launch doesn't tear down
+                    dragCoordinator.folderPanelDidChange(open: false)
                     onActivate(appItem)
                 }
             },

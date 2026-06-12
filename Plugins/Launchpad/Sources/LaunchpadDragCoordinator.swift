@@ -160,6 +160,29 @@ final class LaunchpadDragCoordinator: ObservableObject {
     /// Created-folder id staged at a FLIGHT commit, published by the reveal (`finishSettle`).
     private var pendingRevealFolderID: String?
 
+    /// Mirror of the grid view's folder-panel visibility, written by the view at its open/close
+    /// seams (`openFolderPanel` / `closeFolder` / the commit unmount / the derived safety net).
+    /// The overlay controller's Esc key monitor reads it to implement the §2.4 ladder's MIDDLE
+    /// rung — close the open folder before the launcher — without reaching into SwiftUI state.
+    @Published private(set) var isFolderOpen = false
+    /// Esc-ladder middle rung (design §2.4): bumped by the controller's key monitor when Esc
+    /// should close the open folder instead of the launcher. Consumed by the grid view's
+    /// `.onChange` — only the view owns the close choreography (commit a live rename, zoom out).
+    /// Purely visual and safe to lose on teardown (a torn-down overlay closes everything anyway).
+    @Published private(set) var folderCloseRequestToken = 0
+
+    /// View → coordinator folder-visibility sync. Deduped so the semantic seams plus the
+    /// derived safety-net `.onChange` don't republish redundantly.
+    func folderPanelDidChange(open: Bool) {
+        guard isFolderOpen != open else { return }
+        isFolderOpen = open
+    }
+
+    /// Controller → view: ask the grid to run `closeFolder()` (the Esc ladder's middle rung).
+    func requestFolderClose() {
+        folderCloseRequestToken += 1
+    }
+
     /// Edge-dwell page-flip request (design §4.4). Published from the dwell state machine — never
     /// from inside a mouse handler's withAnimation — and consumed by the grid's `.onChange`, which
     /// calls `goToPage` in a tracked transaction. Withdrawn (nil) on release/cancel so a flip
@@ -560,7 +583,7 @@ final class LaunchpadDragCoordinator: ObservableObject {
         // harness, or classification that never settled. All of those degrade to the hard-cut
         // dismiss further down — the deliberate choice over an in-place fade: the icon vanishes
         // at the cursor and the landed cell reveals in the same mouseUp stack.
-        let settleScreenRect = settleTargetScreenRect()
+        var settleScreenRect = settleTargetScreenRect()
         Self.carryTrace("carryReleased p=\(p) target=\(String(describing: releaseTarget)) result=\(result) engaged=\(currentTargetContainer != nil) editable=\(session.editableAtBegin) settleRect=\(String(describing: settleScreenRect))")
 
         // DATA lands here, synchronously in mouseUp. Editability uses the value frozen at lift —
@@ -584,6 +607,25 @@ final class LaunchpadDragCoordinator: ObservableObject {
                 // tests (token/pendingEject assertions).
                 Self.logger.fault("carry commit resolved to a store action but no storeApplier is injected — data dropped")
             }
+        }
+
+        // BR-3b cross-page degrade (§8): the commit channel re-anchors the viewport to the
+        // LANDING page (relocateSelection + the pageCount clamp run off commitToken). When the
+        // committed landing falls on a DIFFERENT page than the drop viewport — a gap-0 drop on
+        // a later page shifts the landing index back across the page boundary; a merge that
+        // swallows the last page's lone item shrinks pageCount — those writes slide/clamp the
+        // pager while the 0.25s flight is still airborne: the exact "floating icon lands on a
+        // page that just slid away" failure the settling freeze exists to prevent. Same degrade
+        // family as the empty-virtual-page and gap≥capacity cases: hard-cut, reveal in the
+        // mouseUp stack. An unpredictable landing (stale ids, no geometry) keeps the flight —
+        // the prediction replays the same frozen order the commit itself resolved against.
+        if settleScreenRect != nil, let landedID = landingID, geometry.perPage > 0,
+           let landingIndex = Self.predictedLandingIndex(action: action, landingID: landedID,
+                                                         frozenOrder: session.frozenVisibleOrder),
+           landingIndex / geometry.perPage != currentTargetPage {
+            Self.carryTrace("settle DEGRADE cross-page landing idx=\(landingIndex) " +
+                            "page=\(landingIndex / geometry.perPage) targetPage=\(currentTargetPage)")
+            settleScreenRect = nil
         }
 
         pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
@@ -794,6 +836,59 @@ final class LaunchpadDragCoordinator: ObservableObject {
                 return .move(id: commit.itemID, target: .after(last.layoutID))
             }
         }
+    }
+
+    /// Predicts the landing cell's flat index in the COMMITTED visible order by replaying the
+    /// resolved store action over the order frozen at drag start — the same premise the settle
+    /// flight already rests on (§7.3-1: the store materializes from this very order, so the
+    /// committed board is the frozen board with the action applied). Insert semantics mirror
+    /// `LaunchpadLayoutStore`: remove first, a stale target appends at the tail, a make-folder
+    /// replaces the target's slot, and a dissolving 2-app source folder swaps to its survivor
+    /// IN PLACE — which leaves every flat index unchanged, so targets that referenced the folder
+    /// id still resolve to the right slot. Returns nil when the landing id cannot be located;
+    /// callers treat that as "unknown" and keep today's behaviour. Pure and static so unit
+    /// tests drive every branch without a session or a window.
+    static func predictedLandingIndex(action: CarryStoreAction, landingID: String,
+                                      frozenOrder: [LaunchpadDisplayCell]) -> Int? {
+        var ids = frozenOrder.map(\.layoutID)
+        func insert(_ id: String, at target: LaunchpadDropTarget?) {
+            switch target {
+            case .before(let t):
+                if let i = ids.firstIndex(of: t) { ids.insert(id, at: i) } else { ids.append(id) }
+            case .after(let t):
+                if let i = ids.firstIndex(of: t) { ids.insert(id, at: i + 1) } else { ids.append(id) }
+            case nil:
+                ids.append(id)
+            }
+        }
+        switch action {
+        case .none:
+            return nil
+        case .move(let id, let target):
+            ids.removeAll { $0 == id }
+            insert(id, at: target)
+        case .makeFolder(let targetAppID, let draggedID):
+            ids.removeAll { $0 == draggedID }
+            guard let i = ids.firstIndex(of: targetAppID) else { return nil }
+            ids[i] = landingID
+        case .addToFolder(_, let appID):
+            // Landing is the EXISTING destination folder; only the dragged root cell leaves.
+            ids.removeAll { $0 == appID }
+        case .moveOutOfFolder(_, let appID, let result):
+            // The carried app has no root cell while folder-borne; the source folder either
+            // shrinks (its cell stays) or dissolves into its survivor (positional swap) —
+            // root flat indices are unaffected either way.
+            switch result {
+            case .reorder(let target):
+                insert(appID, at: target)
+            case .makeFolder(let targetAppID):
+                guard let i = ids.firstIndex(of: targetAppID) else { return nil }
+                ids[i] = landingID
+            case .addToFolder:
+                break
+            }
+        }
+        return ids.firstIndex(of: landingID)
     }
 
     // MARK: - Legacy eject API (thin shims — design §0 naming table; existing tests + the

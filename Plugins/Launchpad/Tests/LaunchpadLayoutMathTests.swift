@@ -188,8 +188,10 @@ final class LaunchpadLayoutMathTests: XCTestCase {
     }
 
     /// The production (P2) branch: the default 72% reproduces the historical frame
-    /// wherever the old 960×680 cap did not bind (laptop-class screens) — the "default
-    /// keeps today's look" half of ruling A5; the cap removal half is pinned below.
+    /// wherever the old 960×680 cap did not bind — i.e. visibleFrame at or under
+    /// ~1333×829pt, which means SMALL screens only. NOT laptop-class screens: modern
+    /// built-in displays all exceed the width threshold at default scaled resolution
+    /// and grow instead (final-review scope correction; pinned exactly below).
     func testCompactFrameScaledDefaultReproducesLegacyWhereCapDidNotBind() {
         let visible = NSRect(x: 0, y: 38, width: 1200, height: 662)   // 1200×0.72 < 960
         let scaled = LaunchpadLayoutMath.compactFrame(
@@ -211,6 +213,24 @@ final class LaunchpadLayoutMathTests: XCTestCase {
         let bigger = LaunchpadLayoutMath.compactFrame(
             visible: visible, scalePercent: 90, metrics: LaunchpadGridMetrics(), legacyCap: false)
         XCTAssertGreaterThan(bigger.width, scaled.width, "滑杆增大 → 帧单调变宽")
+    }
+
+    /// A5 scope correction, pinned (final review): the old cap bound whenever the
+    /// visibleFrame exceeded ~1333pt wide or ~829pt tall — every modern built-in laptop
+    /// screen at default scaled resolution qualifies (1512/1470/1728pt wide), NOT just
+    /// external monitors. The 14" MBP delta is pinned exactly so the record can never
+    /// again claim laptop screens stay byte-equal to the old formula.
+    func testCompactFrameScaledDefaultGrowsPastLegacyCapOnBuiltInLaptopScreens() {
+        let visible = NSRect(x: 0, y: 0, width: 1512, height: 944)   // 14" MBP, default scaled resolution
+        let legacy = legacyCompactFrame(visible: visible)
+        XCTAssertEqual(legacy.size, NSSize(width: 960, height: 680), "前提：旧 cap 在内建 1512×944 上生效")
+
+        let scaled = LaunchpadLayoutMath.compactFrame(
+            visible: visible, scalePercent: 72, metrics: LaunchpadGridMetrics(), legacyCap: false)
+        XCTAssertEqual(scaled.width, 1512 * 0.72, accuracy: 0.001)   // 1088.64 — ~13% wider than 960
+        XCTAssertEqual(scaled.height, 944 * 0.82, accuracy: 0.001)   // 774.08 — ~14% taller than 680
+        XCTAssertNotEqual(scaled.size, legacy.size,
+                          "内建笔记本屏不是 byte-equal 旧公式——A5 行为变化覆盖所有现代内建屏（终审修正）")
     }
 
     /// The P2 branch (cap removed, ruling A5) honours the 4×3 floor — pinned in P1 so

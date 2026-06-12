@@ -102,10 +102,13 @@ enum LaunchpadLayoutMath {
     ///
     /// Production (P2) runs the scaled branch: `scalePercent` of the visible width, a
     /// 4×3-grid floor that rises with the icon size, a 95% ceiling — and NO 960×680
-    /// hard cap (design §3.3, ruling A5 — a deliberate behaviour change: large screens
-    /// get a proportionally larger panel; the window-size slider is the dial). The
-    /// `legacyCap: true` branch keeps the historical `min(960, w × 0.72) ×
-    /// min(680, h × 0.82)` formula reproducible for the equivalence tests.
+    /// hard cap (design §3.3, ruling A5 — a deliberate behaviour change: any screen
+    /// whose visibleFrame exceeds ~1333×829pt gets a proportionally larger panel, and
+    /// that includes ALL modern built-in laptop displays at default scaled resolution,
+    /// not just external monitors — final-review scope correction; the window-size
+    /// slider is the dial). The `legacyCap: true` branch keeps the historical
+    /// `min(960, w × 0.72) × min(680, h × 0.82)` formula reproducible for the
+    /// equivalence tests.
     static func compactFrame(
         visible: NSRect,
         scalePercent: Int = 72,

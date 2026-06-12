@@ -106,7 +106,8 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         _ items: [LaunchpadDisplayCell],
         page: Int,
         metrics: LaunchpadGridMetrics = LaunchpadGridMetrics(),
-        columns: Int = 7
+        columns: Int = 7,
+        frozenOrder: [LaunchpadDisplayCell]? = nil
     ) -> LaunchpadGridContainerView {
         let coordinator = self.coordinator!
         let grid = LaunchpadDragGrid(
@@ -126,7 +127,7 @@ final class LaunchpadSettleFlightTests: XCTestCase {
             onReorder: { _, _ in },
             onMakeFolder: { _, _ in },
             onAddToFolder: { _, _ in },
-            onDragBegan: { coordinator.freezeVisibleOrder(items) },
+            onDragBegan: { coordinator.freezeVisibleOrder(frozenOrder ?? items) },
             onPageSwipe: { _ in },
             onPageDrag: { _, _, _ in },
             onPageScroll: { _, _ in },
@@ -142,9 +143,9 @@ final class LaunchpadSettleFlightTests: XCTestCase {
     }
 
     /// Same window-space convention as the cross-page tests: viewport at (100, top 700).
-    private func pushGeometry() {
+    private func pushGeometry(pageCount: Int = 1, perPage: Int = 21) {
         coordinator.syncGeometry(LaunchpadPageGeometry(
-            pageWidth: 900, gridHeight: 600, pageCount: 1, perPage: 21,
+            pageWidth: 900, gridHeight: 600, pageCount: pageCount, perPage: perPage,
             viewportMinX: 100, viewportTopY: 700))
     }
 
@@ -615,5 +616,175 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         XCTAssertEqual(spy.dismissCount, 1, "force-complete 必须同步拆旧浮窗")
         XCTAssertTrue(deferredDismissals.isEmpty, "force-complete 不走延迟通道")
         XCTAssertEqual(coordinator.carrySession?.itemID, appB.id)
+    }
+
+    // MARK: - Cross-page landing → hard-cut, never a flight (BR-3b: the commit channel's
+    // relocateSelection / pageCount clamp slides the pager mid-flight when the committed
+    // landing page differs from the drop viewport)
+
+    private var appD: LaunchpadAppItem { app("/Apps/D.app", "D") }
+    private var appE: LaunchpadAppItem { app("/Apps/E.app", "E") }
+    private var appF: LaunchpadAppItem { app("/Apps/F.app", "F") }
+
+    /// Two real pages at perPage 3: page 0 full [A,B,C], page 1 [D,E,F]; the frozen order
+    /// spans both pages, exactly like production's `filtered` snapshot.
+    private func makeTwoPageBoard(
+        pageOne: [LaunchpadDisplayCell]
+    ) -> (source: LaunchpadGridContainerView, target: LaunchpadGridContainerView) {
+        let frozen = threeApps + pageOne
+        let source = makePage(threeApps, page: 0, frozenOrder: frozen)
+        let target = makePage(pageOne, page: 1, frozenOrder: frozen)
+        pushGeometry(pageCount: 2, perPage: 3)
+        coordinator.currentPageDidChange(0)
+        return (source, target)
+    }
+
+    /// The finding's concrete trigger: carry A from page 0, drop at GAP 0 of page 1 (left
+    /// seam of its first cell). The store move is `.before(D)`, and removing A from page 0
+    /// shifts the landing back to page 0's TAIL — the commit channel would animate
+    /// currentPage 1→0 while the flight is still aimed at page 1's slot 0.
+    func testCrossPageBoundaryReorderDegradesToHardCut() {
+        var applied: [CarryStoreAction] = []
+        coordinator.storeApplier = { action, _ in
+            applied.append(action)
+            if case .move(let id, _) = action { return id }     // production returns the moved id
+            return nil
+        }
+        let (source, target) = makeTwoPageBoard(pageOne: [.app(appD), .app(appE), .app(appF)])
+
+        let anchor = lift(source, cellAt: 0)                    // carry A
+        coordinator.currentPageDidChange(1)                     // dwell flip → handoff to page 1
+        XCTAssertTrue(target.externalDragActive, "前提：page-1 容器已被 engage")
+
+        let dFrame = target.cellViews[0].frame
+        let seam = NSPoint(x: dFrame.minX + 4, y: dFrame.midY)  // D 左缝 → gap 0
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertEqual(target.externalGapIndex, 0, "前提：page-1 槽 0 让位 gap")
+
+        source.endDirectDrag(atWindowPoint: windowPoint(forLocal: seam))
+
+        // DATA: unchanged by the visual branch choice — A moves before D.
+        XCTAssertEqual(applied, [.move(id: appA.id, target: .before(appD.id))])
+
+        // VISUAL: landing index 2 → page 0 ≠ drop page 1 → hard-cut in the mouseUp stack.
+        XCTAssertEqual(spy.settleTargets, [], "跨页落点不得起飞——飞行会追着正在滑走的页（BR-3b）")
+        XCTAssertEqual(spy.pendingSettleCount, 0)
+        XCTAssertTrue(capturedTimeouts.isEmpty, "hard-cut 不武装超时兜底")
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertNil(coordinator.settlingItemID)
+        XCTAssertEqual(spy.dismissCount, 1)
+        XCTAssertFalse(coordinator.hasFloatingWindow, "浮窗必须在 mouseUp 栈内同步拆除")
+        XCTAssertFalse(target.externalDragActive, "engaged 容器在 hard-cut 中收口")
+        XCTAssertEqual(coordinator.endReason, .committed)
+        source.layout()
+        XCTAssertNotEqual(anchor.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
+                          "hard-cut 必须同步 reveal 锚")
+    }
+
+    /// The "same family" merge variant: carry A from page 0 onto the LONE item of last
+    /// page 1 → makeFolder. The new folder lands at page 0's tail and pageCount shrinks
+    /// 2→1 — both the relocate and the clamp would slide the pager mid-flight.
+    func testLastPageMergeShrinkDegradesToHardCut() {
+        coordinator.storeApplier = { action, _ in
+            if case .makeFolder = action { return "FOLDER-NEW" }
+            return nil
+        }
+        let (source, target) = makeTwoPageBoard(pageOne: [.app(appD)])
+
+        lift(source, cellAt: 0)                                 // carry A
+        coordinator.currentPageDidChange(1)
+        let centre = NSPoint(x: target.cellViews[0].frame.midX,
+                             y: target.cellViews[0].frame.midY)
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: centre))
+        XCTAssertNotNil(target.stackTargetCell, "前提：merge 已 arm")
+
+        source.endDirectDrag(atWindowPoint: windowPoint(forLocal: centre))
+
+        // landing: [A,B,C,D] − A → [B,C,D] → D 槽变新夹 → index 2 → page 0 ≠ 1 → hard-cut.
+        XCTAssertEqual(spy.settleTargets, [], "缩页 merge 不得起飞——commit clamp 会在飞行中滑页")
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertNil(coordinator.settlingItemID, "hard-cut 不设停泊谓词")
+        XCTAssertEqual(spy.dismissCount, 1)
+        // Hard-cut publishes the created-folder reveal in this same mouseUp stack.
+        XCTAssertEqual(coordinator.folderRevealToken, 1)
+        XCTAssertEqual(coordinator.revealedFolderID, "FOLDER-NEW")
+    }
+
+    /// Control: a cross-page drop whose landing stays ON the drop page must still fly —
+    /// the degrade gate must not kill legitimate cross-page flights.
+    func testCrossPageSameLandingPageStillFlies() {
+        coordinator.storeApplier = { action, _ in
+            if case .move(let id, _) = action { return id }
+            return nil
+        }
+        let (source, target) = makeTwoPageBoard(pageOne: [.app(appD), .app(appE), .app(appF)])
+
+        lift(source, cellAt: 0)                                 // carry A
+        coordinator.currentPageDidChange(1)
+        let dFrame = target.cellViews[0].frame
+        let seam = NSPoint(x: dFrame.maxX - 4, y: dFrame.midY)  // D 右缝 → gap 1
+        coordinator.carryMoved(atScreenPoint: .zero, atWindowPoint: windowPoint(forLocal: seam))
+        XCTAssertEqual(target.externalGapIndex, 1)
+
+        source.endDirectDrag(atWindowPoint: windowPoint(forLocal: seam))
+
+        // landing: [A,B,C,D,E,F] − A → insert after D → [B,C,D,A,E,F] → index 3 → page 1 ==
+        // drop page → the flight proceeds exactly as before the gate.
+        XCTAssertEqual(spy.settleTargets.count, 1, "同页落点的跨页拖拽仍然起飞（gate 不得过度降级）")
+        XCTAssertEqual(coordinator.carrySession?.state, .settling(generation: 1))
+        spy.completeNextSettle()
+        XCTAssertNil(coordinator.carrySession)
+        XCTAssertEqual(spy.dismissCount, 1)
+    }
+
+    // MARK: - predictedLandingIndex pure table
+
+    func testPredictedLandingIndexReplaysStoreSemantics() {
+        let frozen: [LaunchpadDisplayCell] = [
+            .app(appA), .app(appB), .app(appC), .app(appD), .app(appE), .app(appF),
+        ]
+        // move before: A removed from index 0, re-inserted before D → index 2.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .move(id: appA.id, target: .before(appD.id)),
+            landingID: appA.id, frozenOrder: frozen), 2)
+        // move after: → index 3.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .move(id: appA.id, target: .after(appD.id)),
+            landingID: appA.id, frozenOrder: frozen), 3)
+        // move with nil target → global tail.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .move(id: appA.id, target: nil),
+            landingID: appA.id, frozenOrder: frozen), 5)
+        // stale move target → store appends at the tail; the prediction must match.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .move(id: appA.id, target: .before("/Apps/Gone.app")),
+            landingID: appA.id, frozenOrder: frozen), 5)
+        // makeFolder: dragged A leaves, target D's slot becomes the new folder → index 2.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .makeFolder(targetAppID: appD.id, draggedID: appA.id),
+            landingID: "NEW", frozenOrder: frozen), 2)
+        // addToFolder: landing is the EXISTING folder, shifted by the dragged app's removal.
+        let withFolder: [LaunchpadDisplayCell] = [
+            .app(appA), .app(appB), .folder(id: "F1", name: "夹", items: [appC]), .app(appD),
+        ]
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .addToFolder(folderID: "F1", appID: appA.id),
+            landingID: "F1", frozenOrder: withFolder), 1)
+        // moveOutOfFolder reorder: the carried app has no root cell; it inserts at the target.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .moveOutOfFolder(folderID: "F1", appID: "/Apps/X.app",
+                                     result: .reorder(.before(appB.id))),
+            landingID: "/Apps/X.app", frozenOrder: withFolder), 1)
+        // moveOutOfFolder makeFolder: target D's slot becomes the new folder → index 3.
+        XCTAssertEqual(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .moveOutOfFolder(folderID: "F1", appID: "/Apps/X.app",
+                                     result: .makeFolder(targetAppID: appD.id)),
+            landingID: "NEW", frozenOrder: withFolder), 3)
+        // unlocatable landing id → nil (callers keep today's behaviour).
+        XCTAssertNil(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .makeFolder(targetAppID: "/Apps/Gone.app", draggedID: appA.id),
+            landingID: "NEW", frozenOrder: frozen))
+        XCTAssertNil(LaunchpadDragCoordinator.predictedLandingIndex(
+            action: .none, landingID: appA.id, frozenOrder: frozen))
     }
 }

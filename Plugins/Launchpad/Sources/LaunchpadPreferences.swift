@@ -61,7 +61,12 @@ final class LaunchpadPreferences: ObservableObject {
     static let iconSizeStep = 4
 
     /// Compact-panel width as a percentage of the screen's visibleFrame (ruling A6):
-    /// 55...90%, default 72 (reproduces the historical 0.72 look on laptop screens).
+    /// 55...90%, default 72. A5 scope correction (final review): 72% matches the historical
+    /// frame only where the old 960×680 cap did NOT bind — visibleFrame ≤ ~1333pt wide and
+    /// ≤ ~829pt tall. Every modern built-in laptop screen at default scaled resolution
+    /// exceeds the width threshold (14" MBP 1512pt, 13.6" Air 1470pt, 16" MBP 1728pt), so
+    /// compact-mode users there see a ~13% larger panel after the cap removal; the
+    /// window-size slider is the dial back down.
     static let defaultCompactScale = 72
     static let minCompactScale = 55
     static let maxCompactScale = 90

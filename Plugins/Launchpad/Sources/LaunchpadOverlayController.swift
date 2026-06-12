@@ -317,9 +317,11 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     private func targetFrame(on screen: NSScreen) -> NSRect {
         guard sessionMode == .compact else { return screen.frame }
         // P2 (ruling A5): the scaled branch — user-tunable percentage, a 4×3 grid floor
-        // that rises with the icon size, and NO 960×680 hard cap any more (deliberate
-        // behaviour change: on large screens the default 72% now reads larger than the
-        // old capped frame; the new window-size slider is the dial for that).
+        // that rises with the icon size, and NO 960×680 hard cap any more. Deliberate
+        // behaviour change whose scope is wider than "large screens" (final-review
+        // correction): the old cap bound on any visibleFrame over ~1333×829pt, which
+        // includes every modern built-in laptop display — those users get a ~13% larger
+        // default panel; the new window-size slider is the dial for that.
         return LaunchpadLayoutMath.compactFrame(
             visible: screen.visibleFrame,
             scalePercent: sessionCompactScale,
@@ -329,6 +331,37 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     }
 
     // MARK: - Dismissal (Codex P0 #4)
+
+    /// Where an Esc keystroke lands — the design §2.4 ladder: cancel the rename (route the
+    /// event to the field editor) → close the open folder → close the launcher. Static and
+    /// value-typed so the whole ladder is unit-testable without a window or a key event.
+    enum EscapeResolution: Equatable {
+        case routeToFieldEditor, closeFolder, closeOverlay
+    }
+
+    static func resolveEscape(firstResponder: NSResponder?,
+                              isFolderOpen: Bool,
+                              carryLive: Bool) -> EscapeResolution {
+        // Mid-IME-composition Esc must cancel the candidate window: let the event through
+        // to the field editor (Codex P1). Its own `cancelOperation` handles the rest.
+        if let editor = firstResponder as? NSTextView, editor.hasMarkedText() {
+            return .routeToFieldEditor
+        }
+        // A folder rename being edited owns Esc — the rename field editor's `cancelOperation`
+        // restores the original name. Checked BEFORE the folder rung so cancelling the edit
+        // never closes the folder underneath it.
+        if LaunchpadFolderRenameField.shouldRouteEsc(to: firstResponder) {
+            return .routeToFieldEditor
+        }
+        // Middle rung: an open folder closes before the launcher does. Skipped while a carry
+        // session is live (carrying OR settling) — Esc mid-carry keeps the historical
+        // abort-everything semantics (`close()` → `cancelCarry`), and during an eject the
+        // panel is already zoomed shut anyway.
+        if isFolderOpen, !carryLive {
+            return .closeFolder
+        }
+        return .closeOverlay
+    }
 
     /// Close on Esc / app deactivation only — NOT on every key/main loss. IME candidate
     /// windows, permission dialogs and Space switches steal key status and must not
@@ -341,22 +374,25 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// responder, covering activation-failure cases (Codex P2 #4).
     private func installDismissHandlers(for session: LaunchpadOverlayWindow) {
         tokens.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            // Esc — but not while the search field is mid-IME-composition: there Esc must
-            // cancel the candidate window, so let the event through to the field editor
-            // (Codex P1). The field editor's own `cancelOperation` still closes us when
-            // there's no marked text.
+            // Esc — resolved through the §2.4 ladder rule below (unit-tested): cancel an
+            // IME composition / a live rename first, then close an open folder, and only
+            // then the launcher itself.
             if event.keyCode == 53 {
-                if let editor = self?.window?.firstResponder as? NSTextView, editor.hasMarkedText() {
+                guard let self else { return event }
+                switch Self.resolveEscape(firstResponder: self.window?.firstResponder,
+                                          isFolderOpen: self.dragCoordinator.isFolderOpen,
+                                          carryLive: self.dragCoordinator.carrySession != nil) {
+                case .routeToFieldEditor:
                     return event
+                case .closeFolder:
+                    // The grid view owns the close choreography (commit a live rename, zoom
+                    // out), so publish a request instead of mutating SwiftUI state from here.
+                    self.dragCoordinator.requestFolderClose()
+                    return nil
+                case .closeOverlay:
+                    self.close()
+                    return nil
                 }
-                // Second exemption (design §2.4): a folder rename being edited owns Esc —
-                // the field editor's `cancelOperation` restores the original name. The Esc
-                // ladder: cancel the rename first, only then dismissal.
-                if LaunchpadFolderRenameField.shouldRouteEsc(to: self?.window?.firstResponder) {
-                    return event
-                }
-                self?.close()
-                return nil
             }
             return event
         }
