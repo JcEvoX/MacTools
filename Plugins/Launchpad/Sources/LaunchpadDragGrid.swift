@@ -593,25 +593,32 @@ final class LaunchpadGridContainerView: NSView {
     }
 
     /// True when the DRAGGED CELL has clearly left the folder's cell cluster. Decided entirely in the
-    /// container's OWN coordinate space — the cell's laid-out frame vs the union of the grid slots —
-    /// never via a window→view conversion. `convert(_:from:)` is unreliable through the folder
-    /// overlay's SwiftUI `scaleEffect`/centering, which made small in-folder reorders falsely eject;
-    /// the cell frame and the slots share one coordinate system, so this matches what the user sees.
-    /// The zone grows the slot union generously (most on top) to cover the panel's title + padding.
+    /// container's OWN coordinate space — the cell's laid-out frame vs the visible grid rect — never
+    /// via a window→view conversion. `convert(_:from:)` is unreliable through the folder overlay's
+    /// SwiftUI `scaleEffect`/centering, which made small in-folder reorders falsely eject; the cell
+    /// frame and the visible rect share one coordinate system, so this matches what the user sees.
+    ///
+    /// The boundary is the grid's VISIBLE rect, with no outward growth. The folder grid lives inside
+    /// a clip view, so the instant the cell's centre leaves the visible rect the cell is clipped
+    /// invisible. Ejecting exactly here raises the floating icon while the cell is still mostly
+    /// visible — closing the gap that previously let the cell vanish into the clipped region 60-170pt
+    /// before the eject (and the float) caught up. A reorder keeps the cell centre inside the visible
+    /// rect, so it never trips this.
     private func draggedClearlyOutsideFolder(_ cell: LaunchpadGridCellView) -> Bool {
-        let union = (0..<cells.count).map(slotRect).reduce(CGRect.null) { $0.union($1) }
-        var base = union.isNull ? bounds : union
-        // A row-capped folder scrolls: the content extends beyond the clip view, so measuring
-        // against the full slot union would leave a blind zone where the lifted icon is clipped
-        // invisible yet still counts as "inside" (a downward eject would be unreachable). Clamp
-        // to the portion the user can actually see.
+        let centre = NSPoint(x: cell.frame.midX, y: cell.frame.midY)
+        // Primary boundary: the clip view's visible rect (the region the user can actually see).
         if let scrollView = enclosingScrollView {
-            let clipped = base.intersection(scrollView.documentVisibleRect)
-            if !clipped.isEmpty { base = clipped }
+            return !scrollView.documentVisibleRect.contains(centre)
         }
+        // No clip view (not expected for a real folder grid — only windowless tests and any
+        // detached fallback). Without a visible rect we can't tell "clipped" from "still shown",
+        // so keep the previous generous slot-union zone: an in-grid reorder near the edge must
+        // not falsely eject.
+        let union = (0..<cells.count).map(slotRect).reduce(CGRect.null) { $0.union($1) }
+        let base = union.isNull ? bounds : union
         let region = CGRect(x: base.minX - 60, y: base.minY - 110,
                             width: base.width + 120, height: base.height + 170)
-        return !region.contains(NSPoint(x: cell.frame.midX, y: cell.frame.midY))
+        return !region.contains(centre)
     }
 
     /// Tear down the local drag state after an in-folder app is ejected to the root — no in-folder

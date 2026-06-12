@@ -79,29 +79,49 @@ struct LaunchpadGridView: View {
     /// Stable handle into the bridged rename field, so SwiftUI-side hooks (blank tap, folder
     /// close, in-folder drag start) can end the edit session explicitly (design §2.3/§2.7).
     @State private var renameController = LaunchpadFolderRenameController()
+    /// Backs the `filtered` memoization. Reference type so cached cells persist across
+    /// body passes; mutating it never invalidates the view (it is a pure cache).
+    @State private var filteredCache = FilteredCache()
     /// Shared chrome constants (search bar, paddings, page-dot reserve) — single-sourced
     /// in `LaunchpadLayoutMath.Chrome` so the settings preview can't drift (design §1.1).
     private var chrome: LaunchpadLayoutMath.Chrome { .standard(isCompact: isCompact) }
 
+    /// Memoized: the reconcile projection is pure in these inputs, so a body pass
+    /// that changes only paging state (`pageDragTranslation`) — i.e. every frame of
+    /// a two-finger page swipe — reuses the cached cells instead of rebuilding the
+    /// folder projection per frame. The cache key is the FULL input set; a stale key
+    /// would surface wrong icons after paging, so every dependency is included and
+    /// compared exactly (Array `==` is O(1) on the unchanged COW buffer during paging).
     private var filtered: [LaunchpadDisplayCell] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Search is a flat, folder-agnostic projection: every matching app surfaces as its own
-        // `.app` cell, folders dissolved (design §6). Clearing the query returns to the layout.
-        guard query.isEmpty else { return searchResults(query: query).map(LaunchpadDisplayCell.app) }
-        // Layout state: custom order + folders via the pure reconcile projection. `layout == nil`
-        // → alphabetical `.app`-only cells, byte-for-byte the previous behaviour (design §5.2:
-        // output set == visible, only order differs).
-        let cells = LaunchpadLayoutReconciler
-            .reconcile(apps: catalog.apps, layout: layoutStore.layout, hidden: sessionHidden)
-        // During a folder carry, hide the carried app from its source folder's thumbnail (display
-        // only — the data isn't touched until release, preserving the drop-back-in revert).
-        guard dragCoordinator.folderEjectActive,
-              let appID = dragCoordinator.carriedAppID,
-              let folderID = dragCoordinator.carriedSourceFolderID
-        else { return cells }
-        return cells.map { cell in
-            guard case .folder(let id, let name, let items) = cell, id == folderID else { return cell }
-            return .folder(id: id, name: name, items: items.filter { $0.id != appID })
+        let inputs = FilteredInputs(
+            apps: catalog.apps,
+            layout: layoutStore.layout,
+            sessionHidden: sessionHidden,
+            searchText: searchText,
+            folderEjectActive: dragCoordinator.folderEjectActive,
+            carriedAppID: dragCoordinator.carriedAppID,
+            carriedSourceFolderID: dragCoordinator.carriedSourceFolderID
+        )
+        return filteredCache.resolve(inputs) {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Search is a flat, folder-agnostic projection: every matching app surfaces as its own
+            // `.app` cell, folders dissolved (design §6). Clearing the query returns to the layout.
+            guard query.isEmpty else { return searchResults(query: query).map(LaunchpadDisplayCell.app) }
+            // Layout state: custom order + folders via the pure reconcile projection. `layout == nil`
+            // → alphabetical `.app`-only cells, byte-for-byte the previous behaviour (design §5.2:
+            // output set == visible, only order differs).
+            let cells = LaunchpadLayoutReconciler
+                .reconcile(apps: catalog.apps, layout: layoutStore.layout, hidden: sessionHidden)
+            // During a folder carry, hide the carried app from its source folder's thumbnail (display
+            // only — the data isn't touched until release, preserving the drop-back-in revert).
+            guard dragCoordinator.folderEjectActive,
+                  let appID = dragCoordinator.carriedAppID,
+                  let folderID = dragCoordinator.carriedSourceFolderID
+            else { return cells }
+            return cells.map { cell in
+                guard case .folder(let id, let name, let items) = cell, id == folderID else { return cell }
+                return .folder(id: id, name: name, items: items.filter { $0.id != appID })
+            }
         }
     }
 
@@ -851,6 +871,7 @@ struct LaunchpadGridView: View {
             }
             .scrollDisabled(rows <= maxVisibleRows)
             .frame(width: gridW, height: visibleH)
+            .launchpadHidingScrollEdgeEffect()
         }
         .padding(30)
         // Clicking the panel's own blank space (padding / title gaps) commits an in-flight
@@ -989,5 +1010,51 @@ private struct LaunchpadViewportRelay: NSViewRepresentable {
         view.pageCount = pageCount
         view.perPage = perPage
         view.pushGeometry()
+    }
+}
+
+/// The full dependency set of `LaunchpadGridView.filtered`. Equatable so the cache
+/// can compare it exactly — every input that changes the projected cells is here,
+/// so a cache hit can never serve stale icons.
+private struct FilteredInputs: Equatable {
+    var apps: [LaunchpadAppItem]
+    var layout: LaunchpadLayout?
+    var sessionHidden: Set<String>
+    var searchText: String
+    var folderEjectActive: Bool
+    var carriedAppID: String?
+    var carriedSourceFolderID: String?
+}
+
+/// Memo cache for the folder reconcile projection. During a page swipe the inputs are
+/// unchanged (same COW buffers), so `resolve` returns the cached cells in O(1) without
+/// rebuilding the projection each frame.
+@MainActor
+private final class FilteredCache {
+    private var inputs: FilteredInputs?
+    private var value: [LaunchpadDisplayCell] = []
+
+    func resolve(_ newInputs: FilteredInputs, compute: () -> [LaunchpadDisplayCell]) -> [LaunchpadDisplayCell] {
+        if let inputs, inputs == newInputs { return value }
+        let computed = compute()
+        inputs = newInputs
+        value = computed
+        return computed
+    }
+}
+
+private extension View {
+    /// Hides the macOS 26+ scroll edge effect — the faint line the system draws
+    /// at a scroll view's edge — which otherwise shows as a stray bar across the
+    /// top of an open folder's grid. No-op below macOS 26. The `#available`
+    /// branch is fixed per OS (not a runtime row-count flip), so it does not
+    /// violate the single-view-identity constraint the folder ScrollView needs.
+    @ViewBuilder
+    func launchpadHidingScrollEdgeEffect() -> some View {
+        if #available(macOS 26.0, *) {
+            scrollEdgeEffectHidden(true, for: .all)
+        } else {
+            self
+        }
     }
 }

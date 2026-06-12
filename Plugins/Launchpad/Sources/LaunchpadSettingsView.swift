@@ -120,7 +120,9 @@ struct LaunchpadSettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 168)
+                    // Intrinsic width (see the glass-style picker below) so the
+                    // 2-segment control never overflows its card on either language.
+                    .fixedSize()
                 }
                 Divider()
                 row(
@@ -308,7 +310,13 @@ struct LaunchpadSettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 224)
+                    // Take the control's intrinsic width instead of a hardcoded
+                    // value: a 4-segment control's intrinsic minimum (~250pt) is
+                    // wider than the old 224, so NSSegmentedControl overdrew past
+                    // the frame and spilled out of the card. fixedSize adapts to
+                    // the label language (zh/en) and the row's trailing Spacer
+                    // keeps it inside the card.
+                    .fixedSize()
                 }
                 if preferences.backgroundStyle == .custom {
                     Divider()
