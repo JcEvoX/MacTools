@@ -9,11 +9,13 @@ struct PluginManagementSettingsView: View {
     @State private var activeOperationID: String?
     @State private var searchText: String = ""
     @State private var selectedFilter: PluginCategoryFilter = .all
+    @State private var bulkUpdateProgressText: String?
+    @State private var bulkUpdateProgressOpacity: Double = 0
+    @State private var bulkUpdateProgressHideTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             header
-            automaticUpdateBanner
 
             if pluginHost.pluginManagementItems.isEmpty {
                 ContentUnavailableView(
@@ -86,6 +88,12 @@ struct PluginManagementSettingsView: View {
         } message: {
             Text(alertMessage ?? "")
         }
+        .onAppear {
+            syncAutomaticBulkUpdateProgress(pluginHost.automaticPluginUpdateStatus)
+        }
+        .onChange(of: pluginHost.automaticPluginUpdateStatus) { _, status in
+            syncAutomaticBulkUpdateProgress(status)
+        }
     }
 
     private var filteredItems: [PluginManagementItem] {
@@ -127,21 +135,26 @@ struct PluginManagementSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if hasAvailablePluginUpdates {
+            if shouldShowBulkUpdateControls {
+                bulkUpdateProgressLabel
+
                 Button {
-                    runOperation(id: "catalog.updateAll") {
-                        try await pluginHost.updateAvailablePluginsFromCatalog()
-                    }
+                    runBulkUpdate()
                 } label: {
                     PluginManagementActionLabel(
                         title: AppL10n.plugins("plugin.marketplace.updateAll", defaultValue: "全部更新"),
                         busyTitle: AppL10n.plugins("plugin.marketplace.updating", defaultValue: "更新中"),
-                        isBusy: activeOperationID == "catalog.updateAll",
+                        isBusy: isBulkPluginUpdateBusy,
                         width: 74
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(activeOperationID != nil || pluginHost.pluginCatalogStatus.isRefreshing)
+                .disabled(
+                    activeOperationID != nil
+                        || !hasAvailablePluginUpdates
+                        || pluginHost.pluginCatalogStatus.isRefreshing
+                        || pluginHost.automaticPluginUpdateStatus.isActive
+                )
             }
 
             Button {
@@ -152,43 +165,11 @@ struct PluginManagementSettingsView: View {
                 Label(AppL10n.plugins("plugin.marketplace.refresh", defaultValue: "刷新列表"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
-            .disabled(activeOperationID != nil || pluginHost.pluginCatalogStatus.isRefreshing)
-        }
-    }
-
-    @ViewBuilder
-    private var automaticUpdateBanner: some View {
-        if pluginHost.automaticPluginUpdateStatus.isVisible {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(automaticUpdateTint.opacity(0.14))
-
-                    if pluginHost.automaticPluginUpdateStatus.isActive {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.78)
-                    } else {
-                        Image(systemName: automaticUpdateIconName)
-                            .font(PluginSettingsTheme.Typography.sectionTitle.weight(.semibold))
-                            .foregroundStyle(automaticUpdateTint)
-                    }
-                }
-                .frame(width: PluginSettingsTheme.Size.metricIcon, height: PluginSettingsTheme.Size.metricIcon)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(pluginHost.automaticPluginUpdateStatus.title)
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-
-                    Text(pluginHost.automaticPluginUpdateStatus.detailText)
-                        .font(PluginSettingsTheme.Typography.rowDescription)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(PluginSettingsTheme.Spacing.cardContent)
-            .pluginSettingsCardBackground(.host)
+            .disabled(
+                activeOperationID != nil
+                    || pluginHost.pluginCatalogStatus.isRefreshing
+                    || pluginHost.automaticPluginUpdateStatus.isActive
+            )
         }
     }
 
@@ -196,25 +177,25 @@ struct PluginManagementSettingsView: View {
         pluginHost.pluginManagementItems.contains { $0.canUpdate }
     }
 
-    private var automaticUpdateTint: Color {
-        switch pluginHost.automaticPluginUpdateStatus.phase {
-        case .idle, .checking, .updating:
-            return .accentColor
-        case .completed:
-            return .green
-        case .failed:
-            return .orange
-        }
+    private var shouldShowBulkUpdateControls: Bool {
+        hasAvailablePluginUpdates || isBulkPluginUpdateBusy || bulkUpdateProgressText != nil
     }
 
-    private var automaticUpdateIconName: String {
-        switch pluginHost.automaticPluginUpdateStatus.phase {
-        case .idle, .checking, .updating:
-            return "arrow.triangle.2.circlepath"
-        case .completed:
-            return "checkmark.circle.fill"
-        case .failed:
-            return "exclamationmark.triangle.fill"
+    private var isBulkPluginUpdateBusy: Bool {
+        activeOperationID == "catalog.updateAll"
+            || pluginHost.automaticPluginUpdateStatus.phase == .updating
+    }
+
+    @ViewBuilder
+    private var bulkUpdateProgressLabel: some View {
+        if let bulkUpdateProgressText {
+            Text(bulkUpdateProgressText)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .opacity(bulkUpdateProgressOpacity)
         }
     }
 
@@ -226,6 +207,7 @@ struct PluginManagementSettingsView: View {
         }
 
         activeOperationID = id
+        hideBulkUpdateProgressText()
 
         Task {
             do {
@@ -238,6 +220,118 @@ struct PluginManagementSettingsView: View {
         }
     }
 
+    private func runBulkUpdate() {
+        guard activeOperationID == nil,
+              !pluginHost.automaticPluginUpdateStatus.isActive
+        else {
+            return
+        }
+
+        activeOperationID = "catalog.updateAll"
+        bulkUpdateProgressHideTask?.cancel()
+        showBulkUpdateProgressText(
+            AppL10n.pluginsFormat(
+                "plugin.marketplace.bulkUpdate.progressFormat",
+                defaultValue: "已完成 %d/%d",
+                0,
+                availablePluginUpdateCount
+            )
+        )
+
+        Task {
+            do {
+                try await pluginHost.updateAvailablePluginsFromCatalog { progress in
+                    showBulkUpdateProgressText(
+                        AppL10n.pluginsFormat(
+                            "plugin.marketplace.bulkUpdate.progressFormat",
+                            defaultValue: "已完成 %d/%d",
+                            progress.completedCount,
+                            progress.totalCount
+                        )
+                    )
+                }
+
+                activeOperationID = nil
+                showBulkUpdateProgressText(
+                    AppL10n.plugins("plugin.marketplace.bulkUpdate.completed", defaultValue: "更新完成")
+                )
+                scheduleBulkUpdateProgressFadeOut()
+            } catch {
+                activeOperationID = nil
+                alertMessage = error.localizedDescription
+                hideBulkUpdateProgressText()
+            }
+        }
+    }
+
+    private func showBulkUpdateProgressText(_ text: String) {
+        bulkUpdateProgressHideTask?.cancel()
+        bulkUpdateProgressText = text
+
+        withAnimation(.easeOut(duration: 0.15)) {
+            bulkUpdateProgressOpacity = 1
+        }
+    }
+
+    private func scheduleBulkUpdateProgressFadeOut() {
+        bulkUpdateProgressHideTask?.cancel()
+        bulkUpdateProgressHideTask = Task {
+            withAnimation(.easeOut(duration: 2)) {
+                bulkUpdateProgressOpacity = 0
+            }
+
+            try? await Task.sleep(for: .seconds(2))
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            bulkUpdateProgressText = nil
+        }
+    }
+
+    private func syncAutomaticBulkUpdateProgress(_ status: PluginAutomaticUpdateStatus) {
+        switch status.phase {
+        case .updating:
+            guard !status.pluginIDs.isEmpty else {
+                return
+            }
+
+            showBulkUpdateProgressText(
+                status.message
+                    ?? AppL10n.pluginsFormat(
+                        "plugin.marketplace.bulkUpdate.progressFormat",
+                        defaultValue: "已完成 %d/%d",
+                        0,
+                        status.pluginIDs.count
+                    )
+            )
+        case .completed:
+            guard bulkUpdateProgressText != nil, !status.pluginIDs.isEmpty else {
+                return
+            }
+
+            showBulkUpdateProgressText(
+                AppL10n.plugins("plugin.marketplace.bulkUpdate.completed", defaultValue: "更新完成")
+            )
+            scheduleBulkUpdateProgressFadeOut()
+        case .failed:
+            hideBulkUpdateProgressText()
+        case .idle, .checking:
+            break
+        }
+    }
+
+    private func hideBulkUpdateProgressText() {
+        bulkUpdateProgressHideTask?.cancel()
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            bulkUpdateProgressOpacity = 0
+        }
+
+        bulkUpdateProgressText = nil
+    }
+
     private func uninstall(_ item: PluginManagementItem) {
         guard activeOperationID == nil else {
             return
@@ -248,6 +342,10 @@ struct PluginManagementSettingsView: View {
         } catch {
             alertMessage = error.localizedDescription
         }
+    }
+
+    private var availablePluginUpdateCount: Int {
+        pluginHost.pluginManagementItems.filter(\.canUpdate).count
     }
 }
 

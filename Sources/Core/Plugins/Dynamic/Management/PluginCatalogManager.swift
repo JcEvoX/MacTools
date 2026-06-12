@@ -65,6 +65,16 @@ struct PluginCatalogUpdatePlan: Equatable {
     }
 }
 
+struct PluginCatalogUpdateProgress: Equatable {
+    let completedCount: Int
+    let totalCount: Int
+
+    init(completedCount: Int, totalCount: Int) {
+        self.totalCount = max(0, totalCount)
+        self.completedCount = min(max(0, completedCount), self.totalCount)
+    }
+}
+
 @MainActor
 final class PluginCatalogManager {
     private let catalogProvider: (any PluginCatalogProviding)?
@@ -161,13 +171,15 @@ final class PluginCatalogManager {
         try dynamicPluginManager.updatePluginPackage(from: packageURL, catalogEntry: entry)
     }
 
-    func updateAvailablePlugins() async throws {
+    func updateAvailablePlugins(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         let entries = try availableUpdateEntries()
         guard !entries.isEmpty else {
             return
         }
 
-        try await updatePlugins(entries: entries, reloadAfterUpdate: true)
+        try await updatePlugins(entries: entries, reloadAfterUpdate: true, progress: progress)
     }
 
     func automaticUpdatePlanForInstalledPlugins() -> PluginCatalogUpdatePlan {
@@ -175,21 +187,37 @@ final class PluginCatalogManager {
         return PluginCatalogUpdatePlan(updateableInstalledPluginIDs: entries.map(\.id))
     }
 
-    func updateInstalledPluginsToLatestBeforeLoading() async throws {
+    func updateInstalledPluginsToLatestBeforeLoading(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         let entries = updateEntriesForInstalledPlugins()
         guard !entries.isEmpty else {
             return
         }
 
-        try await updatePlugins(entries: entries, reloadAfterUpdate: false)
+        try await updatePlugins(entries: entries, reloadAfterUpdate: false, progress: progress)
     }
 
     private func updatePlugins(
         entries: [PluginCatalogEntry],
-        reloadAfterUpdate: Bool
+        reloadAfterUpdate: Bool,
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
         var resolvedUpdates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)] = []
         var failures: [PluginPackageUpdateFailure] = []
+        let totalCount = entries.count
+        var completedCount = 0
+
+        func reportProgress() {
+            progress?(
+                PluginCatalogUpdateProgress(
+                    completedCount: completedCount,
+                    totalCount: totalCount
+                )
+            )
+        }
+
+        reportProgress()
 
         for entry in entries {
             do {
@@ -197,13 +225,19 @@ final class PluginCatalogManager {
                 resolvedUpdates.append((sourceURL: packageURL, catalogEntry: entry))
             } catch {
                 failures.append(PluginPackageUpdateFailure(pluginID: entry.id, error: error))
+                completedCount += 1
+                reportProgress()
             }
         }
 
         failures.append(
             contentsOf: dynamicPluginManager.updatePluginPackages(
                 resolvedUpdates,
-                reloadAfterUpdate: reloadAfterUpdate
+                reloadAfterUpdate: reloadAfterUpdate,
+                onPackageProcessed: {
+                    completedCount += 1
+                    reportProgress()
+                }
             )
         )
 

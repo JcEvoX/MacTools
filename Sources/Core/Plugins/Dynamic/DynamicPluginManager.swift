@@ -252,7 +252,8 @@ final class DynamicPluginManager: ObservableObject {
 
     func updatePluginPackages(
         _ updates: [(sourceURL: URL, catalogEntry: PluginCatalogEntry)],
-        reloadAfterUpdate: Bool = true
+        reloadAfterUpdate: Bool = true,
+        onPackageProcessed: (() -> Void)? = nil
     ) -> [PluginPackageUpdateFailure] {
         guard !updates.isEmpty else {
             return []
@@ -282,6 +283,8 @@ final class DynamicPluginManager: ObservableObject {
                     )
                 )
             }
+
+            onPackageProcessed?()
         }
 
         return failures

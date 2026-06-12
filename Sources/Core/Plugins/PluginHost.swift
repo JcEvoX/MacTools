@@ -788,15 +788,27 @@ final class PluginHost: ObservableObject {
             phase: .updating,
             pluginIDs: updatePlan.updateableInstalledPluginIDs,
             message: AppL10n.pluginsFormat(
-                "plugin.autoUpdate.message.updatingInstalledFormat",
-                defaultValue: "正在更新 %d 个已安装插件。",
+                "plugin.autoUpdate.message.progressFormat",
+                defaultValue: "已完成 %d/%d",
+                0,
                 updatePlan.updateableInstalledPluginIDs.count
             )
         )
         syncPluginManagementState()
 
         do {
-            try await pluginCatalogManager.updateInstalledPluginsToLatestBeforeLoading()
+            try await pluginCatalogManager.updateInstalledPluginsToLatestBeforeLoading { [weak self] progress in
+                self?.automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
+                    phase: .updating,
+                    pluginIDs: updatePlan.updateableInstalledPluginIDs,
+                    message: AppL10n.pluginsFormat(
+                        "plugin.autoUpdate.message.progressFormat",
+                        defaultValue: "已完成 %d/%d",
+                        progress.completedCount,
+                        progress.totalCount
+                    )
+                )
+            }
             syncPluginManagementState()
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
                 phase: .completed,
@@ -837,7 +849,9 @@ final class PluginHost: ObservableObject {
         syncPluginManagementState()
     }
 
-    func updateAvailablePluginsFromCatalog() async throws {
+    func updateAvailablePluginsFromCatalog(
+        progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
+    ) async throws {
         guard let pluginCatalogManager else {
             return
         }
@@ -846,7 +860,7 @@ final class PluginHost: ObservableObject {
             syncPluginManagementState()
         }
 
-        try await pluginCatalogManager.updateAvailablePlugins()
+        try await pluginCatalogManager.updateAvailablePlugins(progress: progress)
     }
 
     func installPluginPackage(from sourceURL: URL) throws {

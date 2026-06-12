@@ -74,11 +74,9 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             await pluginHost.automaticUpdateInstalledPluginsBeforeLoading()
 
-            if pluginHost.automaticPluginUpdateStatus.phase != .failed {
-                pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
-                    currentAppVersion: currentAppVersion
-                )
-            }
+            pluginAutomaticUpdateVersionStore.markAutomaticUpdateChecked(
+                currentAppVersion: currentAppVersion
+            )
         }
     }
 }

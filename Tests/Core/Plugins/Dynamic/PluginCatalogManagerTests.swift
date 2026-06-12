@@ -94,6 +94,54 @@ final class PluginCatalogManagerTests: XCTestCase {
         XCTAssertEqual(loader.receivedRecordIDBatches, [["com.example.demo"]])
     }
 
+    func testAvailablePluginUpdateReportsCompletedAndTotalProgress() async throws {
+        let store = makeStore()
+        _ = try store.installPackage(from: makePackage(id: "com.example.alpha", version: "1.0.0"))
+        _ = try store.installPackage(from: makePackage(id: "com.example.beta", version: "1.0.0"))
+        let updateAlphaURL = try makePackage(id: "com.example.alpha", version: "2.0.0")
+        let updateBetaURL = try makePackage(id: "com.example.beta", version: "2.0.0")
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "com.example.alpha", version: "2.0.0"),
+            makeCatalogEntry(id: "com.example.beta", version: "2.0.0"),
+        ])
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: StubPluginPackageResolver(packagesByID: [
+                "com.example.alpha": updateAlphaURL,
+                "com.example.beta": updateBetaURL,
+            ]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+        var progressEvents: [PluginCatalogUpdateProgress] = []
+
+        await manager.refreshCatalog()
+        try await manager.updateAvailablePlugins { progress in
+            progressEvents.append(progress)
+        }
+
+        XCTAssertEqual(
+            progressEvents,
+            [
+                PluginCatalogUpdateProgress(completedCount: 0, totalCount: 2),
+                PluginCatalogUpdateProgress(completedCount: 1, totalCount: 2),
+                PluginCatalogUpdateProgress(completedCount: 2, totalCount: 2),
+            ]
+        )
+        XCTAssertEqual(
+            store.installedRecords().map { "\($0.id):\($0.manifest.version)" },
+            [
+                "com.example.alpha:2.0.0",
+                "com.example.beta:2.0.0",
+            ]
+        )
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,
