@@ -34,271 +34,236 @@ struct TranslatorPanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            sourceCard
+        VStack(spacing: 8) {
+            sourceEditor
             languageRow
-            resultCards
+            if let tip = presentation.tip {
+                tipCard(tip)
+            }
+            providerRows
         }
-        .padding(16)
-        .frame(width: 560, height: 560)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 606, height: 380, alignment: .top)
     }
 
-    private var sourceCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(localization.string("panel.source.title", defaultValue: "原文"))
-                    .font(.headline)
-                Spacer()
-                iconButton(
-                    "speaker.wave.2",
-                    help: localization.string("panel.source.speakHelp", defaultValue: "朗读原文"),
-                    action: .speakSource
-                )
-                    .disabled(sourceTextForDisplay.isEmpty)
-                iconButton(
-                    "doc.on.doc",
-                    help: localization.string("panel.source.copyHelp", defaultValue: "复制原文"),
-                    action: .copySource
-                )
-                    .disabled(sourceTextForDisplay.isEmpty)
-                iconButton("xmark", help: localization.string("panel.closeHelp", defaultValue: "关闭"), action: .close)
+    private var presentation: TranslatorPanelPresentation {
+        TranslatorPanelPresentation(snapshot: snapshot, localization: localization)
+    }
+
+    private var sourceEditor: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(panelCardColor)
+
+            if presentation.usesSourceCaretPlaceholder {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.accentColor.opacity(0.65))
+                    .frame(width: 2.5, height: 18)
+                    .padding(.leading, 11)
+                    .padding(.top, 11)
+            } else {
+                ScrollView {
+                    Text(presentation.sourceText)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                        .padding(.bottom, 38)
+                }
             }
 
-            ScrollView {
-                Text(sourceTextForDisplay.isEmpty ? sourcePlaceholder : sourceTextForDisplay)
-                    .font(.body)
-                    .foregroundStyle(sourceTextForDisplay.isEmpty ? .secondary : .primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            HStack(spacing: 8) {
+                sourceIconButton(
+                    "speaker.wave.2",
+                    help: localization.string("panel.source.speakHelp", defaultValue: "朗读原文"),
+                    action: .speakSource,
+                    isDisabled: presentation.sourceText.isEmpty
+                )
+                sourceIconButton(
+                    "doc.on.doc",
+                    help: localization.string("panel.source.copyHelp", defaultValue: "复制原文"),
+                    action: .copySource,
+                    isDisabled: presentation.sourceText.isEmpty
+                )
             }
-            .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120, alignment: .topLeading)
+            .padding(.leading, 12)
+            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .frame(height: 86)
     }
 
     private var languageRow: some View {
-        HStack(spacing: 12) {
-            languagePill(
-                flag: snapshot.languageSelection?.source?.flag ?? "🌐",
-                title: snapshot.languageSelection?.source?.displayName(localization: localization)
-                    ?? localization.string("language.automatic", defaultValue: "自动检测")
-            )
-
+        HStack(spacing: 0) {
+            languageSegment(title: presentation.sourceLanguageTitle)
+            Spacer(minLength: 0)
             Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 56)
+            Spacer(minLength: 0)
+            languageSegment(title: presentation.targetLanguageTitle)
+        }
+        .frame(height: 30)
+        .background(panelCardColor, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func languageSegment(title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-
-            languagePill(
-                flag: snapshot.languageSelection?.target.flag ?? "🇨🇳",
-                title: snapshot.languageSelection?.target.displayName(localization: localization)
-                    ?? TranslatorLanguage.simplifiedChinese.displayName(localization: localization)
-            )
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.primary)
         }
+        .frame(maxWidth: .infinity, minHeight: 30)
     }
 
-    private var resultCards: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(localization.string("panel.result.title", defaultValue: "译文"))
-                    .font(.headline)
-                if case .translating = snapshot.phase {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                Spacer()
-                iconButton(
-                    "speaker.wave.2",
-                    help: localization.string("panel.result.speakHelp", defaultValue: "朗读译文"),
-                    action: .speakTranslation
-                )
-                    .disabled(resultTextForDisplay.isEmpty)
-                iconButton(
-                    "doc.on.doc",
-                    help: localization.string("panel.result.copyHelp", defaultValue: "复制首个译文"),
-                    action: .copyTranslation
-                )
-                    .disabled(resultTextForDisplay.isEmpty)
-                iconButton("arrow.clockwise", help: localization.string("panel.retryHelp", defaultValue: "重试"), action: .retry)
-                iconButton("gearshape", help: localization.string("panel.settingsHelp", defaultValue: "设置"), action: .openSettings)
-            }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    let results = providerResultsForDisplay
-                    ForEach(results) { result in
-                        providerResultCard(result)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .frame(maxWidth: .infinity, minHeight: 222, maxHeight: 222, alignment: .topLeading)
-        }
-        .padding(14)
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func providerResultCard(_ result: TranslatorProviderResult) -> some View {
+    private func tipCard(_ tip: TranslatorPanelPresentation.Tip) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text(result.providerTitle)
-                    .font(.subheadline.weight(.semibold))
+                Image(systemName: tip.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.multicolor)
+                Text(tip.title)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            Text(tip.message)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Button {
+                onAction(.openSettings)
+            } label: {
+                Label(tip.actionTitle, systemImage: "questionmark.bubble")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.accentColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+        .background(panelCardColor, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var providerRows: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                ForEach(presentation.providerRows) { row in
+                    providerRow(row)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .scrollIndicators(.never)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func providerRow(_ row: TranslatorPanelPresentation.ProviderRow) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                providerSymbol(row)
+                Text(row.title)
+                    .font(.system(size: 14, weight: .medium))
                     .lineLimit(1)
-                if result.phase == .translating || result.phase == .waiting {
+                Spacer()
+                if row.isLoading {
                     ProgressView()
                         .controlSize(.small)
                 }
-                Spacer()
-                iconButton(
-                    "doc.on.doc",
-                    help: localization.format(
-                        "panel.result.copyProviderHelpFormat",
-                        defaultValue: "复制%@译文",
-                        result.providerTitle
-                    ),
-                    action: .copyProviderTranslation(result.id)
-                )
-                .disabled((result.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
             }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
 
-            Text(providerResultBodyText(result))
-                .font(.body)
-                .foregroundStyle(providerResultTextColor(result))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            if row.isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(row.bodyText)
+                        .font(.body)
+                        .foregroundStyle(row.isError ? .red : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    HStack(spacing: 8) {
+                        sourceIconButton(
+                            "speaker.wave.2",
+                            help: localization.string("panel.result.speakHelp", defaultValue: "朗读译文"),
+                            action: .speakTranslation,
+                            isDisabled: row.bodyText.isEmpty || row.isError
+                        )
+                        sourceIconButton(
+                            "doc.on.doc",
+                            help: localization.format(
+                                "panel.result.copyProviderHelpFormat",
+                                defaultValue: "复制%@译文",
+                                row.title
+                            ),
+                            action: row.id == "placeholder" ? .copyTranslation : .copyProviderTranslation(row.id),
+                            isDisabled: !row.canCopy
+                        )
+                        sourceIconButton(
+                            "arrow.clockwise",
+                            help: localization.string("panel.retryHelp", defaultValue: "重试"),
+                            action: .retry,
+                            isDisabled: false
+                        )
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(panelCardColor, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func languagePill(flag: String, title: String) -> some View {
-        HStack(spacing: 8) {
-            Text(flag)
-                .font(.title3)
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 34)
-        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
+    private func providerSymbol(_ row: TranslatorPanelPresentation.ProviderRow) -> some View {
+        Image(systemName: row.symbolName)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(providerTint(for: row.title))
+            .frame(width: 18, height: 18)
+            .background(.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 5))
     }
 
-    private func iconButton(
+    private func sourceIconButton(
         _ systemName: String,
         help: String,
-        action: TranslatorPanelAction
+        action: TranslatorPanelAction,
+        isDisabled: Bool
     ) -> some View {
         Button {
             onAction(action)
         } label: {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 24, height: 24)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 26, height: 26)
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
+        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
+        .disabled(isDisabled)
         .help(help)
     }
 
-    private var sourceTextForDisplay: String {
-        snapshot.sourceText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    private func providerTint(for title: String) -> Color {
+        let normalized = title.lowercased()
+        if normalized.contains("deepseek") {
+            return Color(red: 0.32, green: 0.42, blue: 1.0)
+        }
+        if normalized.contains("fireworks") {
+            return Color(red: 0.39, green: 0.16, blue: 0.95)
+        }
+        return .primary
     }
 
-    private var resultTextForDisplay: String {
-        snapshot.translation?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-
-    private var providerResultsForDisplay: [TranslatorProviderResult] {
-        if !snapshot.providerResults.isEmpty {
-            return snapshot.providerResults
-        }
-
-        return [
-            TranslatorProviderResult(
-                id: "placeholder",
-                providerTitle: snapshot.translation?.providerTitle
-                    ?? localization.string("openAIClient.providerTitle", defaultValue: "OpenAI 翻译"),
-                phase: placeholderProviderPhase,
-                translation: snapshot.translation,
-                errorMessage: snapshot.errorMessage
-            ),
-        ]
-    }
-
-    private var placeholderProviderPhase: TranslatorProviderResultPhase {
-        switch snapshot.phase {
-        case .translating:
-            return .translating
-        case .success:
-            return .success
-        case .error:
-            return .error
-        case .idle, .capturing:
-            return .waiting
-        }
-    }
-
-    private var sourcePlaceholder: String {
-        switch snapshot.phase {
-        case .capturing:
-            if let captureStage = snapshot.captureStage {
-                switch captureStage {
-                case .selectedText:
-                    return localization.string("panel.sourcePlaceholder.capturing", defaultValue: "正在读取选中文本...")
-                case .screenshotRegion:
-                    return localization.string("panel.sourcePlaceholder.screenshotRegion", defaultValue: "正在选择截图区域...")
-                case .ocr:
-                    return localization.string("panel.sourcePlaceholder.ocr", defaultValue: "正在识别截图文字...")
-                }
-            }
-            return localization.string("panel.sourcePlaceholder.capturing", defaultValue: "正在读取选中文本...")
-        case .error(.missingSelection):
-            return localization.string("panelError.missingSelection", defaultValue: "未找到选中文本")
-        case .error(.missingOCRText):
-            return localization.string("panelError.missingOCRText", defaultValue: "截图中没有识别到文字")
-        case .error(.permissionRequired):
-            return localization.string("panelError.permissionRequired", defaultValue: "需要辅助功能授权")
-        case .error(.screenRecordingPermissionRequired):
-            return localization.string("panelError.screenRecordingPermissionRequired", defaultValue: "需要屏幕录制授权")
-        case .error(.screenshotCancelled):
-            return localization.string("panelError.screenshotCancelled", defaultValue: "已取消截图")
-        case .error(.screenshotRegionTooSmall):
-            return localization.string("panelError.screenshotRegionTooSmall", defaultValue: "截图区域太小")
-        case .error(.screenshotFailed):
-            return localization.string("panelError.screenshotFailed", defaultValue: "截图失败")
-        default:
-            return localization.string("panel.sourcePlaceholder.idle", defaultValue: "等待选中文本")
-        }
-    }
-
-    private func providerResultBodyText(_ result: TranslatorProviderResult) -> String {
-        let text = result.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !text.isEmpty {
-            return text
-        }
-
-        switch result.phase {
-        case .translating:
-            return localization.string("panel.resultPlaceholder.translating", defaultValue: "正在翻译...")
-        case .error:
-            return result.errorMessage
-                ?? localization.string("openAIClient.error.requestFailed", defaultValue: "请求失败，请稍后重试")
-        case .waiting:
-            return localization.string("panel.resultPlaceholder.idle", defaultValue: "等待翻译")
-        case .success:
-            return localization.string("panel.resultPlaceholder.emptyResponse", defaultValue: "响应为空")
-        }
-    }
-
-    private func providerResultTextColor(_ result: TranslatorProviderResult) -> Color {
-        if result.phase == .error {
-            return .red
-        }
-
-        let text = result.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text.isEmpty ? .secondary : .primary
+    private var panelCardColor: Color {
+        Color(nsColor: .controlBackgroundColor).opacity(0.72)
     }
 }

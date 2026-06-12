@@ -107,6 +107,8 @@ final class TranslatorCoordinator {
         sessionID = currentSessionID
         lastSourceText = nil
         lastQuerySource = .selectedText
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        panelController?.close()
         let providerBuildResult = providerFactory()
         let initialProviderResults = providerBuildResult.waitingProviderResults(localization: localization)
         snapshot = TranslatorPanelSnapshot(
@@ -119,12 +121,10 @@ final class TranslatorCoordinator {
             querySource: .selectedText,
             captureStage: .selectedText
         )
-        // 立即展示取词加载态；capturing 阶段面板不抢焦点，避免影响 AX 取词与模拟复制。
-        panelController?.show(snapshot: snapshot)
 
         let result = await selectedTextCapturePipeline.capture(
             context: SelectedTextCaptureContext(
-                frontmostApplication: NSWorkspace.shared.frontmostApplication
+                frontmostApplication: frontmostApplication
             )
         )
 
@@ -171,6 +171,7 @@ final class TranslatorCoordinator {
         sessionID = currentSessionID
         lastSourceText = nil
         lastQuerySource = .screenshot
+        panelController?.close()
         snapshot = TranslatorPanelSnapshot(
             phase: .capturing,
             sourceText: nil,
@@ -181,7 +182,6 @@ final class TranslatorCoordinator {
             querySource: .screenshot,
             captureStage: .screenshotRegion
         )
-        panelController?.show(snapshot: snapshot)
 
         guard let screenshotRegionCapturer, let ocrTextRecognizer else {
             setError(
