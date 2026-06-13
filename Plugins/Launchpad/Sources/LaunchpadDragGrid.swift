@@ -1396,12 +1396,20 @@ final class LaunchpadGridCellView: NSView {
         NSColor.labelColor.withAlphaComponent(0.08).setFill()
         platePath.fill()
         do {
+            // Clip the highlight/shade to the plate so their straight full-width ends don't
+            // bleed PAST the (large, 0.29×) rounded corners onto the cell background — at
+            // y = maxY-2.5 the corner has already curved in ~8pt, so an unclipped `sh` drew a
+            // faint horizontal "bar" sticking out below the plate's rounded bottom (apps have no
+            // plate, hence no bar). Clipping makes both depth cues follow the squircle contour.
+            NSGraphicsContext.saveGraphicsState()
+            platePath.addClip()
             let hl = NSRect(x: plate.minX + 1, y: plate.minY + 1, width: plate.width - 2, height: 1.5)
             NSColor.white.withAlphaComponent(0.18).setFill()
             NSBezierPath(roundedRect: hl, xRadius: 1, yRadius: 1).fill()
             let sh = NSRect(x: plate.minX + 1, y: plate.maxY - 2.5, width: plate.width - 2, height: 1.5)
             NSColor.black.withAlphaComponent(0.07).setFill()
             NSBezierPath(roundedRect: sh, xRadius: 1, yRadius: 1).fill()
+            NSGraphicsContext.restoreGraphicsState()
         }
 
         // Selected folder: deepen the plate itself along the SAME squircle path — the iOS folder
