@@ -670,9 +670,16 @@ final class LaunchpadGridContainerView: NSView {
         // reveals the source anchor itself (session.sourceContainer.endCarryAnchor).
         if let coord = grid?.coordinator, coord.carryActive {
             lastWindowDragPoint = windowPoint
+            let revealBefore = coord.folderRevealToken
             coord.carryReleased(atWindowPoint: windowPoint)
             if let cell = draggedCell { teardownDragState(cell) }   // folder origin's local drag state
-            refocusSearchField()
+            // A folder commit auto-opens the new folder for inline rename, and the hard-cut reveal
+            // now fires synchronously in this same mouseUp stack. Yanking first responder back to
+            // the search field here would race — and usually beat — that rename focus, dropping the
+            // typed name. Refocus search only when this release did NOT trigger a folder auto-open.
+            if coord.folderRevealToken == revealBefore {
+                refocusSearchField()
+            }
             return
         }
         guard let cell = draggedCell else { return }

@@ -51,6 +51,19 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         return (editor.delegate as AnyObject?) is LaunchpadRenameTextField
     }
 
+    /// Placeholder text with a centered paragraph style — a plain `placeholderString` ignores
+    /// the field's `.center` alignment and draws leading-aligned.
+    private static func centeredPlaceholder(_ text: String, font: NSFont?) -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        var attributes: [NSAttributedString.Key: Any] = [
+            .paragraphStyle: style,
+            .foregroundColor: NSColor.placeholderTextColor,
+        ]
+        if let font { attributes[.font] = font }
+        return NSAttributedString(string: text, attributes: attributes)
+    }
+
     func makeNSView(context: Context) -> LaunchpadRenameTextField {
         let field = LaunchpadRenameTextField()
         field.delegate = context.coordinator
@@ -66,9 +79,14 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         field.maximumNumberOfLines = 1
         field.usesSingleLineMode = true
         field.lineBreakMode = .byTruncatingTail
-        field.cell?.isScrollable = true          // long names scroll while editing, never wrap
+        // NOT scrollable: a scrollable NSTextFieldCell draws from the leading edge and ignores
+        // `.center` alignment, so the title rendered left. Single-line + truncating tail already
+        // prevent wrapping, so dropping it keeps the title centered (iOS folder-title parity).
         field.stringValue = name
-        field.placeholderString = placeholder
+        // Centered placeholder: a plain `placeholderString` draws leading-aligned regardless of
+        // the field's `.center`, so the empty-title prompt rendered left. An attributed string
+        // with a centered paragraph style honors the alignment.
+        field.placeholderAttributedString = Self.centeredPlaceholder(placeholder, font: field.font)
         field.editGate = { [weak coordinator = context.coordinator] in
             coordinator?.parent.editGate() ?? true
         }
@@ -85,7 +103,7 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         coordinator.parent = self
         coordinator.field = field
         controller?.coordinator = coordinator
-        field.placeholderString = placeholder
+        field.placeholderAttributedString = Self.centeredPlaceholder(placeholder, font: field.font)
         if coordinator.folderID != folderID {
             // The panel stayed mounted across a close→reopen of a different folder (the 0.34s
             // unmount grace): any leftover session belongs to the OLD folder — `closeFolder`
@@ -127,6 +145,9 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         /// Last applied resolution — test instrumentation for the forwarding table.
         private(set) var lastResolution: LaunchpadRenameEditSession.Resolution?
         private var focusRequestInFlight = false
+        /// True once a keystroke has been saved to the store in real time this session, so an Esc
+        /// cancel knows it must roll the store back to the original name. Cleared on each begin.
+        private var hasLiveCommitted = false
 
         init(_ parent: LaunchpadFolderRenameField) {
             self.parent = parent
@@ -140,6 +161,7 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         func beginEditing(original: String) {
             guard !isEditing else { return }
             session = .begin(originalName: original)
+            hasLiveCommitted = false
         }
 
         func handleTextChange(_ text: String) {
@@ -233,6 +255,11 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
                 parent.onCommit(text)
             case .cancel(let restore):
                 field?.stringValue = restore
+                // Only roll the store back if real-time save actually wrote mid-edit text this
+                // session; otherwise a cancel must stay silent (no spurious commit).
+                if hasLiveCommitted {
+                    parent.onCommit(restore)
+                }
             }
             // Hand the keyboard back to the search field (Return keeps the folder open, §2.3);
             // the resulting native end-editing is latched into a no-op by the session.
@@ -256,9 +283,25 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
 
         // MARK: NSTextFieldDelegate
 
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            // Center the shared field editor here, where it is guaranteed attached — doing it in
+            // becomeFirstResponder is too early (currentEditor() may still be nil), which left the
+            // caret/placeholder leading-aligned while editing despite the field's .center.
+            (field?.currentEditor() as? NSTextView)?.alignment = .center
+        }
+
         func controlTextDidChange(_ obj: Notification) {
             guard let field else { return }
             handleTextChange(field.stringValue)
+            // Real-time save: persist every keystroke so the name can never be lost to a focus
+            // race or an out-of-order close (the auto-open rename and the carry-release refocus
+            // can land in the same runloop). `renameFolder` trims, falls back on empty, and
+            // no-op-guards unchanged names, so high-frequency calls are cheap and safe. An Esc
+            // cancel rolls the store back to the original name (see `apply`).
+            if isEditing {
+                parent.onCommit(field.stringValue)
+                hasLiveCommitted = true
+            }
         }
 
         func controlTextDidEndEditing(_ obj: Notification) {
@@ -280,7 +323,12 @@ final class LaunchpadRenameTextField: NSTextField {
     override func becomeFirstResponder() -> Bool {
         guard editGate() else { return false }
         let became = super.becomeFirstResponder()
-        if became { onFocusIn() }
+        if became {
+            // The shared field editor does not inherit the field's `.center` alignment, so typed
+            // text would left-align while editing; force it center to match the static title.
+            (currentEditor() as? NSTextView)?.alignment = .center
+            onFocusIn()
+        }
         return became
     }
 }

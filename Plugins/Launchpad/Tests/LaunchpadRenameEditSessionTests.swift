@@ -181,12 +181,19 @@ final class LaunchpadRenameEditSessionTests: XCTestCase {
         editor.insertText("新名", replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
 
         window.makeFirstResponder(nil)                       // what close() does pre-teardown
-        XCTAssertEqual(commits, ["新名"], "整窗 teardown 前的 resign 必须提交在编辑的名字")
+        // Real-time save may commit on the keystroke and again on resign; both carry the edited
+        // name. What matters: the edited name is saved and no stale/default name ever leaks.
+        XCTAssertFalse(commits.isEmpty, "编辑的名字必须被提交")
+        XCTAssertEqual(commits.last, "新名", "最终保存的是在编辑的名字")
+        XCTAssertTrue(commits.allSatisfy { $0 == "新名" }, "提交的都是编辑名,无脏数据")
         XCTAssertFalse(coordinator.isEditing)
+        let committedAfterResign = commits.count
 
-        // The dismantle backstop may or may not run afterwards — either way it stays inert.
+        // The dismantle backstop may or may not run afterwards — the session already resolved
+        // at resign, so it must add NO further commit (stays inert regardless of real-time save).
         LaunchpadFolderRenameField.dismantleNSView(field, coordinator: coordinator)
-        XCTAssertEqual(commits, ["新名"], "resign 已提交后 dismantle 不得二次提交")
+        XCTAssertEqual(commits.count, committedAfterResign, "resign 已提交后 dismantle 不得二次提交")
+        XCTAssertTrue(commits.allSatisfy { $0 == "新名" }, "全程无脏数据")
         window.close()
     }
 
