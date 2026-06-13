@@ -487,7 +487,11 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         container.endDirectDrag(atWindowPoint: windowPoint(forLocal: bCentre))
     }
 
-    func testMakeFolderCommitParksNewFolderCellUntilReveal() {
+    func testMakeFolderCommitRevealsImmediatelyWithoutFlight() {
+        // A folder commit flips the target cell from a single app to a composed folder
+        // thumbnail. It now HARD-CUTS (no 0.25s flight): the composed thumbnail must appear
+        // in the mouseUp stack — nothing parked, float torn down at once, reveal published
+        // immediately — so the user never sees "the dragged app, then a beat later the folder".
         let newFolderID = "FOLDER-NEW"
         coordinator.storeApplier = { [weak self] action, _ in
             self?.applierCalls += 1
@@ -500,30 +504,27 @@ final class LaunchpadSettleFlightTests: XCTestCase {
 
         releaseIntoMergeFlight(container)
         XCTAssertEqual(applierCalls, 1)
-        XCTAssertEqual(coordinator.settlingItemID, newFolderID,
-                       "merge 建夹后顶层不存在被拖 app 的 cell——停泊谓词必须改记新夹 id（§A1 闪烁根因）")
+        XCTAssertNil(coordinator.settlingItemID, "hard-cut 不停泊任何 cell（合成缩略图当帧揭示）")
+        XCTAssertNil(coordinator.carrySession, "hard-cut 同帧结束会话")
+        XCTAssertEqual(spy.dismissCount, 1, "浮窗当帧拆除,无飞行")
+        XCTAssertEqual(coordinator.folderRevealToken, 1, "建夹自动开夹 reveal 当帧发布")
+        XCTAssertEqual(coordinator.revealedFolderID, newFolderID)
 
-        // Post-commit apply lands mid-flight on a non-source page with the NEW model: the fresh
-        // folder cell (new UUID) must park until the reveal, or it pops in under the flying icon.
+        // The new folder cell is NOT parked: a post-commit apply shows the composed thumbnail
+        // right away (no carryParkOrigin), the opposite of the old flight which hid it.
         let folderCell = LaunchpadDisplayCell.folder(id: newFolderID, name: "未命名", items: [appB, appA])
         let target = makePage([folderCell, .app(appC)], page: 1)
         let landedFolder = target.cellViews[0]
         XCTAssertEqual(landedFolder.layoutID, newFolderID)
-        XCTAssertEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
-                       "新夹 cell 必须停泊到 reveal（飞行中现身=先看到夹再看到落点闪烁）")
         for _ in 0..<3 { target.layout() }
-        XCTAssertEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin)
-
-        spy.completeNextSettle()
-        XCTAssertNil(coordinator.settlingItemID)
         XCTAssertNotEqual(landedFolder.frame.origin, LaunchpadGridContainerView.carryParkOrigin,
-                          "reveal 必须把新夹 cell 写回真实槽位")
+                          "新夹 cell 不停泊,当帧显示合成缩略图")
     }
 
-    /// 19/P0a step 5 (design §2.6, R1=B): a merge commit's auto-open trigger must ride the
-    /// settle REVEAL — publishing at mouseUp would mount the folder panel under the still-
-    /// flying icon and fight the park visuals.
-    func testMergeFlightPublishesFolderRevealOnlyAtReveal() {
+    /// 19/P0a step 5 (design §2.6, R1=B): a merge commit's auto-open trigger fires in the
+    /// mouseUp stack now that the commit hard-cuts — there is no flight to defer the reveal
+    /// behind, so the composed folder + its auto-open arrive together, exactly once.
+    func testMakeFolderPublishesFolderRevealImmediately() {
         coordinator.storeApplier = { action, _ in
             if case .makeFolder = action { return "FOLDER-NEW" }
             return nil
@@ -534,11 +535,7 @@ final class LaunchpadSettleFlightTests: XCTestCase {
 
         releaseIntoMergeFlight(container)
         XCTAssertEqual(coordinator.pendingVisualCommit?.createdFolderID, "FOLDER-NEW")
-        XCTAssertEqual(coordinator.folderRevealToken, 0, "飞行中不得发布自动开夹")
-        XCTAssertNil(coordinator.revealedFolderID)
-
-        spy.completeNextSettle()
-        XCTAssertEqual(coordinator.folderRevealToken, 1, "reveal 完成处恰好发布一次")
+        XCTAssertEqual(coordinator.folderRevealToken, 1, "建夹自动开夹当帧发布一次")
         XCTAssertEqual(coordinator.revealedFolderID, "FOLDER-NEW")
     }
 
@@ -552,9 +549,9 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         XCTAssertEqual(coordinator.folderRevealToken, 0, "重排 reveal 不触发自动开夹")
     }
 
-    func testAddToFolderCommitKeepsParkingTheCarriedItemID() {
-        // addToFolder's landing cell is an EXISTING folder — parking it would blank a visible
-        // folder for the whole flight. The park id must stay the carried app's.
+    func testAddToFolderCommitRevealsImmediatelyWithoutParking() {
+        // addToFolder also hard-cuts: the existing folder's updated (one-more-app) thumbnail
+        // shows in the mouseUp stack, nothing parked, float torn down at once — no flight.
         coordinator.storeApplier = { [weak self] _, _ in
             self?.applierCalls += 1
             return "F-EXISTING"
@@ -571,10 +568,9 @@ final class LaunchpadSettleFlightTests: XCTestCase {
         XCTAssertNotNil(container.stackTargetCell)
         container.endDirectDrag(atWindowPoint: windowPoint(forLocal: fCentre))
 
-        XCTAssertEqual(coordinator.settlingItemID, appA.id,
-                       "addToFolder 停泊的是被拖 app（现存夹 cell 必须全程可见）")
-        spy.completeNextSettle()
-        XCTAssertNil(coordinator.settlingItemID)
+        XCTAssertNil(coordinator.settlingItemID, "hard-cut 不停泊任何 cell")
+        XCTAssertNil(coordinator.carrySession, "hard-cut 同帧结束会话")
+        XCTAssertEqual(spy.dismissCount, 1, "浮窗当帧拆除")
     }
 
     // MARK: - Dismiss defers behind the reveal's paint (§A1 same-page flicker: orderOut beats CA commit)

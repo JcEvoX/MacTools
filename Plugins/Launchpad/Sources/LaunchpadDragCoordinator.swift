@@ -628,6 +628,18 @@ final class LaunchpadDragCoordinator: ObservableObject {
             settleScreenRect = nil
         }
 
+        // Folder commits flip the target cell from a single app icon to a composed folder
+        // thumbnail. Flying the lone dragged-app icon for the 0.25s settle before revealing
+        // that thumbnail reads as "the dragged app, then a beat later the folder" — the
+        // not-snappy lag. Hard-cut these so the composed folder thumbnail appears in this
+        // same mouseUp stack (the data already landed above). Reorders keep their flight.
+        switch result {
+        case .makeFolder, .addToFolder:
+            settleScreenRect = nil
+        case .reorder:
+            break
+        }
+
         pendingVisualCommit = VisualCommit(itemID: session.itemID, origin: session.origin,
                                            result: result, landingID: landingID)
 

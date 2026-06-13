@@ -165,6 +165,16 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         isShown ? close() : open()
     }
 
+    /// Warm the app catalog ahead of the first open so the grid shows icons
+    /// immediately instead of a spinner: the disk scan runs in the background
+    /// now (on plugin activation) rather than on the critical path when the
+    /// user summons the launcher. Idempotent — `reload()`'s generation guard
+    /// drops a stale scan, and a later `open()` reload supersedes this one for
+    /// freshness — so calling it more than once is safe.
+    func prewarm() {
+        catalog.reload()
+    }
+
     func open() {
         guard window == nil else { return }
         // Restore the *user's* app on dismiss, not ourselves. When triggered from the
