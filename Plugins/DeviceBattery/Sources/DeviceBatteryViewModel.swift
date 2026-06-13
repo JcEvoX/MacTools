@@ -21,6 +21,8 @@ final class DeviceBatteryViewModel: ObservableObject {
     private var systemItems: [DeviceBatteryItem] = []
     private var rapooSnapshot = RapooMouseBatterySnapshot.idle
     private var lastSystemUpdate: Date?
+    private var isCollecting = false
+    private var pendingCollectRequest = false
     private var isStarted = false
     private var includeInternalBattery = true
     private var includeBluetoothDevices = true
@@ -123,6 +125,11 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func collectNow() {
+        if isCollecting {
+            pendingCollectRequest = true
+            return
+        }
+
         refreshTask?.cancel()
         refreshTask = Task { @MainActor [weak self] in
             await self?.collectOnce()
@@ -142,13 +149,31 @@ final class DeviceBatteryViewModel: ObservableObject {
     }
 
     private func collectOnce() async {
-        rebuildSnapshot(accessOverride: .scanning)
+        if isCollecting {
+            pendingCollectRequest = true
+            return
+        }
 
-        let referenceDate = Date()
-        let collectedItems = await sampler.collectSystemDevices(referenceDate: referenceDate)
-        systemItems = collectedItems
-        lastSystemUpdate = referenceDate
-        rebuildSnapshot()
+        isCollecting = true
+        defer {
+            isCollecting = false
+        }
+
+        repeat {
+            pendingCollectRequest = false
+            rebuildSnapshot(accessOverride: .scanning)
+
+            let referenceDate = Date()
+            let collectedItems = await sampler.collectSystemDevices(referenceDate: referenceDate)
+            guard !Task.isCancelled else {
+                pendingCollectRequest = false
+                return
+            }
+
+            systemItems = collectedItems
+            lastSystemUpdate = referenceDate
+            rebuildSnapshot()
+        } while pendingCollectRequest && !Task.isCancelled
     }
 
     private func rebuildSnapshot(

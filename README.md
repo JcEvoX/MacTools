@@ -52,7 +52,7 @@
 | Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events in the component panel. |
 | System Status | Show CPU, memory, disk, battery, network throughput, and high-usage processes. |
 | Activity Stats | Track keyboard, mouse, scroll, and foreground app usage, with manual hooks for Claude Code, Cursor, and Codex activity. |
-| Device Battery | Aggregate battery levels for the Mac, Bluetooth peripherals, split AirPods batteries, and Rapoo VT series mice, with multiple widget layouts. |
+| Device Battery | Aggregate battery levels for the Mac, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts. |
 | Fan Control | Manage fan speed presets with automatic, full-speed, and custom fixed-RPM modes; installs the bundled helper and requests administrator authorization on first control. |
 | Battery Charge Limit | Limit battery charging to a chosen cap, defaulting to 80%; charging stops at the cap and does not automatically resume below it unless the user chooses to continue or force discharge. |
 | Fix Damaged Apps | Remove quarantine attributes to resolve "damaged and can't be opened" prompts by selecting a .app in a file panel and running the fix with administrator privileges. |

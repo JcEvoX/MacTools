@@ -10,9 +10,10 @@ protocol DeviceBatterySampling: Sendable {
 }
 
 struct DeviceBatterySampler: DeviceBatterySampling {
-    private static let bluetoothPowerLogCache = DeviceBatteryBluetoothPowerLogCache()
     private static let bluetoothPowerLogLookback = "1m"
     private static let bluetoothPowerLogTimeout: TimeInterval = 1.5
+    private static let batteryCenterLogLookback = "2m"
+    private static let batteryCenterLogTimeout: TimeInterval = 1.0
     private let localization: PluginLocalization
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -36,6 +37,10 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 referenceDate: referenceDate,
                 localization: localization
             ))
+            items.append(contentsOf: Self.collectBatteryCenterLogDevices(
+                from: bluetoothData,
+                referenceDate: referenceDate
+            ))
             items.append(contentsOf: Self.collectMagicAccessoryDevices(
                 from: bluetoothData,
                 referenceDate: referenceDate,
@@ -47,12 +52,17 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             )
         }.value
 
+        let appleHeadphoneAdvertisementItems = await DeviceBatteryAppleHeadphoneAdvertisementReader.collectBatteryDevices(
+            targets: baseSample.bluetoothBatteryTargets,
+            referenceDate: referenceDate,
+            localization: localization
+        )
         let bluetoothBatteryItems = await DeviceBatteryBLEBatteryReader.collectBatteryDevices(
             targets: baseSample.bluetoothBatteryTargets,
             referenceDate: referenceDate,
             localization: localization
         )
-        return Self.deduplicated(baseSample.items + bluetoothBatteryItems)
+        return Self.deduplicated(baseSample.items + appleHeadphoneAdvertisementItems + bluetoothBatteryItems)
     }
 
     private static func collectInternalBattery(
@@ -215,7 +225,7 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             from: section["device_not_connected"],
             isConnected: false
         )
-            .filter { hasBluetoothBatteryFields($0.info) }
+            .filter { hasBluetoothBatteryFields($0.info) || isAppleHeadphoneBatteryCandidate($0) }
 
         return BluetoothProfile(
             connectedDevices: connectedDevices,
@@ -266,6 +276,27 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             "device_batteryLevelRight"
         ]
             .contains { batteryValue(from: info[$0]) != nil }
+    }
+
+    private static func isAppleHeadphoneBatteryCandidate(_ device: BluetoothProfileDevice) -> Bool {
+        guard normalizedHexIdentifier(stringValue(device.info["device_vendorID"])) == "004C" else {
+            return false
+        }
+
+        let productID = stringValue(device.info["device_productID"])
+        let model = productID.flatMap { HeadphoneModelCatalog.modelName(forProductID: $0) }
+        let haystack = [
+            device.name,
+            model,
+            device.info["device_minorType"] as? String
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        return haystack.contains("airpods")
+            || haystack.contains("beats")
+            || haystack.contains("headphone")
+            || haystack.contains("headset")
     }
 
     private static func mergedBatteryDevices(_ devices: [BluetoothProfileDevice]) -> [BluetoothProfileDevice] {
@@ -326,7 +357,6 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             let regularReadings = recentReadings.filter { reading in
                 matchingBluetoothPowerLogTarget(reading, in: regularTargets) != nil
             }
-            bluetoothPowerLogCache.update(readings: regularReadings, at: referenceDate)
 
             let regularItems = bluetoothPowerLogItems(
                 from: regularReadings,
@@ -336,16 +366,6 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             )
             if !regularItems.isEmpty {
                 items.append(contentsOf: regularItems)
-            } else {
-                items.append(contentsOf: bluetoothPowerLogItems(
-                    from: bluetoothPowerLogCache.readings(
-                        matching: regularTargets,
-                        referenceDate: referenceDate
-                    ),
-                    targets: regularTargets,
-                    referenceDate: referenceDate,
-                    localization: localization
-                ))
             }
         }
 
@@ -360,8 +380,11 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         timeout: TimeInterval
     ) -> [DeviceBatteryBluetoothPowerLogReading] {
         guard let output = runCommand(
-            path: "/usr/bin/log",
+            path: "/usr/bin/nice",
             arguments: [
+                "-n",
+                "19",
+                "/usr/bin/log",
                 "show",
                 "--process",
                 "bluetoothd",
@@ -382,6 +405,197 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         }
 
         return DeviceBatteryBluetoothPowerLogParser.readings(from: output)
+    }
+
+    private static func collectBatteryCenterLogDevices(
+        from profile: BluetoothProfile,
+        referenceDate: Date
+    ) -> [DeviceBatteryItem] {
+        let targets = bluetoothBatteryTargets(from: profile)
+        guard !targets.isEmpty || !profile.connectedDevices.isEmpty || !profile.batteryDevices.isEmpty else {
+            return []
+        }
+
+        let recentReadings = collectBatteryCenterLogReadings(
+            lookback: batteryCenterLogLookback,
+            timeout: batteryCenterLogTimeout
+        )
+
+        return batteryCenterLogItems(
+            from: recentReadings,
+            targets: targets,
+            referenceDate: referenceDate
+        )
+    }
+
+    private static func collectBatteryCenterLogReadings(
+        lookback: String,
+        timeout: TimeInterval
+    ) -> [DeviceBatteryBatteryCenterLogReading] {
+        guard let output = runCommand(
+            path: "/usr/bin/nice",
+            arguments: [
+                "-n",
+                "19",
+                "/usr/bin/log",
+                "show",
+                "--info",
+                "--last",
+                lookback,
+                "--style",
+                "compact",
+                "--predicate",
+                #"subsystem == "com.apple.BatteryCenter" AND eventMessage CONTAINS "BCBatteryDevice" AND eventMessage CONTAINS "percentCharge""#
+            ],
+            timeout: timeout,
+            outputLineFilter: { line in
+                line.contains("BCBatteryDevice") && line.contains("percentCharge")
+            }
+        ) else {
+            return []
+        }
+
+        return DeviceBatteryBatteryCenterLogParser.readings(from: output)
+    }
+
+    private static func batteryCenterLogItems(
+        from readings: [DeviceBatteryBatteryCenterLogReading],
+        targets: [BluetoothBatteryTarget],
+        referenceDate: Date
+    ) -> [DeviceBatteryItem] {
+        readings.compactMap { reading in
+            if let target = matchingBatteryCenterLogTarget(reading, in: targets) {
+                return DeviceBatteryItem(
+                    id: "batterycenter-\(target.address ?? target.id)",
+                    name: target.name,
+                    model: firstNonEmpty(reading.model, target.model),
+                    kind: target.kind,
+                    level: reading.level,
+                    chargeState: reading.chargeState,
+                    parentName: nil,
+                    source: "BatteryCenter",
+                    lastUpdated: referenceDate,
+                    isConnected: reading.isConnected ?? target.isConnected,
+                    detail: firstNonEmpty(reading.category, target.detail),
+                    componentIdentity: componentAggregateIdentity(
+                        groupID: target.componentGroupID,
+                        kind: target.kind
+                    )
+                )
+            }
+
+            guard reading.isInternal != true,
+                  let name = firstNonEmptyOptional(reading.name, reading.groupName)
+            else {
+                return nil
+            }
+
+            let kind = batteryCenterKind(reading: reading)
+            return DeviceBatteryItem(
+                id: "batterycenter-\(reading.accessoryID ?? normalizedDeviceName(name))",
+                name: name,
+                model: reading.model,
+                kind: kind,
+                level: reading.level,
+                chargeState: reading.chargeState,
+                parentName: nil,
+                source: "BatteryCenter",
+                lastUpdated: referenceDate,
+                isConnected: reading.isConnected ?? true,
+                detail: firstNonEmpty(reading.category, reading.transportType),
+                componentIdentity: componentAggregateIdentity(
+                    groupID: reading.accessoryID ?? normalizedDeviceName(name),
+                    kind: kind
+                )
+            )
+        }
+    }
+
+    private static func batteryCenterKind(reading: DeviceBatteryBatteryCenterLogReading) -> DeviceBatteryKind {
+        let haystack = [
+            reading.name,
+            reading.groupName,
+            reading.model,
+            reading.category
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        if haystack.contains("airpods")
+            || haystack.contains("beats")
+            || haystack.contains("headphone")
+            || haystack.contains("headset") {
+            return .airPodsPart
+        }
+        if haystack.contains("magic")
+            || haystack.contains("keyboard")
+            || haystack.contains("mouse")
+            || haystack.contains("trackpad") {
+            return .magicAccessory
+        }
+        return .bluetooth
+    }
+
+    private static func firstNonEmptyOptional(_ values: String?...) -> String? {
+        for value in values {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        return nil
+    }
+
+    fileprivate static func canUseUnmatchedBatteryCenterReading(
+        _ reading: DeviceBatteryBatteryCenterLogReading
+    ) -> Bool {
+        reading.isInternal != true && firstNonEmptyOptional(reading.name, reading.groupName) != nil
+    }
+
+    fileprivate static func matchingBatteryCenterLogTarget(
+        _ reading: DeviceBatteryBatteryCenterLogReading,
+        in targets: [BluetoothBatteryTarget]
+    ) -> BluetoothBatteryTarget? {
+        let nameMatchedTargets = targets.filter { target in
+            batteryCenterNamesMatch(reading: reading, target: target)
+                && batteryCenterProductIdentifiersMatch(reading: reading, target: target)
+        }
+        if nameMatchedTargets.count == 1 {
+            return nameMatchedTargets[0]
+        }
+
+        guard let readingProductID = normalizedProductIdentifier(reading.productID) else {
+            return nil
+        }
+
+        let productMatchedTargets = targets.filter { target in
+            normalizedProductIdentifier(target.productID) == readingProductID
+        }
+        return productMatchedTargets.count == 1 ? productMatchedTargets[0] : nil
+    }
+
+    private static func batteryCenterNamesMatch(
+        reading: DeviceBatteryBatteryCenterLogReading,
+        target: BluetoothBatteryTarget
+    ) -> Bool {
+        let readingNames = [reading.name, reading.groupName]
+            .compactMap { $0 }
+            .map(normalizedDeviceName)
+        return readingNames.contains(normalizedDeviceName(target.name))
+    }
+
+    private static func batteryCenterProductIdentifiersMatch(
+        reading: DeviceBatteryBatteryCenterLogReading,
+        target: BluetoothBatteryTarget
+    ) -> Bool {
+        guard let readingProductID = normalizedProductIdentifier(reading.productID),
+              let targetProductID = normalizedProductIdentifier(target.productID)
+        else {
+            return true
+        }
+
+        return readingProductID == targetProductID
     }
 
     private static func bluetoothPowerLogPredicate(for targets: [BluetoothBatteryTarget]) -> String {
@@ -571,6 +785,37 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 "deviceName.withPart",
                 defaultValue: "%@ %@",
                 target.name,
+                DeviceBatteryBluetoothPowerLogComponent.chargingCase.title(localization: localization)
+            )
+        }
+    }
+
+    fileprivate static func powerLogItemNameForReader(
+        component: DeviceBatteryBluetoothPowerLogComponent,
+        targetName: String,
+        localization: PluginLocalization
+    ) -> String {
+        localization.format(
+            "deviceName.withPart",
+            defaultValue: "%@ %@",
+            targetName,
+            component.title(localization: localization)
+        )
+    }
+
+    fileprivate static func powerLogParentNameForReader(
+        component: DeviceBatteryBluetoothPowerLogComponent,
+        targetName: String,
+        localization: PluginLocalization
+    ) -> String? {
+        switch component {
+        case .chargingCase:
+            return targetName
+        case .left, .right:
+            return localization.format(
+                "deviceName.withPart",
+                defaultValue: "%@ %@",
+                targetName,
                 DeviceBatteryBluetoothPowerLogComponent.chargingCase.title(localization: localization)
             )
         }
@@ -1055,18 +1300,45 @@ struct DeviceBatterySampler: DeviceBatterySampling {
         return cleaned.uppercased()
     }
 
+    fileprivate static func normalizedHexIdentifierForReader(_ value: String?) -> String? {
+        normalizedHexIdentifier(value)
+    }
+
+    private static func normalizedProductIdentifier(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return nil
+        }
+
+        let rawValue = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        if rawValue.hasPrefix("0x") || rawValue.hasPrefix("0X") {
+            return normalizedHexIdentifier(rawValue)
+        }
+        if let decimal = Int(rawValue) {
+            return String(decimal, radix: 16).uppercased()
+        }
+        return normalizedHexIdentifier(rawValue)
+    }
+
     private static func deduplicated(_ items: [DeviceBatteryItem]) -> [DeviceBatteryItem] {
         var bestByNameAndKind: [String: DeviceBatteryItem] = [:]
+        var orderedKeys: [String] = []
+
         for item in DeviceBatteryItemNormalizer.removingRedundantComponentAggregates(items) {
             let key = "\(item.kind)-\(item.name.lowercased())-\(item.parentName ?? "")"
             if let existing = bestByNameAndKind[key] {
                 bestByNameAndKind[key] = preferredItem(existing, item)
             } else {
                 bestByNameAndKind[key] = item
+                orderedKeys.append(key)
             }
         }
 
-        return Array(bestByNameAndKind.values)
+        return orderedKeys.compactMap { bestByNameAndKind[$0] }
     }
 
     private static func preferredItem(
@@ -1081,9 +1353,11 @@ struct DeviceBatterySampler: DeviceBatterySampling {
             "IORegistry": 0,
             "IOPowerSources": 0,
             "CoreBluetooth": 1,
-            "BluetoothPowerLog": 2,
-            "IOBluetooth": 3,
-            "system_profiler": 4
+            "AppleHeadphoneAdvertisement": 2,
+            "BatteryCenter": 3,
+            "BluetoothPowerLog": 4,
+            "IOBluetooth": 5,
+            "system_profiler": 6
         ]
         let leftRank = sourceRank[left.source] ?? 10
         let rightRank = sourceRank[right.source] ?? 10
@@ -1328,64 +1602,6 @@ fileprivate struct BluetoothBatteryTarget: Sendable {
     }
 }
 
-private final class DeviceBatteryBluetoothPowerLogCache: @unchecked Sendable {
-    private struct Entry {
-        let reading: DeviceBatteryBluetoothPowerLogReading
-        let updatedAt: Date
-    }
-
-    private let lock = NSLock()
-    private var entriesByIdentity: [String: Entry] = [:]
-    private let ttl: TimeInterval = 60
-
-    func update(
-        readings: [DeviceBatteryBluetoothPowerLogReading],
-        at date: Date
-    ) {
-        guard !readings.isEmpty else {
-            return
-        }
-
-        lock.lock()
-        for reading in readings {
-            entriesByIdentity[Self.identityKey(for: reading)] = Entry(
-                reading: reading,
-                updatedAt: date
-            )
-        }
-        lock.unlock()
-    }
-
-    func readings(
-        matching targets: [BluetoothBatteryTarget],
-        referenceDate: Date
-    ) -> [DeviceBatteryBluetoothPowerLogReading] {
-        lock.lock()
-        defer { lock.unlock() }
-
-        entriesByIdentity = entriesByIdentity.filter { _, entry in
-            referenceDate.timeIntervalSince(entry.updatedAt) <= ttl
-        }
-
-        return entriesByIdentity.values.compactMap { entry in
-            DeviceBatterySampler.matchingBluetoothPowerLogTarget(entry.reading, in: targets) == nil
-                ? nil
-                : entry.reading
-        }
-    }
-
-    private static func identityKey(for reading: DeviceBatteryBluetoothPowerLogReading) -> String {
-        [
-            reading.name,
-            reading.vendorID ?? "",
-            reading.productID ?? "",
-            reading.component?.rawValue ?? "main"
-        ]
-            .joined(separator: "|")
-            .lowercased()
-    }
-}
-
 struct DeviceBatteryBluetoothPowerLogReading: Equatable, Sendable {
     let name: String
     let vendorID: String?
@@ -1444,7 +1660,7 @@ enum DeviceBatteryBluetoothPowerLogParser {
             }
         }
 
-        return Array(latestByIdentity.values)
+        return latestByIdentity.keys.sorted().compactMap { latestByIdentity[$0] }
     }
 
     static func reading(from line: String) -> DeviceBatteryBluetoothPowerLogReading? {
@@ -1564,6 +1780,331 @@ enum DeviceBatteryBluetoothPowerLogParser {
         }
 
         return (level: level, isCharging: value.hasPrefix("+"))
+    }
+}
+
+struct DeviceBatteryBatteryCenterLogReading: Equatable, Sendable {
+    let name: String?
+    let groupName: String?
+    let productID: String?
+    let model: String?
+    let category: String?
+    let accessoryID: String?
+    let transportType: String?
+    let level: Int
+    let chargeState: DeviceBatteryChargeState
+    let isConnected: Bool?
+    let isInternal: Bool?
+}
+
+enum DeviceBatteryBatteryCenterLogParser {
+    static func readings(from output: String) -> [DeviceBatteryBatteryCenterLogReading] {
+        output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { reading(fromLine: String($0)) }
+    }
+
+    static func reading(fromLine line: String) -> DeviceBatteryBatteryCenterLogReading? {
+        guard line.contains("BCBatteryDevice"),
+              let payload = stringValue(after: "<BCBatteryDevice:", before: ">", in: line),
+              let level = intField("percentCharge", in: payload),
+              (0...100).contains(level)
+        else {
+            return nil
+        }
+
+        return DeviceBatteryBatteryCenterLogReading(
+            name: field("name", in: payload),
+            groupName: field("groupName", in: payload),
+            productID: field("productIdentifier", in: payload),
+            model: field("modelNumber", in: payload),
+            category: field("accessoryCategory", in: payload),
+            accessoryID: field("accessoryIdentifier", in: payload),
+            transportType: field("transportType", in: payload),
+            level: level,
+            chargeState: boolField("charging", in: payload) == true ? .charging : .normal,
+            isConnected: boolField("connected", in: payload),
+            isInternal: boolField("internal", in: payload)
+        )
+    }
+
+    private static func field(_ key: String, in text: String) -> String? {
+        for segment in text.split(separator: ";", omittingEmptySubsequences: false) {
+            let parts = segment.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  parts[0].trimmingCharacters(in: .whitespacesAndNewlines) == key
+            else {
+                continue
+            }
+
+            let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, value != "(null)" else {
+                return nil
+            }
+            return value
+        }
+
+        return nil
+    }
+
+    private static func intField(_ key: String, in text: String) -> Int? {
+        field(key, in: text).flatMap(Int.init)
+    }
+
+    private static func boolField(_ key: String, in text: String) -> Bool? {
+        switch field(key, in: text)?.uppercased() {
+        case "YES":
+            return true
+        case "NO":
+            return false
+        default:
+            return nil
+        }
+    }
+
+    private static func stringValue(
+        after prefix: String,
+        before suffix: Character,
+        in text: String
+    ) -> String? {
+        guard let startRange = text.range(of: prefix) else {
+            return nil
+        }
+
+        let start = startRange.upperBound
+        guard let end = text[start...].firstIndex(of: suffix) else {
+            return nil
+        }
+
+        let value = String(text[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+}
+
+struct DeviceBatteryAppleHeadphoneAdvertisementReading: Equatable, Sendable {
+    let component: DeviceBatteryBluetoothPowerLogComponent
+    let level: Int
+    let chargeState: DeviceBatteryChargeState
+}
+
+enum DeviceBatteryAppleHeadphoneAdvertisementParser {
+    static func readings(from manufacturerData: Data) -> [DeviceBatteryAppleHeadphoneAdvertisementReading] {
+        let bytes = [UInt8](manufacturerData)
+        guard bytes.count >= 2, bytes[0] == 0x4C, bytes[1] == 0x00 else {
+            return []
+        }
+
+        switch bytes.count {
+        case 29 where bytes[2] == 0x07:
+            return openCaseReadings(from: bytes)
+        case 25 where bytes[2] == 0x12:
+            return closedCaseReadings(from: bytes)
+        default:
+            return []
+        }
+    }
+
+    private static func openCaseReadings(from bytes: [UInt8]) -> [DeviceBatteryAppleHeadphoneAdvertisementReading] {
+        let flip = (bytes[7] & 0x02) == 0
+        return [
+            reading(component: .chargingCase, rawLevel: bytes[16]),
+            reading(component: .left, rawLevel: bytes[flip ? 15 : 14]),
+            reading(component: .right, rawLevel: bytes[flip ? 14 : 15])
+        ]
+            .compactMap { $0 }
+    }
+
+    private static func closedCaseReadings(from bytes: [UInt8]) -> [DeviceBatteryAppleHeadphoneAdvertisementReading] {
+        [
+            reading(component: .chargingCase, rawLevel: bytes[12]),
+            reading(component: .left, rawLevel: bytes[13]),
+            reading(component: .right, rawLevel: bytes[14])
+        ]
+            .compactMap { $0 }
+    }
+
+    private static func reading(
+        component: DeviceBatteryBluetoothPowerLogComponent,
+        rawLevel: UInt8
+    ) -> DeviceBatteryAppleHeadphoneAdvertisementReading? {
+        guard rawLevel != 0xFF else {
+            return nil
+        }
+
+        let isCharging = rawLevel > 100
+        let level = Int(rawLevel & 0x7F)
+        guard (0...100).contains(level) else {
+            return nil
+        }
+
+        return DeviceBatteryAppleHeadphoneAdvertisementReading(
+            component: component,
+            level: level,
+            chargeState: isCharging ? .charging : .normal
+        )
+    }
+}
+
+@MainActor
+private final class DeviceBatteryAppleHeadphoneAdvertisementReader: NSObject, @preconcurrency CBCentralManagerDelegate {
+    private let targets: [BluetoothBatteryTarget]
+    private let targetsByName: [String: BluetoothBatteryTarget]
+    private let referenceDate: Date
+    private let localization: PluginLocalization
+    private var centralManager: CBCentralManager?
+    private var continuations: [CheckedContinuation<[DeviceBatteryItem], Never>] = []
+    private var readingsByTargetID: [String: [DeviceBatteryBluetoothPowerLogComponent: DeviceBatteryAppleHeadphoneAdvertisementReading]] = [:]
+    private var timeoutTask: Task<Void, Never>?
+    private var didFinish = false
+
+    static func collectBatteryDevices(
+        targets: [BluetoothBatteryTarget],
+        referenceDate: Date,
+        localization: PluginLocalization
+    ) async -> [DeviceBatteryItem] {
+        let eligibleTargets = targets.filter { target in
+            target.vendorID.flatMap(DeviceBatterySampler.normalizedHexIdentifierForReader) == "004C"
+                && DeviceBatteryAppleHeadphoneAdvertisementReader.supportsAdvertisementBattery(target: target)
+        }
+        guard !eligibleTargets.isEmpty else {
+            return []
+        }
+
+        let reader = DeviceBatteryAppleHeadphoneAdvertisementReader(
+            targets: eligibleTargets,
+            referenceDate: referenceDate,
+            localization: localization
+        )
+        return await reader.collect()
+    }
+
+    init(
+        targets: [BluetoothBatteryTarget],
+        referenceDate: Date,
+        localization: PluginLocalization
+    ) {
+        self.targets = targets
+        self.targetsByName = Dictionary(uniqueKeysWithValues: targets.map { ($0.name.lowercased(), $0) })
+        self.referenceDate = referenceDate
+        self.localization = localization
+        super.init()
+    }
+
+    private func collect() async -> [DeviceBatteryItem] {
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+            centralManager = CBCentralManager(delegate: self, queue: .main)
+            timeoutTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(2500))
+                self?.finish()
+            }
+        }
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard central.state == .poweredOn else {
+            finish()
+            return
+        }
+
+        central.scanForPeripherals(
+            withServices: nil,
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+        )
+    }
+
+    func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        guard let name = peripheral.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let target = targetsByName[name.lowercased()],
+              let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
+        else {
+            return
+        }
+
+        let readings = DeviceBatteryAppleHeadphoneAdvertisementParser.readings(from: manufacturerData)
+        guard !readings.isEmpty else {
+            return
+        }
+
+        var targetReadings = readingsByTargetID[target.id] ?? [:]
+        for reading in readings {
+            targetReadings[reading.component] = reading
+        }
+        readingsByTargetID[target.id] = targetReadings
+
+        let hasChargingState = targetReadings.values.contains { $0.chargeState == .charging }
+        if hasChargingState || readingsByTargetID.count == targets.count {
+            finish()
+        }
+    }
+
+    private func finish() {
+        guard !didFinish else {
+            return
+        }
+
+        didFinish = true
+        timeoutTask?.cancel()
+        centralManager?.stopScan()
+        let items = batteryItems()
+        let pendingContinuations = continuations
+        continuations.removeAll()
+        for continuation in pendingContinuations {
+            continuation.resume(returning: items)
+        }
+    }
+
+    private func batteryItems() -> [DeviceBatteryItem] {
+        readingsByTargetID.flatMap { targetID, readingsByComponent -> [DeviceBatteryItem] in
+            guard let target = targets.first(where: { $0.id == targetID }) else {
+                return []
+            }
+
+            return readingsByComponent.values.map { reading in
+                DeviceBatteryItem(
+                    id: "apple-headphone-advertisement-\(target.componentGroupID)-\(reading.component.idSuffix)",
+                    name: DeviceBatterySampler.powerLogItemNameForReader(
+                        component: reading.component,
+                        targetName: target.name,
+                        localization: localization
+                    ),
+                    model: target.model,
+                    kind: .airPodsPart,
+                    level: reading.level,
+                    chargeState: reading.chargeState,
+                    parentName: DeviceBatterySampler.powerLogParentNameForReader(
+                        component: reading.component,
+                        targetName: target.name,
+                        localization: localization
+                    ),
+                    source: "AppleHeadphoneAdvertisement",
+                    lastUpdated: referenceDate,
+                    isConnected: target.isConnected,
+                    detail: target.detail,
+                    componentIdentity: DeviceBatteryComponentIdentity(
+                        groupID: target.componentGroupID,
+                        role: reading.component.componentRole
+                    )
+                )
+            }
+        }
+    }
+
+    private static func supportsAdvertisementBattery(target: BluetoothBatteryTarget) -> Bool {
+        let haystack = [
+            target.name,
+            target.model,
+            target.detail
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        return haystack.contains("airpods") || haystack.contains("beats")
     }
 }
 

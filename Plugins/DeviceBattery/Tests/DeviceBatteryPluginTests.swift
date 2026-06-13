@@ -244,6 +244,82 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(caseReading?.chargeState, .charging)
     }
 
+    func testBatteryCenterLogParserReadsChargingState() {
+        let line = """
+        2026-06-12 21:43:32.313 Df NotificationCenter[1199:36289f6] [com.apple.BatteryCenter:PowerSourceController] Found device: <BCBatteryDevice: 0x804941b80; vendor = Apple; productIdentifier = 8212; parts = (null); identifier = 49443244; matchIdentifier = (null); name = ggbond AirPods; groupName =ggbond AirPods; percentCharge = 24; lowBattery = NO; lowPowerModeActive = NO; connected = YES; charging = YES; paused = NO; internal = NO; powerSource = NO; poweredSoureState = AC Power; transportType = Bluetooth; accessoryIdentifier = 2C7600E3-8F61-4CAA-A1F0-BADBEEF12345; accessoryCategory = Headphones; modelNumber = AirPods Pro 2; >
+        """
+
+        let reading = DeviceBatteryBatteryCenterLogParser.reading(fromLine: line)
+
+        XCTAssertEqual(reading?.name, "ggbond AirPods")
+        XCTAssertEqual(reading?.groupName, "ggbond AirPods")
+        XCTAssertEqual(reading?.productID, "8212")
+        XCTAssertEqual(reading?.model, "AirPods Pro 2")
+        XCTAssertEqual(reading?.category, "Headphones")
+        XCTAssertEqual(reading?.level, 24)
+        XCTAssertEqual(reading?.chargeState, .charging)
+        XCTAssertEqual(reading?.isConnected, true)
+    }
+
+    func testBatteryCenterLogParserReadsWatchChargingState() {
+        let line = """
+        2026-06-12 21:43:32.313 Df BatteriesAvocadoWidgetExtension[1199:36289f6] [com.apple.BatteryCenter:PowerSourceController] Found device: <BCBatteryDevice: 0x804941b80; vendor = Apple; productIdentifier = 777; parts = (null); identifier = 49443245; matchIdentifier = (null); name = ggbond Watch; groupName =ggbond Watch; percentCharge = 86; lowBattery = NO; lowPowerModeActive = NO; connected = YES; charging = YES; paused = NO; internal = NO; powerSource = NO; poweredSoureState = AC Power; transportType = Continuity; accessoryIdentifier = WATCH-1234; accessoryCategory = Watch; modelNumber = Watch7,4; >
+        """
+
+        let reading = DeviceBatteryBatteryCenterLogParser.reading(fromLine: line)
+
+        XCTAssertEqual(reading?.name, "ggbond Watch")
+        XCTAssertEqual(reading?.category, "Watch")
+        XCTAssertEqual(reading?.transportType, "Continuity")
+        XCTAssertEqual(reading?.level, 86)
+        XCTAssertEqual(reading?.chargeState, .charging)
+        XCTAssertEqual(reading?.isInternal, false)
+    }
+
+    func testAppleHeadphoneAdvertisementParserReadsClosedCaseChargingState() {
+        var data = [UInt8](repeating: 0, count: 25)
+        data[0] = 0x4C
+        data[1] = 0x00
+        data[2] = 0x12
+        data[12] = 0x80 | 24
+        data[13] = 0x80 | 100
+        data[14] = 100
+
+        let readings = DeviceBatteryAppleHeadphoneAdvertisementParser.readings(from: Data(data))
+        let caseReading = readings.first { $0.component == .chargingCase }
+        let leftReading = readings.first { $0.component == .left }
+        let rightReading = readings.first { $0.component == .right }
+
+        XCTAssertEqual(caseReading?.level, 24)
+        XCTAssertEqual(caseReading?.chargeState, .charging)
+        XCTAssertEqual(leftReading?.level, 100)
+        XCTAssertEqual(leftReading?.chargeState, .charging)
+        XCTAssertEqual(rightReading?.level, 100)
+        XCTAssertEqual(rightReading?.chargeState, .normal)
+    }
+
+    func testAppleHeadphoneAdvertisementParserReadsOpenCaseFlippedEarbuds() {
+        var data = [UInt8](repeating: 0, count: 29)
+        data[0] = 0x4C
+        data[1] = 0x00
+        data[2] = 0x07
+        data[7] = 0x00
+        data[14] = 72
+        data[15] = 0x80 | 64
+        data[16] = 35
+
+        let readings = DeviceBatteryAppleHeadphoneAdvertisementParser.readings(from: Data(data))
+        let leftReading = readings.first { $0.component == .left }
+        let rightReading = readings.first { $0.component == .right }
+        let caseReading = readings.first { $0.component == .chargingCase }
+
+        XCTAssertEqual(leftReading?.level, 64)
+        XCTAssertEqual(leftReading?.chargeState, .charging)
+        XCTAssertEqual(rightReading?.level, 72)
+        XCTAssertEqual(rightReading?.chargeState, .normal)
+        XCTAssertEqual(caseReading?.level, 35)
+    }
+
     func testBluetoothPowerLogParserKeepsLatestReadingForSameDevice() {
         let output = """
         2026-06-02 14:04:52.648 Df bluetoothd[616:f85de1] [com.apple.bluetooth:CBPowerSource] Power source updated CBPowerSource Nm 'MX Anywhere 3S', AcCa Mouse, PID 0xB037 (?), VID 0x046D (?), Battery -81%
@@ -328,6 +404,35 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertFalse(caseItem?.isConnected ?? true)
         XCTAssertFalse(items.contains { $0.name == "ggbond AirPods 4" })
         XCTAssertFalse(items.contains { $0.name == "MX Anywhere 3S" })
+    }
+
+    func testSystemProfilerKeepsDisconnectedAirPodsCandidateWithoutBatteryFields() {
+        let output = """
+        {
+          "SPBluetoothDataType": [
+            {
+              "device_connected": [],
+              "device_not_connected": [
+                {
+                  "ggbond AirPods 4": {
+                    "device_address": "C4:B3:49:EE:7F:62",
+                    "device_minorType": "Headphones",
+                    "device_productID": "0x201B",
+                    "device_vendorID": "0x004C"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        let items = DeviceBatterySampler.bluetoothProfileBatteryItems(
+            fromSystemProfilerOutput: output,
+            referenceDate: Date()
+        )
+
+        XCTAssertTrue(items.isEmpty)
     }
 
     func testBluetoothKindKeepsConnectedMouseAsBluetoothDevice() {
