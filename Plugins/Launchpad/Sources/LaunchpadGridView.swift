@@ -624,9 +624,13 @@ struct LaunchpadGridView: View {
                         goToPage(page)
                     }
                     // Mirror the cell fix: `.onTapGesture` is mouse-only, so VoiceOver /
-                    // AX press needs an explicit action to actually change page. AX flips ride
-                    // the same goToPage → currentPage funnel, so they are carry-safe (§6.4).
-                    .accessibilityAction { goToPage(page) }
+                    // AX press needs an explicit action to actually change page. Carry the
+                    // same input-freeze guard as the tap path (§9.4) so an AX-triggered flip
+                    // can't move the grid out from under an in-flight carry.
+                    .accessibilityAction {
+                        guard dragCoordinator.carrySession == nil else { return }
+                        goToPage(page)
+                    }
                     .accessibilityLabel(
                         page >= pageCount
                             ? localization.string("grid.page.virtualLabel", defaultValue: "新页面")

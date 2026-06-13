@@ -156,7 +156,7 @@ struct LaunchpadSettingsView: View {
                                 value: compactScaleBinding,
                                 in: Double(LaunchpadPreferences.minCompactScale)
                                     ... Double(LaunchpadPreferences.maxCompactScale),
-                                step: 5
+                                step: 1
                             )
                             .frame(minWidth: 120, idealWidth: 160, maxWidth: 200)
                             Text(
@@ -410,7 +410,7 @@ struct LaunchpadSettingsView: View {
                                 value: dimPercentBinding,
                                 in: Double(LaunchpadBackgroundDim.percentRange.lowerBound)
                                     ... Double(LaunchpadBackgroundDim.percentRange.upperBound),
-                                step: 5
+                                step: 1
                             )
                             .frame(minWidth: 120, idealWidth: 160, maxWidth: 200)
                             Text(

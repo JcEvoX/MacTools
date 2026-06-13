@@ -436,7 +436,7 @@ func resolveExternalDrop() -> (result: LaunchpadExternalDropResult, settleLocalR
 | 7 | settle 期打字/Esc | 同 6/2 的入口，session 在 settling | force-complete 视觉；**数据在 mouseUp 已提交，isLayoutEditable guard 不在数据通路上**（storeApplier 用 editableAtBegin），BR-2 消解 |
 | 8 | 几何突变（resize/perPage 变） | updatePageGeometry 检测与会话起点不符 → cancelCarry(.geometryChanged) | 标定空间失效，fail-safe |
 | 9 | settling 期重入 lift | §1.2 settling×lift：force-complete 后开新会话 | 不存在「第二个 cell 被停泊却无浮窗」的半开状态（BR-4） |
-| 10 | **mid-carry 右键**（两家审查共同新发现） | cell rightMouseDown 守卫扩为 `container?.hasActiveDrag == true || container?.grid?.coordinator?.carryActive == true` | 现守卫（:1029-1032）per-container，root carry 翻到非源页后该页 hasActiveDrag==false、interactionEnabled==true（无夹保护）→ NSMenu tracking loop 吞 mouseUp 卡死会话——升 coordinator 级 gate 关死（AR-9/BC-4/BR-6） |
+| 10 | **mid-carry 右键**（两家审查共同新发现） | cell rightMouseDown 守卫扩为 `container?.hasActiveDrag == true \|\| container?.grid?.coordinator?.carryActive == true` | 现守卫（:1029-1032）per-container，root carry 翻到非源页后该页 hasActiveDrag==false、interactionEnabled==true（无夹保护）→ NSMenu tracking loop 吞 mouseUp 卡死会话——升 coordinator 级 gate 关死（AR-9/BC-4/BR-6） |
 | 11 | lift 前 0.1s 内刚滚动过 | §2.1-3 carry 入口清场 + snapToNearestPage guard | pageDragTranslation ≡ 0 during carry——§5.3 算术前提由 carry 入口自己保证，不靠「恰好静止」（AC-6/BC-2） |
 | 12 | flight 中断 | §7.2 gen-token 化的 timeout + cancel 先 reveal | 图标不可永久隐身 |
 

@@ -127,9 +127,10 @@ final class LaunchpadEjectE2ETests: XCTestCase {
         XCTAssertNotNil(coordinator.pendingEject, "commit 后 pendingEject 必须可供 SwiftUI onChange 消费")
         XCTAssertEqual(coordinator.pendingEject?.appID, postman.id)
         XCTAssertEqual(coordinator.pendingEject?.folderID, "F-TEST")
-        if case .reorder(let target)? = coordinator.pendingEject?.result {
-            XCTAssertNotNil(target, "落点在根网格内部必须解析出相对目标，不得落尾兜底")
+        guard case .reorder(let target)? = coordinator.pendingEject?.result else {
+            return XCTFail("commit 结果应为 .reorder，实际为 \(String(describing: coordinator.pendingEject?.result))")
         }
+        XCTAssertNotNil(target, "落点在根网格内部必须解析出相对目标，不得落尾兜底")
         XCTAssertFalse(coordinator.hasFloatingWindow)
     }
 

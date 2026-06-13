@@ -15,7 +15,7 @@
 三个枚举，全 String rawValue + CaseIterable + Identifiable(id=rawValue) + label(localization:) + 派生值：
 1. LaunchpadLabelColor: automatic/light/dark/accent；nsColor 派生(.automatic→NSColor.labelColor 零迁移, light→.white, dark→.black, accent→.controlAccentColor)。
 2. LaunchpadLabelWeight: regular/medium/semibold/bold；nsFontWeight→NSFont.Weight；文件夹标题用 emphasized 派生(下限 .semibold，保证标题永不细于历史)。
-3. LaunchpadLabelSize: small/medium(默认,=历史 12pt 基线)/large；纯函数 fontSize(iconSide:)：small→11(固定)；medium→clamp(round(iconSide*0.18),11,15)；large→clamp(round(iconSide*0.21),12,17)。文件夹标题 fontSize = max(title2.pointSize, networkSize)，保证标题 ≥ app 名。
+3. LaunchpadLabelSize: small/medium(默认,=历史 12pt 基线)/large；纯函数 fontSize(iconSide:)：small→11(固定)；medium→clamp(round(iconSide*0.18),11,15)；large→clamp(round(iconSide*0.21),12,17)。文件夹标题 fontSize = max(title2.pointSize, labelFontSize)（labelFontSize 即上面 LaunchpadLabelSize.fontSize(iconSide:) 的计算结果），保证标题 ≥ app 名。
    —— 这一档采纳方案 C「字号与 iconSize 协调」，但 default(medium) 在 @64pt 派生 12pt 命中历史，且 labelHeight 用 max(32, ceil(systemFontLineHeight(size)*2)+pad)，仅 large/超大图标才长高，默认严格不动几何。
 
 LaunchpadAppearance(LaunchpadLayoutMath.swift:6-11) 加三字段，安全默认守 byte-compat：

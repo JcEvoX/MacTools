@@ -246,7 +246,11 @@ final class LaunchpadLayoutStore: ObservableObject {
               case .folder(let fid, let currentName, let children) = nodes[folderIndex]
         else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolved = trimmed.isEmpty ? fallback : trimmed
+        // Trim the fallback too: a whitespace-only fallback (e.g. a bad localization
+        // payload) would otherwise persist a visually blank folder name. Fall back once
+        // more to a hard default so a folder is never left nameless.
+        let trimmedFallback = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = trimmed.isEmpty ? (trimmedFallback.isEmpty ? "未命名" : trimmedFallback) : trimmed
         guard resolved != currentName else { return }   // no visible change → no write
         nodes[folderIndex] = .folder(id: fid, name: resolved, children: children)
         setLayout(LaunchpadLayout(version: current.version, nodes: nodes))
