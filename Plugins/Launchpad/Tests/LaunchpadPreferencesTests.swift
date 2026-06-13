@@ -183,4 +183,52 @@ final class LaunchpadPreferencesTests: XCTestCase {
         XCTAssertEqual(prefs.appearance, LaunchpadAppearance(iconSide: 80, showsLabels: false),
                        "showsLabels = !hidesAppNames，iconSide 跟随 iconSize")
     }
+
+    // MARK: - Label-style keys (design 2026-06-13)
+
+    func testLabelStyleDefaultsWhenStorageEmpty() {
+        let prefs = LaunchpadPreferences(storage: FakePluginStorage())
+        XCTAssertEqual(prefs.labelColor, .automatic, "未设值 → .automatic（零迁移）")
+        XCTAssertEqual(prefs.labelWeight, .regular, "未设值 → .regular")
+        XCTAssertEqual(prefs.labelSize, .medium, "未设值 → .medium（历史 12pt 基线）")
+    }
+
+    func testLabelStyleRoundTrip() {
+        let store = FakePluginStorage()
+        let prefs = LaunchpadPreferences(storage: store)
+        prefs.labelColor = .accent
+        prefs.labelWeight = .bold
+        prefs.labelSize = .large
+        XCTAssertEqual(store.values["labelColor"] as? String, "accent")
+        XCTAssertEqual(store.values["labelWeight"] as? String, "bold")
+        XCTAssertEqual(store.values["labelSize"] as? String, "large")
+
+        // A fresh instance over the same storage reads the raw values back.
+        let reloaded = LaunchpadPreferences(storage: store)
+        XCTAssertEqual(reloaded.labelColor, .accent)
+        XCTAssertEqual(reloaded.labelWeight, .bold)
+        XCTAssertEqual(reloaded.labelSize, .large)
+    }
+
+    func testUnknownStoredLabelValuesFallBackToDefaults() {
+        let store = FakePluginStorage()
+        store.values["labelColor"] = "neon"        // a future/garbage raw value
+        store.values["labelWeight"] = "ultralight"
+        store.values["labelSize"] = "huge"
+        let prefs = LaunchpadPreferences(storage: store)
+        XCTAssertEqual(prefs.labelColor, .automatic, "未知颜色值降级回 .automatic")
+        XCTAssertEqual(prefs.labelWeight, .regular, "未知字重值降级回 .regular")
+        XCTAssertEqual(prefs.labelSize, .medium, "未知字号值降级回 .medium")
+    }
+
+    func testAppearanceDerivationCarriesLabelStyle() {
+        let prefs = LaunchpadPreferences(storage: FakePluginStorage())
+        prefs.labelColor = .light
+        prefs.labelWeight = .semibold
+        prefs.labelSize = .small
+        XCTAssertEqual(prefs.appearance,
+                       LaunchpadAppearance(iconSide: 64, showsLabels: true,
+                                           labelColor: .light, labelWeight: .semibold, labelSize: .small),
+                       "appearance 投影必须携带三个标签样式字段")
+    }
 }

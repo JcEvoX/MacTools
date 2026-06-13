@@ -253,6 +253,68 @@ struct LaunchpadSettingsView: View {
                         .frame(width: 52, alignment: .trailing)
                     }
                 }
+                Divider()
+                row(
+                    title: localization.string(
+                        "settings.appearance.labelSize.title",
+                        defaultValue: "标签字号"
+                    ),
+                    description: localization.string(
+                        "settings.appearance.labelSize.description",
+                        defaultValue: "与图标大小协调缩放"
+                    )
+                ) {
+                    Picker("", selection: $preferences.labelSize) {
+                        ForEach(LaunchpadLabelSize.allCases) { size in
+                            Text(size.label(localization: localization)).tag(size)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    // Intrinsic width; see the background-style picker note — a fixed frame
+                    // lets NSSegmentedControl overdraw past the card on wider languages.
+                    .fixedSize()
+                }
+                Divider()
+                row(
+                    title: localization.string(
+                        "settings.appearance.labelWeight.title",
+                        defaultValue: "标签字重"
+                    ),
+                    description: localization.string(
+                        "settings.appearance.labelWeight.description",
+                        defaultValue: "应用名称与文件夹标题共用"
+                    )
+                ) {
+                    Picker("", selection: $preferences.labelWeight) {
+                        ForEach(LaunchpadLabelWeight.allCases) { weight in
+                            Text(weight.label(localization: localization)).tag(weight)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                Divider()
+                row(
+                    title: localization.string(
+                        "settings.appearance.labelColor.title",
+                        defaultValue: "标签颜色"
+                    ),
+                    description: localization.string(
+                        "settings.appearance.labelColor.description",
+                        defaultValue: "深色背景下可选浅色更清晰"
+                    )
+                ) {
+                    Picker("", selection: $preferences.labelColor) {
+                        ForEach(LaunchpadLabelColor.allCases) { color in
+                            Text(color.label(localization: localization)).tag(color)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(width: 110)
+                }
             }
         }
     }

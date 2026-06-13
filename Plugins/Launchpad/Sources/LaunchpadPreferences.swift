@@ -125,6 +125,26 @@ final class LaunchpadPreferences: ObservableObject {
         }
     }
 
+    // MARK: Label appearance (design 2026-06-13)
+
+    /// Label text colour preset. Default `.automatic` resolves to `.labelColor`, the
+    /// historical implicit colour — zero migration. Persisted as the raw value (a String
+    /// PluginStorage stores natively, no NSColor/Data encoding).
+    @Published var labelColor: LaunchpadLabelColor {
+        didSet { storage.set(labelColor.rawValue, forKey: Keys.labelColor) }
+    }
+
+    /// Label font-weight preset. Default `.regular` matches the historical system weight.
+    @Published var labelWeight: LaunchpadLabelWeight {
+        didSet { storage.set(labelWeight.rawValue, forKey: Keys.labelWeight) }
+    }
+
+    /// Label font-size tier. Default `.medium` derives 12pt at the 64pt icon — the byte-compat
+    /// baseline; the other tiers scale with the icon side.
+    @Published var labelSize: LaunchpadLabelSize {
+        didSet { storage.set(labelSize.rawValue, forKey: Keys.labelSize) }
+    }
+
     /// The single input to `LaunchpadGridMetrics.resolve(_:)` (and, later, the settings
     /// layout preview). Read-only derivation — features 7/8 own the writes above.
     /// The overlay snapshots the resolved metrics at `open()` (same session discipline
@@ -132,7 +152,10 @@ final class LaunchpadPreferences: ObservableObject {
     var appearance: LaunchpadAppearance {
         LaunchpadAppearance(
             iconSide: CGFloat(Self.normalizedIconSize(iconSize)),
-            showsLabels: !hidesAppNames
+            showsLabels: !hidesAppNames,
+            labelColor: labelColor,
+            labelWeight: labelWeight,
+            labelSize: labelSize
         )
     }
 
@@ -177,6 +200,9 @@ final class LaunchpadPreferences: ObservableObject {
         static let iconSize = "iconSize"
         static let hidesAppNames = "hidesAppNames"
         static let compactScalePercent = "compactScalePercent"
+        static let labelColor = "labelColor"
+        static let labelWeight = "labelWeight"
+        static let labelSize = "labelSize"
         static let backgroundStyle = "backgroundStyle"
         static let backgroundMaterial = "backgroundMaterial"
         static let backgroundDimPercent = "backgroundDimPercent"
@@ -215,6 +241,14 @@ final class LaunchpadPreferences: ObservableObject {
         self.hidesAppNames = storage.bool(forKey: Keys.hidesAppNames)
         self.compactScalePercent = Self.normalizedCompactScale(
             storage.integer(forKey: Keys.compactScalePercent))
+        // Label-style presets: unknown/unset raw values fall back to the byte-compat defaults
+        // (`.automatic`/`.regular`/`.medium`), same pattern as `windowMode`/`backgroundStyle`.
+        self.labelColor = LaunchpadLabelColor(
+            rawValue: storage.string(forKey: Keys.labelColor) ?? "") ?? .automatic
+        self.labelWeight = LaunchpadLabelWeight(
+            rawValue: storage.string(forKey: Keys.labelWeight) ?? "") ?? .regular
+        self.labelSize = LaunchpadLabelSize(
+            rawValue: storage.string(forKey: Keys.labelSize) ?? "") ?? .medium
         // Unknown raw values (a downgrade wrote a future style) fall back to the default,
         // same pattern as `windowMode`.
         self.backgroundStyle = LaunchpadBackgroundStyle(

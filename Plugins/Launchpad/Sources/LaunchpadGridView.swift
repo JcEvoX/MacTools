@@ -82,6 +82,11 @@ struct LaunchpadGridView: View {
     /// Backs the `filtered` memoization. Reference type so cached cells persist across
     /// body passes; mutating it never invalidates the view (it is a pure cache).
     @State private var filteredCache = FilteredCache()
+    /// Full ZStack size, captured via a background GeometryReader. The folder pop-out's
+    /// `collapsedOffset` needs the whole container (its centre + the grid's chrome offset),
+    /// not the post-chrome grid viewport `pagedGrid` measures. `.zero` until the first layout
+    /// pass — the collapsed-offset fallback (design «动画计划» 兜底) catches that frame.
+    @State private var containerSize: CGSize = .zero
     /// Shared chrome constants (search bar, paddings, page-dot reserve) — single-sourced
     /// in `LaunchpadLayoutMath.Chrome` so the settings preview can't drift (design §1.1).
     private var chrome: LaunchpadLayoutMath.Chrome { .standard(isCompact: isCompact) }
@@ -221,12 +226,27 @@ struct LaunchpadGridView: View {
                     .opacity(folderShown ? 1 : 0)
                     .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
 
+                // iOS-style pop-out: the panel grows FROM the opened folder's grid cell, not from
+                // the ZStack centre (design 2026-06-13 «动画计划»). `collapsedOffset` slides the
+                // (centred) panel onto that cell and `collapsedScale` shrinks it to a dot; opening
+                // returns to `.zero` / `1`. offset + scale + opacity share ONE `.animation(value:
+                // folderShown)` so the three never split into off-beat segments. No `.transition`
+                // (the ZStack-over-AppKit tuple view has no stable identity — see `folderShown`).
                 folderPanel(folder)
-                    .scaleEffect(folderShown ? 1 : 0.55, anchor: .center)
+                    .scaleEffect(folderShown ? 1 : collapsedScale, anchor: .center)
+                    .offset(folderShown ? .zero : collapsedOffset)
                     .opacity(folderShown ? 1 : 0)
                     .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
             }
         }
+        // Capture the full ZStack size for the folder pop-out's collapsed-offset math. Sits in a
+        // background (never affects layout) and reports the container the centred panel lives in.
+        .background(
+            GeometryReader { proxy in
+                Color.clear.onAppear { containerSize = proxy.size }
+                    .onChange(of: proxy.size) { _, size in containerSize = size }
+            }
+        )
         .onAppear {
             selectedIndex = 0; currentPage = 0; sessionHidden = hiddenAppIDs
             // The coordinator outlives this view (controller-owned): a previous session torn
@@ -781,6 +801,47 @@ struct LaunchpadGridView: View {
     private var folderOpenAnimation: Animation { .spring(response: 0.50, dampingFraction: 0.78) }
     private var folderCloseAnimation: Animation { .spring(response: 0.32, dampingFraction: 0.92) }
 
+    /// Collapsed scale of the folder panel — small enough to read as "from the cell" (~a folder
+    /// thumbnail), not the historical 0.55 centre-zoom (design 2026-06-13 «动画计划»).
+    private let collapsedScale: CGFloat = 0.18
+
+    /// Offset that anchors the collapsed (closed) folder panel onto its grid cell, so it grows
+    /// FROM there (design 2026-06-13 «动画计划»). Pure SwiftUI viewport math via
+    /// `LaunchpadLayoutMath.folderCollapsedOffset` — no AppKit `convert`.
+    ///
+    /// Fallbacks (hard requirement — never sling the panel off-screen or compute on a half-laid-out
+    /// frame): `.zero` (→ the historical centre zoom) whenever the open folder isn't found, isn't on
+    /// the current page, or the container hasn't been measured yet. `firstIndex` is `nil`-guarded
+    /// (the folder can dissolve within the close window) — same nil → hard-cut philosophy as the
+    /// carry settle target.
+    private var collapsedOffset: CGSize {
+        guard containerSize.width > 0, containerSize.height > 0,
+              let openID = openFolderID,
+              let index = filtered.firstIndex(where: { $0.layoutID == openID })
+        else { return .zero }
+        let per = perPage
+        let folderPage = index / per
+        // The folder must be on the page that's actually on screen — a context-menu rename or a
+        // post-create auto-open could target a folder on another page; fall back to centre then.
+        guard folderPage == currentPage else { return .zero }
+        let slot = index % per
+        // Grid-container width = the post-chrome viewport `pagedGrid` measures (ZStack minus the
+        // horizontal padding ring), the same width its slotRect uses, so the cell centre matches.
+        let containerWidth = containerSize.width - 2 * chrome.horizontalPadding
+        guard containerWidth > 0 else { return .zero }
+        let cellRect = LaunchpadLayoutMath.slotRect(
+            index: slot,
+            columns: max(1, columnCount),
+            containerWidth: containerWidth,
+            metrics: metrics
+        )
+        return LaunchpadLayoutMath.folderCollapsedOffset(
+            cellRect: cellRect,
+            chrome: chrome,
+            viewportSize: containerSize
+        )
+    }
+
     /// The open folder resolved from `filtered`, or `nil` when none is open *or* the open one
     /// no longer renders (emptied / dissolved underneath). Driving both the overlay and the
     /// grid's `interactionEnabled` off this one value keeps them from disagreeing — a stale
@@ -827,8 +888,21 @@ struct LaunchpadGridView: View {
         // A1 — finding an app inside a folder depends on its name; only the root grid
         // follows the hide-names switch). Re-derived through the single resolve entry
         // point, so when labels are globally shown this IS the injected session metrics.
-        let folderMetrics = LaunchpadGridMetrics.resolve(
+        // The user's label-style selections (colour/weight/size) carry over from the
+        // session metrics so the folder grid labels + big title share one appearance
+        // (design 2026-06-13); these stay byte-compatible at the defaults.
+        var folderMetrics = LaunchpadGridMetrics.resolve(
             LaunchpadAppearance(iconSide: metrics.iconSide, showsLabels: true))
+        folderMetrics.labelColor = metrics.labelColor
+        folderMetrics.labelFontSize = metrics.labelFontSize
+        folderMetrics.labelFontWeight = metrics.labelFontWeight
+        folderMetrics.folderTitleFontSize = metrics.folderTitleFontSize
+        folderMetrics.folderTitleWeight = metrics.folderTitleWeight
+        // The two-line strip follows the user's font size (only the larger tiers grow it past 32);
+        // cellHeight stays the labels-shown formula (iconSide + 60) just like the root grid — the
+        // fixed reserve already holds the band, so we don't widen the cell here.
+        folderMetrics.labelHeight = LaunchpadGridMetrics.labelHeight(
+            forFontSize: folderMetrics.labelFontSize, weight: folderMetrics.labelFontWeight)
         let cols = min(max(folder.items.count, 1), 5)              // Mac is wide; cap at 5 per row
         let rows = max(1, (folder.items.count + cols - 1) / cols)
         let gridW = CGFloat(cols) * folderMetrics.cellWidth + CGFloat(cols - 1) * folderMetrics.columnSpacing
@@ -852,6 +926,9 @@ struct LaunchpadGridView: View {
                 folderID: folder.id,
                 name: folder.name,
                 placeholder: localization.string("folder.rename.placeholder", defaultValue: "文件夹名称"),
+                titleColor: folderMetrics.labelColor.nsColor,
+                titleFont: .systemFont(ofSize: folderMetrics.folderTitleFontSize,
+                                       weight: folderMetrics.folderTitleWeight),
                 focusRequestID: pendingRenameFocusID,
                 controller: renameController,
                 editGate: { dragCoordinator.carrySession == nil },   // mid-carry: no rename entry

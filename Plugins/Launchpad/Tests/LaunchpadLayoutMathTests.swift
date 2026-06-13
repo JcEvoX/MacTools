@@ -396,4 +396,45 @@ final class LaunchpadLayoutMathTests: XCTestCase {
             index: 0, columns: 11, containerWidth: 1000, metrics: metrics)
         XCTAssertEqual(cramped.minX, 0)
     }
+
+    // MARK: folderCollapsedOffset — iOS pop-out anchor (design 2026-06-13 «动画计划»)
+
+    /// The collapsed offset = the cell centre (chrome-shifted into ZStack space) minus the
+    /// viewport centre, so a panel CENTRED in the ZStack lands on that cell.
+    func testFolderCollapsedOffsetAnchorsPanelOnCellCentre() {
+        let chrome = LaunchpadLayoutMath.Chrome.standard(isCompact: false)   // pad 48, top 60, bar 28, spacing 20
+        let cellRect = CGRect(x: 100, y: 200, width: 116, height: 124)       // midX 158, midY 262
+        let viewport = CGSize(width: 1000, height: 800)                       // centre (500, 400)
+        let offset = LaunchpadLayoutMath.folderCollapsedOffset(
+            cellRect: cellRect, chrome: chrome, viewportSize: viewport)
+        // Δ = (48, 60 + 28 + 20 = 108); cell centre in viewport = (48 + 158, 108 + 262) = (206, 370).
+        XCTAssertEqual(offset.width, 206 - 500, accuracy: 0.001)
+        XCTAssertEqual(offset.height, 370 - 400, accuracy: 0.001)
+    }
+
+    /// Compact chrome differs (pad 24, top 24, spacing 14) — Δ must be DERIVED from chrome,
+    /// never hard-coded, so the same cell yields a different anchor in the compact panel.
+    func testFolderCollapsedOffsetUsesCompactChromeDelta() {
+        let chrome = LaunchpadLayoutMath.Chrome.standard(isCompact: true)    // pad 24, top 24, bar 28, spacing 14
+        let cellRect = CGRect(x: 0, y: 0, width: 116, height: 124)           // midX 58, midY 62
+        let viewport = CGSize(width: 600, height: 500)                        // centre (300, 250)
+        let offset = LaunchpadLayoutMath.folderCollapsedOffset(
+            cellRect: cellRect, chrome: chrome, viewportSize: viewport)
+        // Δ = (24, 24 + 28 + 14 = 66); cell centre = (24 + 58, 66 + 62) = (82, 128).
+        XCTAssertEqual(offset.width, 82 - 300, accuracy: 0.001)
+        XCTAssertEqual(offset.height, 128 - 250, accuracy: 0.001)
+    }
+
+    /// A cell whose chrome-shifted centre coincides with the viewport centre yields `.zero`
+    /// (no slide) — the degenerate identity that the open state animates toward.
+    func testFolderCollapsedOffsetIsZeroWhenCellCentreIsViewportCentre() {
+        let chrome = LaunchpadLayoutMath.Chrome.standard(isCompact: false)
+        // Pick a cell whose viewport centre is exactly (500, 400): cellRect.mid = (452, 292).
+        let cellRect = CGRect(x: 452 - 58, y: 292 - 62, width: 116, height: 124)
+        let viewport = CGSize(width: 1000, height: 800)
+        let offset = LaunchpadLayoutMath.folderCollapsedOffset(
+            cellRect: cellRect, chrome: chrome, viewportSize: viewport)
+        XCTAssertEqual(offset.width, 0, accuracy: 0.001)
+        XCTAssertEqual(offset.height, 0, accuracy: 0.001)
+    }
 }

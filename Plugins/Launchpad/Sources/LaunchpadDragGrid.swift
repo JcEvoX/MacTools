@@ -19,6 +19,27 @@ struct LaunchpadGridMetrics: Equatable {
     var iconTopInset: CGFloat = 8
     var labelGap: CGFloat = 8
     var labelHeight: CGFloat = 32
+    // Label-style fields (design 2026-06-13): the "finished" values the cell injects.
+    // The COLOR is stored as the preset enum, never as an `NSColor` — that keeps
+    // `Equatable` clean (NSColor's `==` is unreliable across colour spaces) and the cell
+    // resolves `.nsColor` at apply time. Weight is `NSFont.Weight`, a RawRepresentable
+    // CGFloat, so it is Equatable-safe to store directly. Defaults reproduce the historical
+    // implicit rendering — `.automatic` (→ `.labelColor`), 12pt, regular weight — so an
+    // untouched `LaunchpadGridMetrics()` stays byte-compatible.
+    var labelColor: LaunchpadLabelColor = .automatic
+    var labelFontSize: CGFloat = 12
+    var labelFontWeight: NSFont.Weight = .regular
+    // Open-folder big-title style, derived in `resolve(_:)` so `LaunchpadFolderRenameField`
+    // no longer hardcodes the font. Defaults match the historical title: `.title2` point
+    // size, semibold weight.
+    var folderTitleFontSize: CGFloat = LaunchpadGridMetrics.defaultFolderTitleFontSize
+    var folderTitleWeight: NSFont.Weight = .semibold
+
+    /// The historical folder-title point size (`Text(...).font(.title2.weight(.semibold))`),
+    /// surfaced as a constant so both the default initialiser and `resolve(_:)` reference one
+    /// source. `.title2` resolves to 17pt on macOS today; reading it keeps parity if Apple
+    /// ever retunes the text style.
+    static let defaultFolderTitleFontSize: CGFloat = NSFont.preferredFont(forTextStyle: .title2).pointSize
 }
 
 /// Where a dragged app should land, expressed as a *relative* position (never an absolute
@@ -1193,6 +1214,12 @@ final class LaunchpadGridCellView: NSView {
     /// The app icon, for the window-level floating view when this cell is ejected from a folder.
     var primaryIcon: NSImage? { imageView.image }
 
+    /// The rendered label font / colour — surfaced so tests can verify that `init`/`update`
+    /// actually apply the resolved label style (design 2026-06-13). Read-only; the cell owns
+    /// the field.
+    var labelFontForTesting: NSFont? { label.font }
+    var labelColorForTesting: NSColor? { label.textColor }
+
     /// The floating-window visual for a carried cell (design §2.1-4): an app provides its icon
     /// image; a folder plate is DRAWN (no image view), so it must be snapshot via cacheDisplay.
     func carryVisual() -> NSImage? {
@@ -1269,7 +1296,12 @@ final class LaunchpadGridCellView: NSView {
 
         label.frame = labelFrame
         label.isHidden = !metrics.showsLabels
-        label.font = .systemFont(ofSize: 12)   // font size stays constant across icon sizes (design §1.1)
+        // Label-style injection (design 2026-06-13): size/weight from the chosen tier, color
+        // from the preset. Defaults (`.medium` 12pt / regular / `.automatic` → `.labelColor`)
+        // reproduce the historical rendering. `update` MUST re-apply both, or the same view
+        // reused with new metrics keeps the old font/colour.
+        label.font = .systemFont(ofSize: metrics.labelFontSize, weight: metrics.labelFontWeight)
+        label.textColor = metrics.labelColor.nsColor
         label.alignment = .center
         label.maximumNumberOfLines = 2
         label.lineBreakMode = .byTruncatingTail
@@ -1292,6 +1324,11 @@ final class LaunchpadGridCellView: NSView {
         imageView.frame = iconFrame
         label.frame = labelFrame
         label.isHidden = !metrics.showsLabels
+        // Symmetric with `init`: re-apply the label style so reusing this view with new
+        // metrics (e.g. the user changes the size/weight/colour preset) actually re-renders.
+        // Omitting this would silently keep the previous appearance for already-mounted cells.
+        label.font = .systemFont(ofSize: metrics.labelFontSize, weight: metrics.labelFontWeight)
+        label.textColor = metrics.labelColor.nsColor
         configure(cell: cell, icons: icons)
     }
 

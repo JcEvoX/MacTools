@@ -29,6 +29,17 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
     var folderID: String
     var name: String
     var placeholder: String
+    /// The big-title text colour, derived from the label-colour preset (design 2026-06-13).
+    /// Defaults to `.labelColor` — the historical hardcoded title colour — so an unset caller
+    /// renders exactly as before.
+    var titleColor: NSColor = .labelColor
+    /// The big-title font, derived in `LaunchpadGridMetrics.resolve(_:)` (folderTitleFontSize/
+    /// folderTitleWeight). The default reproduces the historical `.title2`/semibold title, so an
+    /// unset caller is byte-compatible.
+    var titleFont: NSFont = .systemFont(
+        ofSize: NSFont.preferredFont(forTextStyle: .title2).pointSize,
+        weight: .semibold
+    )
     /// Folder id whose field should grab focus + select-all (context-menu rename / the
     /// post-creation auto-open). Consumed via `onFocusRequestHandled`.
     var focusRequestID: String?
@@ -72,10 +83,12 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.alignment = .center
-        field.textColor = .labelColor
-        // Visual parity with the previous `Text(...).font(.title2.weight(.semibold))` title.
-        field.font = .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title2).pointSize,
-                                 weight: .semibold)
+        // Label-style injection (design 2026-06-13): colour from the preset, font derived from
+        // the folder-title metrics. The defaults reproduce the historical `.labelColor` +
+        // `.title2`/semibold title. `updateNSView` MUST re-apply both — this Representable reuses
+        // the same field instance, so a preset change after reopen would not refresh otherwise.
+        field.textColor = titleColor
+        field.font = titleFont
         field.maximumNumberOfLines = 1
         field.usesSingleLineMode = true
         field.lineBreakMode = .byTruncatingTail
@@ -103,7 +116,20 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
         coordinator.parent = self
         coordinator.field = field
         controller?.coordinator = coordinator
-        field.placeholderAttributedString = Self.centeredPlaceholder(placeholder, font: field.font)
+        // Symmetric with `makeNSView`: the Representable reuses the same field across reopens, so
+        // re-apply the label style here or a preset change would not take until the panel is
+        // recreated. Gate behind a value-changed check (like the `folderID`/`stringValue` guards
+        // below) so a re-render mid-rename — `controlTextDidChange` saves every keystroke, which
+        // re-renders the parent and fires this on each key — does not churn the live field editor's
+        // layout by reassigning an already-equal font/colour. Set the font BEFORE rebuilding the
+        // placeholder so it follows (centeredPlaceholder reads `field.font`).
+        if field.textColor != titleColor {
+            field.textColor = titleColor
+        }
+        if field.font != titleFont {
+            field.font = titleFont
+            field.placeholderAttributedString = Self.centeredPlaceholder(placeholder, font: field.font)
+        }
         if coordinator.folderID != folderID {
             // The panel stayed mounted across a close→reopen of a different folder (the 0.34s
             // unmount grace): any leftover session belongs to the OLD folder — `closeFolder`
@@ -227,6 +253,14 @@ struct LaunchpadFolderRenameField: NSViewRepresentable {
                     guard self.parent.editGate() else { return }   // mid-carry: stay a title
                     window.makeFirstResponder(field)
                     field.selectText(nil)                          // programmatic entry selects all (§2.3)
+                    // `selectText` re-establishes the field editor and resets its alignment to the
+                    // natural (leading) default, stomping the `.center` that becomeFirstResponder /
+                    // controlTextDidBeginEditing applied — so the auto-opened (post-creation) and
+                    // context-menu-rename titles rendered LEFT-aligned while the click-entered and
+                    // static titles centered. Re-apply center AFTER selectText, where the editor is
+                    // guaranteed live. (Runtime-verified: without this, a new folder's title sits
+                    // ~one-cell left of the panel centre.)
+                    (field.currentEditor() as? NSTextView)?.alignment = .center
                 } else if retries > 0 {
                     self.attemptProgrammaticFocus(retries: retries - 1)
                 } else {

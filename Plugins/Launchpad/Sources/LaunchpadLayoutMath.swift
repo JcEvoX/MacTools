@@ -8,6 +8,12 @@ struct LaunchpadAppearance: Equatable {
     var iconSide: CGFloat = 64
     /// Feature 7: `!hidesAppNames`. Default = labels visible (today's behaviour).
     var showsLabels: Bool = true
+    /// Label-style presets (design 2026-06-13). Defaults reproduce the historical implicit
+    /// rendering — `.automatic` (→ `.labelColor`), regular weight, the `.medium` size tier
+    /// (12pt at the default 64pt icon) — so an untouched appearance is byte-compatible.
+    var labelColor: LaunchpadLabelColor = .automatic
+    var labelWeight: LaunchpadLabelWeight = .regular
+    var labelSize: LaunchpadLabelSize = .medium
 }
 
 extension LaunchpadGridMetrics {
@@ -29,6 +35,18 @@ extension LaunchpadGridMetrics {
     ) -> LaunchpadGridMetrics {
         let iconSide = appearance.iconSide
         let showsLabels = appearance.showsLabels
+        // Label-style derivation (design 2026-06-13). Font size scales with the icon per the
+        // chosen tier; the grid label height only grows for the larger tiers — at the default
+        // `.medium` size (12pt @64pt) it stays exactly 32, the byte-compat anchor.
+        let labelFontSize = appearance.labelSize.fontSize(iconSide: iconSide)
+        let labelFontWeight = appearance.labelWeight.nsFontWeight
+        let labelHeight: CGFloat = showsLabels
+            ? Self.labelHeight(forFontSize: labelFontSize, weight: labelFontWeight)
+            : 0
+        // The open-folder big title never drops below the historical `.title2`/semibold style
+        // and is always ≥ the grid label, so a larger app-name size pushes the title up too.
+        let folderTitleFontSize = max(Self.defaultFolderTitleFontSize, labelFontSize)
+        let folderTitleWeight = appearance.labelWeight.emphasized
         return LaunchpadGridMetrics(
             cellWidth: iconSide + (showsLabels ? 52 : 28),
             cellHeight: iconSide + (showsLabels ? 60 : 20),
@@ -38,8 +56,24 @@ extension LaunchpadGridMetrics {
             showsLabels: showsLabels,
             iconTopInset: 8,
             labelGap: 8,
-            labelHeight: showsLabels ? 32 : 0
+            labelHeight: labelHeight,
+            labelColor: appearance.labelColor,
+            labelFontSize: labelFontSize,
+            labelFontWeight: labelFontWeight,
+            folderTitleFontSize: folderTitleFontSize,
+            folderTitleWeight: folderTitleWeight
         )
+    }
+
+    /// Two-line label strip height for a given font size/weight: `max(32, ceil(lineHeight × 2))`.
+    /// The 32 floor pins the historical height, so the default `.medium` size (12pt, line
+    /// height 15) and every tier up to 13pt stay at exactly 32 — only 15pt+ (the larger tiers
+    /// at big icons) grow the strip. Returns 32 verbatim at the historical font, so the
+    /// byte-compat anchor holds.
+    static func labelHeight(forFontSize size: CGFloat, weight: NSFont.Weight) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: size, weight: weight)
+        let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+        return max(32, ceil(lineHeight * 2))
     }
 
     /// The icon area inside a cell, in CELL-LOCAL coordinates — the single source for
@@ -164,6 +198,31 @@ enum LaunchpadLayoutMath {
     /// 760 (the plate now hugs its content); at 96pt it is 832 (pinned in tests).
     static func folderPanelMaxWidth(metrics: LaunchpadGridMetrics) -> CGFloat {
         5 * metrics.cellWidth + 4 * metrics.columnSpacing + 60
+    }
+
+    /// Offset (relative to a panel CENTRED in the ZStack) that lands the panel's centre on the
+    /// opened folder's grid cell — the "from the cell" anchor for the iOS-style pop-out
+    /// (design 2026-06-13 «动画计划»). Pure SwiftUI viewport coordinates, zero AppKit `convert`
+    /// (the y-flip / scale-transform sampling traps are avoided by never crossing the bridge).
+    ///
+    /// `cellRect` is the slot frame from `slotRect` — top-left origin, y-down, exactly the SwiftUI
+    /// orientation. `Δ` shifts grid-container space into ZStack space: the grid begins below the
+    /// chrome (search bar + paddings + VStack spacing), so the cell centre in the viewport is
+    /// `Δ + cellRect.mid`. Subtracting the viewport centre gives the offset a centred panel needs.
+    /// Δ is derived from `chrome` — never hard-coded literals, since compact / fullscreen differ.
+    static func folderCollapsedOffset(
+        cellRect: CGRect,
+        chrome: Chrome,
+        viewportSize: CGSize
+    ) -> CGSize {
+        let deltaX = chrome.horizontalPadding
+        let deltaY = chrome.topPadding + chrome.searchBarHeight + chrome.stackSpacing
+        let cellCenterX = deltaX + cellRect.midX
+        let cellCenterY = deltaY + cellRect.midY
+        return CGSize(
+            width: cellCenterX - viewportSize.width / 2,
+            height: cellCenterY - viewportSize.height / 2
+        )
     }
 
     /// The frame of grid slot `index` (row-major) inside a top-aligned container of
