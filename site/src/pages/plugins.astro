@@ -13,9 +13,15 @@ const plugins = [...catalog.plugins].sort((a, b) => {
 
 const categories = new Map<string, number>();
 for (const plugin of plugins) {
-  const label = categoryLabel(plugin.category).zh;
-  categories.set(label, (categories.get(label) ?? 0) + 1);
+  const key = plugin.category ?? "other";
+  categories.set(key, (categories.get(key) ?? 0) + 1);
 }
+
+const categoryFilters = [...categories.entries()].map(([key, count]) => ({
+  key,
+  count,
+  label: categoryLabel(key === "other" ? null : key),
+}));
 ---
 
 <BaseLayout
@@ -34,26 +40,21 @@ for (const plugin of plugins) {
         <span data-i18n-zh>{plugins.length} 个插件，按功能清晰归位。</span>
         <span data-i18n-en>{plugins.length} plugins, organized by purpose.</span>
       </h1>
-      <dl class="catalog-meta">
-        <div>
-          <dt>Host</dt>
-          <dd>{catalog.minimumHostVersion}+</dd>
-        </div>
-        <div>
-          <dt>Updated</dt>
-          <dd>{new Date(catalog.generatedAt).toISOString().slice(0, 10)}</dd>
-        </div>
-        <div>
-          <dt>Categories</dt>
-          <dd>{categories.size}</dd>
-        </div>
-      </dl>
     </section>
 
     <section class="plugin-directory" aria-label="插件列表">
       <div class="category-rail" aria-label="插件分类">
-        {[...categories.entries()].map(([name, count]) => (
-          <span>{name}<strong>{count}</strong></span>
+        <button type="button" data-plugin-filter="all" aria-pressed="true">
+          <span data-i18n-zh>全部</span>
+          <span data-i18n-en>All</span>
+          <strong>{plugins.length}</strong>
+        </button>
+        {categoryFilters.map((filter) => (
+          <button type="button" data-plugin-filter={filter.key} aria-pressed="false">
+            <span data-i18n-zh>{filter.label.zh}</span>
+            <span data-i18n-en>{filter.label.en}</span>
+            <strong>{filter.count}</strong>
+          </button>
         ))}
       </div>
 
@@ -62,8 +63,9 @@ for (const plugin of plugins) {
           const category = categoryLabel(plugin.category);
           const text = localizedPluginText(plugin);
           const size = formatSize(plugin.package?.size);
+          const filterCategory = plugin.category ?? "other";
           return (
-            <article class="plugin-card">
+            <article class="plugin-card" data-plugin-category={filterCategory}>
               <div>
                 <p class="plugin-category">
                   <span data-i18n-zh>{category.zh}</span>

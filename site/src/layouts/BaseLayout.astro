@@ -27,6 +27,38 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="theme-color" content="#f5f5f7" />
     <link rel="canonical" href={canonical} />
     <title>{title}</title>
+    <script is:inline>
+      (() => {
+        const root = document.documentElement;
+
+        try {
+          const storedTheme = localStorage.getItem("mactools-theme");
+          const storedLang = localStorage.getItem("mactools-lang");
+
+          if (storedTheme === "dark" || storedTheme === "light") {
+            root.dataset.theme = storedTheme;
+          } else {
+            root.dataset.theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+
+          const applyLanguage = (lang) => {
+            root.dataset.lang = lang;
+            root.lang = lang === "zh" ? "zh-CN" : "en";
+          };
+
+          if (storedLang === "zh" || storedLang === "en") {
+            applyLanguage(storedLang);
+          } else {
+            const browserLanguages = navigator.languages?.length ? navigator.languages : [navigator.language];
+            const prefersChinese = browserLanguages.some((language) => language.toLowerCase().startsWith("zh"));
+            applyLanguage(prefersChinese ? "zh" : "en");
+          }
+        } catch {
+          root.dataset.theme = root.dataset.theme || "light";
+          root.dataset.lang = root.dataset.lang || "zh";
+        }
+      })();
+    </script>
   </head>
   <body data-page={page}>
     <slot />

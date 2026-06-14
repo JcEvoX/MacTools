@@ -15,9 +15,7 @@
 
 ## 截图
 
-|                                   菜单栏功能面板                                    |                                              组件仪表盘                                              |
-| :---------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------: |
-| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="菜单栏功能面板"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="日历与系统状态组件">               |
+<img src="docs/assets/screenshots/readme-hero-zh-dark.png" alt="MacTools 深色模式菜单栏面板">
 
 ## 功能
 

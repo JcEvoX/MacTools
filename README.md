@@ -14,9 +14,7 @@
 
 ## Screenshots
 
-|                                  Menu panel                                   |                                            Component dashboard                                            |
-| :---------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------: |
-| <img src="docs/assets/screenshots/menu-panel.png" width="220" alt="Menu panel"> | <img src="docs/assets/screenshots/component-dashboard.png" width="220" alt="Calendar and system status widgets"> |
+<img src="docs/assets/screenshots/readme-hero-en-dark.png" alt="MacTools menu bar panels in dark mode">
 
 ## Features
 
