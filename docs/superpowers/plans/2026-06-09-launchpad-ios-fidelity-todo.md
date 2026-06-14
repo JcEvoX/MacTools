@@ -34,12 +34,32 @@
 - **落下**：现在 `isLifted=false` 瞬间复位、settle 只有 0.13s easeOut、无 haptic。→ 落下 scale 走同一弹簧、settle 拉到 ~0.2-0.25s spring、commit 成功（`commitDrop` 返回 true）时 haptic。codeRef：`:331`。
 - **让位瞄准**：现在按**光标点**算插入槽，略超前/滞后。→ 改按**被拖图标中心**（cursor − dragGrabOffset 校到 cell 中心）。codeRef：`:362`。
 
-## §5 文件夹命名（Low）
-- 现在硬编码「未命名」、不自动打开新夹、无改名 UI（`renameFolder` 在 store 里有、无 UI）。
-- **要做**：建夹后 `openFolderID = 新夹` 自动打开 + 面板内联可编辑名字（新夹时 first-responder）；按 `LSApplicationCategoryType` 推断建议名替代「未命名」。
-- codeRef：`LaunchpadGridView.swift:308`（handleMakeFolder）。
+## §5 文件夹命名（Low）— ✅ 已落地（2026-06-11，设计见 2026-06-11-launchpad-appearance-design.md §2 / P0a）
+- ✅ 夹面板标题 = 常驻 bridged NSTextField 内联改名（点击即编辑，Return 提交 / Esc 撤销 / 失焦提交）。
+- ✅ folder 右键菜单：打开 / 重命名 / 解散文件夹（R2：无确认）。
+- ✅ 建夹自动打开 + 名字全选聚焦（R1=B）：旧路径即开；carry 路径在 settle reveal 完成后开（`folderRevealToken`）。
+- ⏳ 按 `LSApplicationCategoryType` 推断建议名替代「未命名」：另立任务（R3，排除在本批外）。
 
 ## 已确认「一致」的部分（不用动）
 - 让位重排模型（true insert-and-shift + 边缘 hysteresis + 中心死区）——最像 iOS 的部分。
 - 文件夹降到 1 个自动解散、幸存者归位——与 iOS 一致。
 - macOS Launchpad 的点按即拖（无 jiggle）——本来就对标 Launchpad 而非 iOS 主屏，jiggle 是 iOS-only 差异，按需再加。
+
+---
+
+## 2026-06-11 用户真机试用反馈（§1 步骤 1-8 落地后）
+
+### A. Bug / 打磨（本版必修）
+1. **merge 建夹 settle 闪烁**：拖 app 到另一 app 建夹，目标图标先变成「被拖 app 的图标」再闪现为文件夹图标。settle 飞行期间目标 cell 的视觉冻结/reveal 次序问题（设计 §7.3-4 预言的真机观察点，确认存在）。
+2. **app 可拖出启动台边界**：carry 浮窗无 clamp，图标可被拖出 overlay/屏幕（iOS 图标始终留在屏内）。浮窗位置需 clamp（保留 grab-offset）。
+3. **文件夹 tile 选中视觉突兀**：选中蓝框内还套着夹 tile 自身的白/灰圆角背景，两层框叠加（见截图）。选中样式与夹背景需要融合。
+4. **跨页放置溢出图标走位 + 闪烁**：跨页 drop 后被挤出的最后一个图标出现在本页「最下面新的一排」（容器 row-major 布局不知道页边界），应该向右缘飞出消失（去下一页）；过程伴随闪烁。
+5. **边缘翻页 vs 边缘落点判定**：想把 app 放在页面边缘位置时容易误触发翻页，热区/驻留参数与让位判定的共存逻辑需调整（edgeWidth 44pt 与末列重叠的调参项）。
+   - **已修（2026-06-11）**：edgeWidth 44→28 + 最外列 x 跨度豁免带（`LaunchpadEdgePageTurner.ExemptBands`，由 engaged 容器的 `outerColumnXSpans()` 注入）。行为变化：悬在首/末列图标上驻留不再翻页——翻页必须把光标推到列跨度以外（页边距或屏缘，iOS 同款）；虚拟尾页（无 cell）不豁免。豁免判据是几何列宽而非 gap 状态（gap 在边距/页外也保持开启，按 gap 豁免会杀死右缘翻页）。
+
+### B. 新功能（下一批，按用户原话）
+6. **文件夹改名**（§5 提前）：现在完全没有改名入口。
+7. **隐藏 app 名字 + 图标整体放大**：iOS 式「只看图标」模式，去掉名字后 cell 变大。
+8. **自定义图标大小**：直接调图标尺寸，动态重算每行/每列个数；窗口（启动台）大小也可动态调整。
+9. **设置内排列缩略图预览**：等比例缩小的启动台缩略图，用半透明 app 占位实时展示当前大小设置下的排列效果。
+10. **背景 liquid glass 效果调整**：背景玻璃感/透明度可调。

@@ -151,6 +151,9 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
         // the corner preference kept its value, so the `$hotCorner` sink (fires on CHANGE) never
         // re-arms it — re-apply explicitly here.
         hotCornerMonitor.update(corner: preferences.hotCorner)
+        // Warm the app catalog in the background now, so the first summon shows
+        // icons at once instead of waiting for the disk scan on the hot path.
+        overlay.prewarm()
     }
 
     func deactivate(reason: PluginDeactivationReason) {

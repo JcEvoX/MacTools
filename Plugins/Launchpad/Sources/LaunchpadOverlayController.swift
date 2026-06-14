@@ -55,13 +55,27 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     private let layoutStore: LaunchpadLayoutStore
     /// Folder-eject handoff (the floating icon rides in its own child NSWindow). Controller-owned
     /// so `close()` can abort an in-flight eject deterministically — that floating window is NOT
-    /// part of the overlay window and would survive it otherwise.
-    private let dragCoordinator = LaunchpadDragCoordinator()
+    /// part of the overlay window and would survive it otherwise. Internal (not private) so tests
+    /// can drive a carry through the controller's PRODUCTION storeApplier/close wiring (§10-④).
+    let dragCoordinator = LaunchpadDragCoordinator()
     private let localization: PluginLocalization
     /// Window mode captured at `open()`. The grid content is rendered against this
     /// snapshot, so frame recomputation (screen changes) must use it too — not live
     /// `preferences`, which could drift mid-session and desync frame vs. content (Codex P2).
     private var sessionMode: LaunchpadPreferences.WindowMode = .fullscreen
+    /// Grid metrics resolved from the appearance preferences at `open()` (design §1.4).
+    ///
+    /// INVARIANT — metrics are constant for the whole overlay session: every consumer
+    /// (SwiftUI pager, AppKit page grids, folder panel, carry floating window, compact
+    /// frame) reads THIS snapshot, so a settings change can only take effect on the next
+    /// summon. Mid-carry appearance changes are therefore unreachable by construction
+    /// (the settings window taking key closes the overlay via `resignKeyObserver`);
+    /// the only mid-session geometry mutations left are window resize / screen swaps,
+    /// already fail-safed by `cancelCarry(.geometryChanged)` in `syncGeometry`.
+    private var sessionMetrics = LaunchpadGridMetrics()
+    /// Compact scale captured at `open()` alongside `sessionMode` — screen-change frame
+    /// recomputation must not read live preferences either (same snapshot discipline).
+    private var sessionCompactScale = LaunchpadPreferences.defaultCompactScale
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "LaunchpadOverlay"
@@ -76,12 +90,89 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         self.layoutStore = layoutStore
         self.localization = localization
         super.init()
+        // The synchronous mouseUp data path (design §1.3): the controller owns both the store and
+        // the coordinator, so the commit writes the store directly — never through a SwiftUI
+        // `@Published` token a torn-down view could fail to consume (the resign-active data-loss
+        // race). Captures the store/name directly: no reference back to self, no cycle.
+        let folderName = localization.string("folder.defaultName", defaultValue: "未命名")
+        dragCoordinator.storeApplier = { [layoutStore] action, frozenOrder in
+            Self.apply(action, frozenOrder: frozenOrder, to: layoutStore, folderName: folderName)
+        }
+    }
+
+    /// Maps a resolved carry commit onto the layout store, returning the landing id the visual
+    /// channel re-selects. Mirrors the per-result handlers that previously lived in the grid view
+    /// (`handleMoveOutOfFolder` and friends) — the store mutation semantics are unchanged.
+    /// Internal (not private) so tests drive the production mapping directly (design §10-⑤).
+    static func apply(
+        _ action: CarryStoreAction,
+        frozenOrder: [LaunchpadDisplayCell],
+        to store: LaunchpadLayoutStore,
+        folderName: String
+    ) -> String? {
+        // Materialize/extend the layout from the order frozen at drag start, not a live read a
+        // mid-carry catalog reload may have changed (constraint 15).
+        let rootApps = frozenOrder.compactMap { cell -> LaunchpadAppItem? in
+            if case .app(let item) = cell { return item }
+            return nil
+        }
+        switch action {
+        case .none:
+            return nil
+        case .move(let id, let target):
+            store.captureVisibleOrder(rootApps)
+            switch target {
+            case .before(let targetID):
+                store.move(id: id, before: targetID)
+            case .after(let targetID):
+                store.move(id: id, after: targetID)
+            case nil:
+                // Global tail. resolveCarryCommit only emits nil targets once the virtual tail
+                // page lands (step 6); defensive mapping in the meantime.
+                if let last = frozenOrder.last?.layoutID, last != id { store.move(id: id, after: last) }
+            }
+            return id
+        case .makeFolder(let targetAppID, let draggedID):
+            store.captureVisibleOrder(rootApps)
+            let newID = UUID().uuidString
+            store.makeFolder(target: targetAppID, dragged: draggedID, name: folderName, id: newID)
+            return newID
+        case .addToFolder(let folderID, let appID):
+            store.captureVisibleOrder(rootApps)
+            store.addToFolder(folderID, app: appID)
+            return folderID
+        case .moveOutOfFolder(let folderID, let appID, let result):
+            store.captureVisibleOrder(rootApps)
+            switch result {
+            case .reorder(let target):
+                store.moveOutOfFolder(folderID, app: appID, to: target)
+                return appID
+            case .makeFolder(let targetAppID):
+                let newID = UUID().uuidString
+                store.ejectIntoNewFolder(source: folderID, app: appID, target: targetAppID,
+                                         name: folderName, id: newID)
+                return newID
+            case .addToFolder(let destFolderID):
+                store.ejectIntoFolder(source: folderID, app: appID, destination: destFolderID)
+                return destFolderID
+            }
+        }
     }
 
     var isShown: Bool { window != nil }
 
     func toggle() {
         isShown ? close() : open()
+    }
+
+    /// Warm the app catalog ahead of the first open so the grid shows icons
+    /// immediately instead of a spinner: the disk scan runs in the background
+    /// now (on plugin activation) rather than on the critical path when the
+    /// user summons the launcher. Idempotent — `reload()`'s generation guard
+    /// drops a stale scan, and a later `open()` reload supersedes this one for
+    /// freshness — so calling it more than once is safe.
+    func prewarm() {
+        catalog.reload()
     }
 
     func open() {
@@ -93,6 +184,8 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         previousApp = (front == .current) ? nil : front
         catalog.reload()
         sessionMode = preferences.windowMode      // snapshot for this session
+        sessionMetrics = LaunchpadGridMetrics.resolve(preferences.appearance)
+        sessionCompactScale = preferences.compactScalePercent
         let screen = activeScreen()
         let isCompact = sessionMode == .compact
         let frame = targetFrame(on: screen)
@@ -128,7 +221,13 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
             dragCoordinator: dragCoordinator,
             columns: preferences.columns,
             isCompact: isCompact,
+            // The session metrics snapshot (design §1.4): the SwiftUI pager, the AppKit
+            // page grids and the folder panel all derive from this one injection.
+            metrics: sessionMetrics,
             hiddenAppIDs: preferences.hiddenAppIDs,
+            // Snapshot, same discipline as `sessionMode`: settings changes apply on the
+            // next summon (the settings window taking key closes the overlay anyway).
+            backgroundRecipe: preferences.backgroundRecipe,
             localization: localization,
             onActivate: { [weak self] app in self?.launch(app) },
             onReveal: { [weak self] app in self?.reveal(app) },
@@ -137,9 +236,15 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
         ))
         win.contentView = host
         if isCompact {
-            // Round the floating panel; the material fills the host and is clipped to it.
+            // Round the floating panel. This layer mask clips the in-process SwiftUI
+            // content (icons, labels, dim layer, legacy ultraThinMaterial); the glass
+            // recipes additionally round the behind-window blur itself via the backdrop's
+            // maskImage with the SAME shared radius (see LaunchpadGlassBackdrop).
+            // TODO(G5): on macOS 26+ wrap the compact panel in NSGlassEffectView (with an
+            // NSGlassEffectContainerView shared with the folder panel when both are visible).
+            // `#available` gated, separate commit, Tahoe screenshots.
             host.wantsLayer = true
-            host.layer?.cornerRadius = 22
+            host.layer?.cornerRadius = LaunchpadCompactPanelMetrics.cornerRadius
             host.layer?.masksToBounds = true
         }
 
@@ -154,12 +259,25 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     ///   `true` for user dismissal (Esc / background / app switch); `false` when an app
     ///   was just launched (it should come forward instead).
     func close(restoringFocus: Bool = true) {
-        guard !isTearingDown, let win = window else { return }
+        guard !isTearingDown else { return }
+        // A carry may be mid-flight (mouse still down): drop its floating icon window before the
+        // overlay goes — it's a separate window and would outlive us. Ahead of the window guard
+        // (nil-safe and idempotent) so no close request can ever leave a floating icon behind.
+        // Fully synchronous; if a commit already landed, its data hit the store in mouseUp and
+        // only visuals are skipped.
+        dragCoordinator.cancelCarry(.overlayClosed)
+        guard let win = window else { return }
         isTearingDown = true
-        // A folder eject may be mid-flight (mouse still down): drop its floating icon window
-        // before the overlay goes — it's a separate child window and would outlive us.
-        dragCoordinator.cancelEject()
         removeDismissHandlers()
+        // A folder rename may be mid-edit on ANY whole-window teardown path (Cmd+Tab
+        // resign-active, the Settings window taking key, launching an app from inside a
+        // folder). SwiftUI only contracts `dismantleNSView` for diffing removals — an
+        // NSHostingView deallocated together with its window may never get one — so resign
+        // first responder HERE: the field editor ends editing and the rename coordinator
+        // commits synchronously on this event stack (design §2.3 "unmount → commit, no data
+        // loss"). Idempotent for every other responder (search field has no end-editing
+        // hooks) and the session latch keeps any later dismantle call inert.
+        win.makeFirstResponder(nil)
         win.delegate = nil
         win.orderOut(nil)
         win.close()
@@ -208,18 +326,52 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// floating panel (compact). Used for both initial placement and screen changes.
     private func targetFrame(on screen: NSScreen) -> NSRect {
         guard sessionMode == .compact else { return screen.frame }
-        let visible = screen.visibleFrame
-        let width = min(960, visible.width * 0.72)
-        let height = min(680, visible.height * 0.82)
-        return NSRect(
-            x: visible.midX - width / 2,
-            y: visible.midY - height / 2,
-            width: width,
-            height: height
+        // P2 (ruling A5): the scaled branch — user-tunable percentage, a 4×3 grid floor
+        // that rises with the icon size, and NO 960×680 hard cap any more. Deliberate
+        // behaviour change whose scope is wider than "large screens" (final-review
+        // correction): the old cap bound on any visibleFrame over ~1333×829pt, which
+        // includes every modern built-in laptop display — those users get a ~13% larger
+        // default panel; the new window-size slider is the dial for that.
+        return LaunchpadLayoutMath.compactFrame(
+            visible: screen.visibleFrame,
+            scalePercent: sessionCompactScale,
+            metrics: sessionMetrics,
+            legacyCap: false
         )
     }
 
     // MARK: - Dismissal (Codex P0 #4)
+
+    /// Where an Esc keystroke lands — the design §2.4 ladder: cancel the rename (route the
+    /// event to the field editor) → close the open folder → close the launcher. Static and
+    /// value-typed so the whole ladder is unit-testable without a window or a key event.
+    enum EscapeResolution: Equatable {
+        case routeToFieldEditor, closeFolder, closeOverlay
+    }
+
+    static func resolveEscape(firstResponder: NSResponder?,
+                              isFolderOpen: Bool,
+                              carryLive: Bool) -> EscapeResolution {
+        // Mid-IME-composition Esc must cancel the candidate window: let the event through
+        // to the field editor (Codex P1). Its own `cancelOperation` handles the rest.
+        if let editor = firstResponder as? NSTextView, editor.hasMarkedText() {
+            return .routeToFieldEditor
+        }
+        // A folder rename being edited owns Esc — the rename field editor's `cancelOperation`
+        // restores the original name. Checked BEFORE the folder rung so cancelling the edit
+        // never closes the folder underneath it.
+        if LaunchpadFolderRenameField.shouldRouteEsc(to: firstResponder) {
+            return .routeToFieldEditor
+        }
+        // Middle rung: an open folder closes before the launcher does. Skipped while a carry
+        // session is live (carrying OR settling) — Esc mid-carry keeps the historical
+        // abort-everything semantics (`close()` → `cancelCarry`), and during an eject the
+        // panel is already zoomed shut anyway.
+        if isFolderOpen, !carryLive {
+            return .closeFolder
+        }
+        return .closeOverlay
+    }
 
     /// Close on Esc / app deactivation only — NOT on every key/main loss. IME candidate
     /// windows, permission dialogs and Space switches steal key status and must not
@@ -232,16 +384,25 @@ final class LaunchpadOverlayController: NSObject, NSWindowDelegate {
     /// responder, covering activation-failure cases (Codex P2 #4).
     private func installDismissHandlers(for session: LaunchpadOverlayWindow) {
         tokens.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            // Esc — but not while the search field is mid-IME-composition: there Esc must
-            // cancel the candidate window, so let the event through to the field editor
-            // (Codex P1). The field editor's own `cancelOperation` still closes us when
-            // there's no marked text.
+            // Esc — resolved through the §2.4 ladder rule below (unit-tested): cancel an
+            // IME composition / a live rename first, then close an open folder, and only
+            // then the launcher itself.
             if event.keyCode == 53 {
-                if let editor = self?.window?.firstResponder as? NSTextView, editor.hasMarkedText() {
+                guard let self else { return event }
+                switch Self.resolveEscape(firstResponder: self.window?.firstResponder,
+                                          isFolderOpen: self.dragCoordinator.isFolderOpen,
+                                          carryLive: self.dragCoordinator.carrySession != nil) {
+                case .routeToFieldEditor:
                     return event
+                case .closeFolder:
+                    // The grid view owns the close choreography (commit a live rename, zoom
+                    // out), so publish a request instead of mutating SwiftUI state from here.
+                    self.dragCoordinator.requestFolderClose()
+                    return nil
+                case .closeOverlay:
+                    self.close()
+                    return nil
                 }
-                self?.close()
-                return nil
             }
             return event
         }
