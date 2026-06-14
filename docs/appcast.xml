@@ -5,27 +5,26 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.18</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.18</link>
-            <sparkle:version>48</sparkle:version>
-            <sparkle:shortVersionString>1.0.18</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.18 -->
+            <title>Version 1.0.19</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.19</link>
+            <sparkle:version>49</sparkle:version>
+            <sparkle:shortVersionString>1.0.19</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.19 -->
 
 ## What's Changed
 ### Other Changes
-* Make Homebrew cask update workflow manual by @char1eslu in https://github.com/ggbond268/MacTools/pull/131
-* feat(translator): add screenshot OCR translation by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/132
-* Feat: Launchpad custom ordering + iOS-style folders (#19a/#19b) by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/134
-* fix(l10n): remove unnecessary line break in about description by @YangFong in https://github.com/ggbond268/MacTools/pull/133
+* Optimize translator panel UI by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/136
+* fix: menu bar status item position resets after reboot by @mvanhorn in https://github.com/ggbond268/MacTools/pull/137
+* Launchpad: cross-page drag, folders, appearance & label system, iOS folder animation by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/138
 
 ## New Contributors
-* @YangFong made their first contribution in https://github.com/ggbond268/MacTools/pull/133
+* @mvanhorn made their first contribution in https://github.com/ggbond268/MacTools/pull/137
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.17...v1.0.18
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.18...v1.0.19
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Thu, 11 Jun 2026 14:00:36 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.18/MacTools.dmg" length="6096378" type="application/octet-stream" sparkle:edSignature="IZHnYsQZ5tzAg1J1IV1uesWUd8sB00p8gupzHWEZwAmqPGnmTV8VgYc34HHFk+JulxAcAqoSDSFp7K6vP3kHAw==" />
+            <pubDate>Sun, 14 Jun 2026 15:47:26 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.19/MacTools.dmg" length="6129288" type="application/octet-stream" sparkle:edSignature="B0ofJC8pnKEJKjYHHPkGPkvs3ZnTq5IQxHoak9OYN5G//RDDNLCDjLPJVmcNe74H4C0Z5fKbf0PZl6ZWHcSBCg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
