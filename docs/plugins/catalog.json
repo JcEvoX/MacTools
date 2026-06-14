@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-11T13:56:43Z",
+  "generatedAt": "2026-06-14T15:41:06Z",
   "minimumHostVersion": "1.0.18",
   "pluginKitVersion": 2,
   "plugins": [
@@ -284,16 +284,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "e0e72755f2ebc52f0bba9cdff314160ad0186e0763da8ab577a6ca6e0d54f908",
-        "size": 594980,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/device-battery.mactoolsplugin.zip"
+        "sha256": "0d656a44991be48da6a2611d482271158fff453f862700a77ff433898081817c",
+        "size": 629720,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.19/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.19",
       "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -732,16 +732,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "5a0cc82cf72ba42c6440d244bd117caec8fbb0a6044ca9dcf59cd7e9ccd22871",
-        "size": 606171,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.18/launchpad.mactoolsplugin.zip"
+        "sha256": "d77f33bbf09f34cdd909520c77027fdcb5ff405539b656e2981d3eaa9e8ac01d",
+        "size": 960503,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.19/launchpad.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.18",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.19",
       "summary": "用全局热键或菜单栏唤出全屏应用网格，搜索并启动",
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     {
       "capabilities": {
@@ -1091,9 +1091,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "9deea25eb50614fa64568c38b2407507fc9919fbe0d36d82182a825ab6a27c82",
-        "size": 712827,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.17/translator.mactoolsplugin.zip"
+        "sha256": "0caa553de1eb92101bd6108207533d156fd00020bc1b6991e92eb7fb9dec7865",
+        "size": 755051,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.19/translator.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -1102,9 +1102,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.17",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.19",
       "summary": "划词与截图快捷键翻译",
-      "version": "0.1.4"
+      "version": "0.1.5"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "vQuuwg+Xi5YL+zN/gKRlDNlAQ3ydRett8srXExzknkeE+EDSeVh71nOtqv3vvHPB98bwR8NEj+7zO8+KoTKWBg=="
+    "value": "5Vb95NjJVyYgSSE9MqKTMElgz+hcqerh/VtVCjyeLyW19BQZD4vDNXa1jMwqr6Zb9niuJoM78is2Qnh/ASzUBA=="
   }
 }
