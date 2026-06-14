@@ -97,6 +97,37 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
         XCTAssertTrue(userDefaults.bool(forKey: visibleControlCenterKey(MenuBarControlItemDefaults.visibleAutosaveName)))
     }
 
+    func testVisibleControlItemRestoreKeepsExistingSystemPreferredPosition() {
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(3, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(12, userDefaults: userDefaults)
+
+        MenuBarControlItemDefaults.restoreVisibleControlItemPreferredPositionIfMissing(userDefaults: userDefaults)
+
+        XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 12)
+    }
+
+    func testVisibleControlItemPreflightRestoresBackedUpPreferredPositionWhenMissing() {
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(9, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(nil, userDefaults: userDefaults)
+
+        MenuBarControlItemDefaults.prepareVisibleControlItem(userDefaults: userDefaults)
+
+        XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 9)
+    }
+
+    func testVisibleControlItemSnapshotKeepsPreviousBackupWhenSystemPreferredPositionIsMissing() {
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(6, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(nil, userDefaults: userDefaults)
+
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.restoreVisibleControlItemPreferredPositionIfMissing(userDefaults: userDefaults)
+
+        XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 6)
+    }
+
     func testVisibleControlItemPositionResetRestoresPositionRightOfHiddenDivider() {
         userDefaults.set(12, forKey: preferredPositionKey(MenuBarControlItemDefaults.visibleAutosaveName))
 
@@ -117,6 +148,23 @@ final class MenuBarControlItemDefaultsTests: XCTestCase {
 
         MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(cached, userDefaults: userDefaults)
         XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 0.5)
+    }
+
+    func testVisibleControlItemResetSnapshotReplacesStaleBackup() {
+        MenuBarControlItemDefaults.setHiddenDividerControlItemPreferredPosition(8, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(12, userDefaults: userDefaults)
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+
+        XCTAssertTrue(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
+
+        MenuBarControlItemDefaults.resetVisibleControlItemPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition(userDefaults: userDefaults)
+        MenuBarControlItemDefaults.setVisibleControlItemPreferredPosition(nil, userDefaults: userDefaults)
+
+        MenuBarControlItemDefaults.prepareVisibleControlItem(userDefaults: userDefaults)
+
+        XCTAssertEqual(MenuBarControlItemDefaults.visibleControlItemPreferredPosition(userDefaults: userDefaults), 7.5)
+        XCTAssertFalse(MenuBarControlItemDefaults.visibleControlItemNeedsRecovery(userDefaults: userDefaults))
     }
 
     func testHiddenDividerDefaultsToPreferredPositionOneWhenMissing() {

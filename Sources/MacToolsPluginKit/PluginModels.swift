@@ -102,8 +102,10 @@ public enum MenuBarControlItemDefaults {
     public static let visibleDefaultPreferredPosition: Double = 0
     public static let hiddenDefaultPreferredPosition: Double = 1
     public static let adjacentPreferredPositionOffset: Double = 0.5
+    private static let visiblePreferredPositionBackupKey = "MacTools.ControlItem.Visible.PreferredPositionBackup"
 
     public static func prepareVisibleControlItem(userDefaults: UserDefaults = .standard) {
+        restoreVisibleControlItemPreferredPositionIfMissing(userDefaults: userDefaults)
         prepareControlItemVisibility(autosaveName: visibleAutosaveName, userDefaults: userDefaults)
     }
 
@@ -125,6 +127,27 @@ public enum MenuBarControlItemDefaults {
         userDefaults: UserDefaults = .standard
     ) {
         setPreferredPosition(position, autosaveName: visibleAutosaveName, userDefaults: userDefaults)
+    }
+
+    public static func snapshotVisibleControlItemPreferredPosition(userDefaults: UserDefaults = .standard) {
+        guard let preferredPosition = visibleControlItemPreferredPosition(userDefaults: userDefaults) else {
+            return
+        }
+
+        userDefaults.set(preferredPosition, forKey: visiblePreferredPositionBackupKey)
+    }
+
+    public static func restoreVisibleControlItemPreferredPositionIfMissing(
+        userDefaults: UserDefaults = .standard
+    ) {
+        guard
+            visibleControlItemPreferredPosition(userDefaults: userDefaults) == nil,
+            let preferredPosition = userDefaults.object(forKey: visiblePreferredPositionBackupKey) as? Double
+        else {
+            return
+        }
+
+        setVisibleControlItemPreferredPosition(preferredPosition, userDefaults: userDefaults)
     }
 
     public static func visibleControlItemNeedsRecovery(userDefaults: UserDefaults = .standard) -> Bool {
