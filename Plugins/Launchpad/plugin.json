@@ -12,7 +12,7 @@
       "summary": "Open a full-screen app grid from a global shortcut or the menu bar, then search and launch apps."
     }
   },
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Launchpad.bundle",

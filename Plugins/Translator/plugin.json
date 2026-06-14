@@ -12,7 +12,7 @@
       "summary": "Translate selected text or screenshot regions with shortcuts."
     }
   },
-  "version": "0.1.4",
+  "version": "0.1.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Translator.bundle",
