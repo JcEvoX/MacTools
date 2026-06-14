@@ -97,6 +97,48 @@ final class LaunchpadFolderOpsTests: XCTestCase {
         XCTAssertEqual(folderName(store, "F1"), "未命名", "空名回退默认名")
     }
 
+    func testRenameFolderEmptyUsesLocalizedFallbackParameter() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "旧名", id: "F1")
+        store.renameFolder("F1", name: "  \n ", fallback: "Untitled")
+        XCTAssertEqual(folderName(store, "F1"), "Untitled", "空名回退走调用方传入的本地化默认名")
+    }
+
+    func testRenameFolderSameNameWritesNothing() {
+        let storage = FakePluginStorage()
+        let store = LaunchpadLayoutStore(storage: storage)
+        store.materializeIfNeeded(from: sampleApps())
+        store.makeFolder(target: a, dragged: b, name: "工具", id: "F1")
+        let writesBefore = storage.writeCount
+
+        store.renameFolder("F1", name: "工具")          // identical
+        store.renameFolder("F1", name: "  工具  ")      // trim-equivalent
+        XCTAssertEqual(storage.writeCount, writesBefore, "同名/trim 同名不写盘（失焦即提交的高频路径）")
+        XCTAssertEqual(folderName(store, "F1"), "工具")
+    }
+
+    func testRenameFolderEmptyWhenAlreadyFallbackNameWritesNothing() {
+        let storage = FakePluginStorage()
+        let store = LaunchpadLayoutStore(storage: storage)
+        store.materializeIfNeeded(from: sampleApps())
+        store.makeFolder(target: a, dragged: b, name: "未命名", id: "F1")
+        let writesBefore = storage.writeCount
+
+        store.renameFolder("F1", name: "   ")           // empty → fallback == current name
+        XCTAssertEqual(storage.writeCount, writesBefore, "空名回退等于现名时也不写盘")
+    }
+
+    func testRenameFolderAllowsDuplicateNamesAndKeepsID() {
+        let store = materializedStore()
+        store.makeFolder(target: a, dragged: b, name: "工具", id: "F1")   // [F1, c, d]
+        store.makeFolder(target: c, dragged: d, name: "其他", id: "F2")   // [F1, F2]
+        store.renameFolder("F2", name: "工具")
+        XCTAssertEqual(folderName(store, "F1"), "工具")
+        XCTAssertEqual(folderName(store, "F2"), "工具", "重名允许——两个夹可同名")
+        XCTAssertEqual(rootIDs(store), ["F1", "F2"], "改名不改 id、不改顺序")
+        XCTAssertEqual(folderChildren(store, "F2"), [c, d], "children 原样保留")
+    }
+
     func testFolderSurvivesPersistenceRoundTrip() {
         let storage = FakePluginStorage()
         let store = LaunchpadLayoutStore(storage: storage)

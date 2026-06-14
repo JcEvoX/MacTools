@@ -43,4 +43,36 @@ final class LaunchpadCellHitTestTests: XCTestCase {
         let padding = NSPoint(x: 124 + 4, y: 140 + 40)
         XCTAssertNil(cell.hitTest(padding), "侧边 padding 应落空，交给容器翻页")
     }
+
+    // MARK: Hidden labels (design §1.2/§1.6 — P1 plumbing; wired to a preference in P2)
+
+    private func makeHiddenLabelCell() -> (cell: LaunchpadGridCellView, metrics: LaunchpadGridMetrics) {
+        let metrics = LaunchpadGridMetrics.resolve(LaunchpadAppearance(iconSide: 64, showsLabels: false))
+        let app = LaunchpadAppItem(id: "/A.app", name: "A", url: URL(fileURLWithPath: "/A.app"))
+        let cell = LaunchpadGridCellView(cell: .app(app), icons: [NSImage()], metrics: metrics)
+        return (cell, metrics)
+    }
+
+    func testHiddenLabelsIconStillHits() {
+        let container = FlippedContainer(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        let (cell, metrics) = makeHiddenLabelCell()
+        cell.frame = NSRect(x: 124, y: 140, width: metrics.cellWidth, height: metrics.cellHeight)
+        container.addSubview(cell)
+
+        // Icon frame inside the 92×84 cell is (14, 8, 64, 64) → centre (46, 40).
+        let iconCentre = NSPoint(x: 124 + 46, y: 140 + 40)
+        XCTAssertEqual(cell.hitTest(iconCentre), cell, "隐藏名字时图标区域仍应命中")
+    }
+
+    func testHiddenLabelsLabelStripFallsThrough() {
+        let container = FlippedContainer(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        let (cell, metrics) = makeHiddenLabelCell()
+        cell.frame = NSRect(x: 124, y: 140, width: metrics.cellWidth, height: metrics.cellHeight)
+        container.addSubview(cell)
+
+        // Below the icon (+2pt hit slop): cell-local y = 78 is inside the 84pt-tall
+        // cell but past the icon's hit region (8−2 ... 72+2) → must fall through.
+        let belowIcon = NSPoint(x: 124 + 46, y: 140 + 78)
+        XCTAssertNil(cell.hitTest(belowIcon), "隐藏名字时 label 条应落空，交给容器翻页")
+    }
 }
