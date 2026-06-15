@@ -3,16 +3,6 @@ import Charts
 import SwiftUI
 import MacToolsPluginKit
 
-private struct ActivityBarPanelShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(
-            roundedRect: rect,
-            cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
-            style: .continuous
-        )
-    }
-}
-
 private enum ActivityBarComponentLayout {
     static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
 }
@@ -193,12 +183,13 @@ struct ActivityBarComponentView: View {
             footerBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(.regularMaterial, in: ActivityBarPanelShape())
-        .overlay {
-            ActivityBarPanelShape()
-                .stroke(Color.black.opacity(0.5), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+        .background(ActivityBarComponentBackground(cornerRadius: ActivityBarComponentLayout.cardCornerRadius))
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: ActivityBarComponentLayout.cardCornerRadius,
+                style: .continuous
+            )
+        )
         .animation(.easeInOut(duration: 0.2), value: statsExpanded)
         .animation(.easeInOut(duration: 0.2), value: chartRange)
         .animation(.easeInOut(duration: 0.2), value: trendMode)
@@ -1295,5 +1286,14 @@ struct ActivityBarComponentView: View {
         let tint: Color
         let systemImage: String
         let iconSize: CGFloat
+    }
+}
+
+private struct ActivityBarComponentBackground: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.primary.opacity(0.045))
     }
 }
