@@ -148,6 +148,10 @@ final class DisplayBrightnessController: DisplayBrightnessControlling {
         for displayID: CGDirectDisplayID,
         phase: PluginPanelAction.SliderPhase
     ) {
+        if managedDisplays[displayID] == nil {
+            refresh()
+        }
+
         guard var managedDisplay = managedDisplays[displayID] else {
             lastErrorMessage = DisplayBrightnessControllerError.displayUnavailable(
                 displayID: displayID
