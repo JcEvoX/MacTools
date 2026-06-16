@@ -2,7 +2,17 @@
   "id": "menu-bar-hidden",
   "displayName": "隐藏菜单栏图标",
   "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-  "version": "1.0.0",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "隐藏菜单栏图标",
+      "summary": "菜单栏图标隐藏功能的设置与弹窗界面"
+    },
+    "en": {
+      "displayName": "Hide Menu Bar Icons",
+      "summary": "Hide menu bar icons, arrange them by dragging, and open hidden icons from a panel."
+    }
+  },
+  "version": "1.0.2",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "MenuBarHidden.bundle",
@@ -16,6 +26,9 @@
     "componentPanel": true,
     "configuration": true
   },
-  "permissions": ["accessibility", "screen-recording"],
+  "permissions": [
+    "accessibility",
+    "screen-recording"
+  ],
   "category": "productivity"
 }

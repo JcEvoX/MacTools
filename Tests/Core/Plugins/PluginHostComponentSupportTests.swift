@@ -43,6 +43,39 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.featureManagementItems.map(\.id), ["second", "first"])
     }
 
+    func testDisplayPreferencesReadingWithEmptyDefaultPluginIDsDoesNotDiscardStoredOrder() {
+        let store = makeDisplayPreferencesStore()
+        store.setOrderedPluginIDs(["second", "first"], defaultPluginIDs: ["first", "second"])
+
+        XCTAssertTrue(store.orderedPluginIDs(defaultPluginIDs: []).isEmpty)
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first", "second"]),
+            ["second", "first"]
+        )
+    }
+
+    func testDisplayPreferencesReadingWithPartialDefaultPluginIDsDoesNotDiscardMissingPluginOrder() {
+        let store = makeDisplayPreferencesStore()
+        store.setOrderedPluginIDs(["third", "second", "first"], defaultPluginIDs: ["first", "second", "third"])
+
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first"]),
+            ["first"]
+        )
+        XCTAssertEqual(
+            store.orderedPluginIDs(defaultPluginIDs: ["first", "second", "third"]),
+            ["third", "second", "first"]
+        )
+    }
+
+    func testDisplayPreferencesHiddenPluginSurvivesTemporaryMissingPlugin() {
+        let store = makeDisplayPreferencesStore()
+        store.setVisibility(false, for: "dynamic", defaultPluginIDs: ["dynamic"])
+
+        XCTAssertTrue(store.isVisible("dynamic", defaultPluginIDs: []))
+        XCTAssertFalse(store.isVisible("dynamic", defaultPluginIDs: ["dynamic"]))
+    }
+
     func testComponentOnlyPluginContributesSettingsPermissionsAndShortcuts() {
         let componentPanelPlugin = MockComponentPanelPlugin(
             id: "component",
@@ -88,6 +121,107 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(host.pluginConfigurationItems.first?.settingsCards.map(\.id), ["component.settings"])
         XCTAssertEqual(host.pluginConfigurationItems.first?.permissionCards.map(\.permissionID), ["accessibility"])
         XCTAssertEqual(host.pluginConfigurationItems.first?.shortcutItems.map(\.pluginID), ["component"])
+    }
+
+    func testShortcutItemsCarryOptionalSettingsGroupingMetadata() {
+        let componentPanelPlugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "display-down",
+                    title: "降低亮度",
+                    description: "降低亮度。",
+                    actionID: "display-down",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false,
+                    sharedBindingGroupID: "brightness.down",
+                    settingsGroupID: "display.one",
+                    settingsGroupTitle: "Studio Display",
+                    settingsGroupDescription: "可与其他显示器使用相同快捷键，同时调节。",
+                    settingsControlTitle: "降低",
+                    settingsControlSystemImage: "sun.min.fill"
+                )
+            ]
+        )
+        let host = makeHost(plugins: [componentPanelPlugin])
+        let item = host.shortcutItems.first
+
+        XCTAssertEqual(item?.settingsGroupID, "display.one")
+        XCTAssertEqual(item?.settingsGroupTitle, "Studio Display")
+        XCTAssertEqual(item?.settingsGroupDescription, "可与其他显示器使用相同快捷键，同时调节。")
+        XCTAssertEqual(item?.settingsControlTitle, "降低")
+        XCTAssertEqual(item?.settingsControlSystemImage, "sun.min.fill")
+    }
+
+    func testShortcutsInSameSharedBindingGroupCanUseSameBinding() {
+        let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
+        let componentPanelPlugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "first",
+                    title: "第一个",
+                    description: "第一个动作。",
+                    actionID: "first",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false,
+                    sharedBindingGroupID: "brightness.down"
+                ),
+                PluginShortcutDefinition(
+                    id: "second",
+                    title: "第二个",
+                    description: "第二个动作。",
+                    actionID: "second",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false,
+                    sharedBindingGroupID: "brightness.down"
+                )
+            ]
+        )
+        let host = makeHost(plugins: [componentPanelPlugin])
+
+        host.setShortcutBinding(binding, for: "component.shortcut.first")
+        host.setShortcutBinding(binding, for: "component.shortcut.second")
+
+        XCTAssertNil(host.shortcutItems.first { $0.id == "component.shortcut.second" }?.errorMessage)
+    }
+
+    func testShortcutsInDifferentSharedBindingGroupsStillRejectDuplicateBindings() {
+        let binding = ShortcutBinding(keyCode: 18, modifiers: [.command, .option])
+        let componentPanelPlugin = MockComponentPanelPlugin(
+            id: "component",
+            shortcutDefinitions: [
+                PluginShortcutDefinition(
+                    id: "first",
+                    title: "第一个",
+                    description: "第一个动作。",
+                    actionID: "first",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false,
+                    sharedBindingGroupID: "brightness.down"
+                ),
+                PluginShortcutDefinition(
+                    id: "second",
+                    title: "第二个",
+                    description: "第二个动作。",
+                    actionID: "second",
+                    scope: .global,
+                    defaultBinding: nil,
+                    isRequired: false,
+                    sharedBindingGroupID: "brightness.up"
+                )
+            ]
+        )
+        let host = makeHost(plugins: [componentPanelPlugin])
+
+        host.setShortcutBinding(binding, for: "component.shortcut.first")
+        host.setShortcutBinding(binding, for: "component.shortcut.second")
+
+        XCTAssertNotNil(host.shortcutItems.first { $0.id == "component.shortcut.second" }?.errorMessage)
     }
 
     func testPluginsWithoutConfigurationSurfaceAreHiddenFromConfigurationList() {
@@ -381,6 +515,12 @@ final class PluginHostComponentSupportTests: XCTestCase {
             displayConfigurationObserver: displayConfigurationObserver,
             displayTopologyRefreshDelay: displayTopologyRefreshDelay
         )
+    }
+
+    private func makeDisplayPreferencesStore() -> PluginDisplayPreferencesStore {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return PluginDisplayPreferencesStore(userDefaults: defaults)
     }
 
     private func installTestPluginPackage(

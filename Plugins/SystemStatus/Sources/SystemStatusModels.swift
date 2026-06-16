@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
     case cpu
@@ -8,20 +9,20 @@ enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
     case network
     case topProcesses
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .cpu:
             return "CPU"
         case .memory:
-            return "内存"
+            return localization.string("metric.memory", defaultValue: "内存")
         case .disk:
-            return "磁盘"
+            return localization.string("metric.disk", defaultValue: "磁盘")
         case .battery:
-            return "电量"
+            return localization.string("metric.battery", defaultValue: "电量")
         case .network:
-            return "网络"
+            return localization.string("metric.network", defaultValue: "网络")
         case .topProcesses:
-            return "进程"
+            return localization.string("metric.topProcesses", defaultValue: "进程")
         }
     }
 }
@@ -32,6 +33,9 @@ struct SystemStatusGridPosition: Equatable, Sendable {
 }
 
 enum SystemStatusComponentLayout {
+    static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
+    static let cardSpacing: CGFloat = 6
+    static let cardContentPadding: CGFloat = 6
     static let columns = 4
     static let rows = 2
     static let orderedMetricKinds: [SystemStatusMetricKind] = [
@@ -142,20 +146,20 @@ enum SystemStatusBatteryState: Equatable, Sendable {
     case unavailable
     case unknown
 
-    var title: String {
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .charging:
-            return "充电中"
+            return localization.string("battery.state.charging", defaultValue: "充电中")
         case .charged:
-            return "已充满"
+            return localization.string("battery.state.charged", defaultValue: "已充满")
         case .unplugged:
-            return "使用电池"
+            return localization.string("battery.state.unplugged", defaultValue: "使用电池")
         case .acPower:
-            return "外接电源"
+            return localization.string("battery.state.acPower", defaultValue: "外接电源")
         case .unavailable:
-            return "无电池"
+            return localization.string("battery.state.unavailable", defaultValue: "无电池")
         case .unknown:
-            return "未知"
+            return localization.string("battery.state.unknown", defaultValue: "未知")
         }
     }
 }
@@ -391,9 +395,12 @@ enum SystemStatusFormatter {
         return "\(format(watts, fractionDigits: fractionDigits))W"
     }
 
-    static func timeRemaining(minutes: Int?) -> String {
+    static func timeRemaining(
+        minutes: Int?,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) -> String {
         guard let minutes, minutes >= 0 else {
-            return "估算中"
+            return localization.string("battery.timeRemaining.estimating", defaultValue: "估算中")
         }
 
         if minutes < 60 {

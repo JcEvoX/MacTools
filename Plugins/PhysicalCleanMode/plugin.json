@@ -2,7 +2,17 @@
   "id": "physical-clean-mode",
   "displayName": "清洁模式",
   "summary": "屏幕全黑并临时禁用键盘输入",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "清洁模式",
+      "summary": "屏幕全黑并临时禁用键盘输入"
+    },
+    "en": {
+      "displayName": "Clean Mode",
+      "summary": "Turn the screen black and temporarily disable keyboard input."
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "PhysicalCleanMode.bundle",

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import OSLog
+import MacToolsPluginKit
 
 // MARK: - ZshConfigStore
 
@@ -22,6 +23,7 @@ final class ZshConfigStore: ObservableObject {
 
     /// 当前文件在磁盘上的内容（加载或保存成功后更新），用于判断是否真有未保存改动
     private var savedContent: String = ""
+    private let localization: PluginLocalization
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -30,7 +32,8 @@ final class ZshConfigStore: ObservableObject {
 
     // MARK: Init
 
-    init() {
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+        self.localization = localization
         refreshStatusMap()
         loadFile(type: .zshrc)
     }
@@ -130,7 +133,11 @@ final class ZshConfigStore: ObservableObject {
         } catch {
             editingContent = ""
             savedContent = ""
-            saveError = "读取失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.readFailed",
+                defaultValue: "读取失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to read \(url.path): \(error)")
         }
     }
@@ -149,7 +156,11 @@ final class ZshConfigStore: ObservableObject {
             refreshStatusMap()
             logger.info("Saved \(url.path)")
         } catch {
-            saveError = "保存失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.saveFailed",
+                defaultValue: "保存失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to save \(url.path): \(error)")
         }
         isBusy = false
@@ -167,7 +178,11 @@ final class ZshConfigStore: ObservableObject {
             loadFile(type: type)
             refreshStatusMap()
         } catch {
-            saveError = "创建失败：\(error.localizedDescription)"
+            saveError = localization.format(
+                "store.error.createFailed",
+                defaultValue: "创建失败：%@",
+                error.localizedDescription
+            )
             logger.error("Failed to create \(url.path): \(error)")
         }
         isBusy = false
@@ -187,14 +202,16 @@ final class ZshConfigStore: ObservableObject {
     }
 
     private func buildFileHeader(for type: ZshConfigFileType) -> String {
-        """
+        let createdAt = ISO8601DateFormatter().string(from: Date())
+        let sourceCommand = "source \(type.filename)"
+        return """
         # \(type.filename)
-        # 说明：\(type.role)
-        # 加载时机：\(type.whenLoaded)
-        # 推荐用途：\(type.recommendedUse)
-        # 由 MacTools 创建于 \(ISO8601DateFormatter().string(from: Date()))
+        # \(localization.format("store.header.role", defaultValue: "说明：%@", type.role(localization: localization)))
+        # \(localization.format("store.header.whenLoaded", defaultValue: "加载时机：%@", type.whenLoaded(localization: localization)))
+        # \(localization.format("store.header.recommendedUse", defaultValue: "推荐用途：%@", type.recommendedUse(localization: localization)))
+        # \(localization.format("store.header.createdAt", defaultValue: "由 MacTools 创建于 %@", createdAt))
         #
-        # 保存后，在终端执行 source \(type.filename) 即可立即生效（.zshrc 适用）。
+        # \(localization.format("store.header.reloadHint", defaultValue: "保存后，在终端执行 %@ 即可立即生效（.zshrc 适用）。", sourceCommand))
         #
 
         """

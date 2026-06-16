@@ -2,7 +2,17 @@
   "id": "display-brightness",
   "displayName": "显示器亮度",
   "summary": "快速调节每个显示器的亮度",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "显示器亮度",
+      "summary": "快速调节每个显示器的亮度"
+    },
+    "en": {
+      "displayName": "Display Brightness",
+      "summary": "Adjust brightness for each display quickly."
+    }
+  },
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayBrightness.bundle",
@@ -14,7 +24,7 @@
   "capabilities": {
     "primaryPanel": true,
     "componentPanel": false,
-    "configuration": false
+    "configuration": true
   },
   "permissions": [],
   "category": "display"

@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MacToolsPluginKit
 
 protocol IPOverviewProviding: Sendable {
     func collectSnapshot() async -> IPOverviewSnapshot
@@ -27,15 +28,19 @@ enum IPOverviewServiceError: LocalizedError {
     case invalidIP(String)
 
     var errorDescription: String? {
+        localizedDescription()
+    }
+
+    func localizedDescription(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch self {
         case .invalidResponse:
-            return "响应无效"
+            return localization.string("service.error.invalidResponse", defaultValue: "响应无效")
         case .badStatus(let statusCode):
             return "HTTP \(statusCode)"
         case .invalidPayload:
-            return "数据格式不正确"
+            return localization.string("service.error.invalidPayload", defaultValue: "数据格式不正确")
         case .invalidIP(let value):
-            return "IP 无效：\(value)"
+            return localization.format("service.error.invalidIP", defaultValue: "IP 无效：%@", value)
         }
     }
 }
@@ -43,13 +48,16 @@ enum IPOverviewServiceError: LocalizedError {
 struct IPOverviewService: IPOverviewProviding {
     private let httpClient: any IPOverviewHTTPClient
     private let timeout: TimeInterval
+    private let localization: PluginLocalization
 
     init(
         httpClient: any IPOverviewHTTPClient = URLSession.shared,
-        timeout: TimeInterval = 4
+        timeout: TimeInterval = 4,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.httpClient = httpClient
         self.timeout = timeout
+        self.localization = localization
     }
 
     func collectSnapshot() async -> IPOverviewSnapshot {
@@ -73,7 +81,10 @@ struct IPOverviewService: IPOverviewProviding {
 
         let errorMessage: String?
         if publicIPv4 == nil && publicIPv6 == nil {
-            errorMessage = "未能从外部检测源获取公网 IP"
+            errorMessage = localization.string(
+                "service.error.noPublicIP",
+                defaultValue: "未能从外部检测源获取公网 IP"
+            )
         } else {
             errorMessage = nil
         }
@@ -114,11 +125,14 @@ struct IPOverviewService: IPOverviewProviding {
                     status: .success(ip)
                 ))
             } catch {
+                let message = (error as? IPOverviewServiceError)?
+                    .localizedDescription(localization: localization)
+                    ?? error.localizedDescription
                 results.append(IPOverviewSourceResult(
                     id: source.id,
                     family: family,
                     source: source.name,
-                    status: .failure(error.localizedDescription)
+                    status: .failure(message)
                 ))
             }
         }

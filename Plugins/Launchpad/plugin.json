@@ -1,0 +1,31 @@
+{
+  "id": "launchpad",
+  "displayName": "启动台",
+  "summary": "用全局热键或菜单栏唤出全屏应用网格，搜索并启动",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "启动台",
+      "summary": "用全局热键或菜单栏唤出全屏应用网格，搜索并启动"
+    },
+    "en": {
+      "displayName": "Launchpad",
+      "summary": "Open a full-screen app grid from a global shortcut or the menu bar, then search and launch apps."
+    }
+  },
+  "version": "1.1.1",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "Launchpad.bundle",
+  "factoryClass": "LaunchpadPlugin.LaunchpadPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "LaunchpadPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "system"
+}

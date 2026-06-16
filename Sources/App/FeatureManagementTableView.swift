@@ -415,7 +415,9 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private let containerView = NSView()
     private let iconBackgroundView = NSView()
     private let iconImageView = NSImageView()
+    private let titleRowStackView = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
+    private let releaseChannelBadgeView = NSHostingView(rootView: PluginReleaseChannelBadge(releaseChannel: nil))
     private let descriptionLabel = NSTextField(labelWithString: "")
     private let activeDotView = NSView()
     private let visibilityButton = NSButton(checkboxWithTitle: "", target: nil, action: nil)
@@ -442,6 +444,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         visibilityHandler = onVisibilityChange
 
         titleLabel.stringValue = item.title
+        configureReleaseChannelBadge(item.releaseChannel)
         descriptionLabel.stringValue = "\(item.description) · \(featureManagementPresentationText(for: item.presentation))"
         iconImageView.image = NSImage(
             systemSymbolName: item.iconName,
@@ -465,7 +468,9 @@ private final class FeatureManagementTableCellView: NSTableCellView {
         addSubview(containerView)
         containerView.addSubview(iconBackgroundView)
         iconBackgroundView.addSubview(iconImageView)
-        containerView.addSubview(titleLabel)
+        containerView.addSubview(titleRowStackView)
+        titleRowStackView.addArrangedSubview(titleLabel)
+        titleRowStackView.addArrangedSubview(releaseChannelBadgeView)
         containerView.addSubview(descriptionLabel)
         containerView.addSubview(activeDotView)
         containerView.addSubview(visibilityButton)
@@ -478,9 +483,18 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         iconBackgroundView.layer?.cornerRadius = 10
 
+        titleRowStackView.orientation = .horizontal
+        titleRowStackView.alignment = .centerY
+        titleRowStackView.spacing = 6
+        titleRowStackView.distribution = .fill
+
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        releaseChannelBadgeView.setContentHuggingPriority(.required, for: .horizontal)
+        releaseChannelBadgeView.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         descriptionLabel.font = .systemFont(ofSize: 11, weight: .medium)
         descriptionLabel.textColor = .secondaryLabelColor
@@ -498,7 +512,10 @@ private final class FeatureManagementTableCellView: NSTableCellView {
 
         handleImageView.image = NSImage(
             systemSymbolName: "line.3.horizontal",
-            accessibilityDescription: "拖拽调整顺序"
+            accessibilityDescription: AppL10n.plugins(
+                "plugin.management.reorderAccessibility",
+                defaultValue: "拖拽调整顺序"
+            )
         )
         handleImageView.contentTintColor = .secondaryLabelColor
         handleImageView.symbolConfiguration = .init(pointSize: 13, weight: .semibold)
@@ -509,7 +526,7 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             containerView,
             iconBackgroundView,
             iconImageView,
-            titleLabel,
+            titleRowStackView,
             descriptionLabel,
             activeDotView,
             visibilityButton,
@@ -532,13 +549,13 @@ private final class FeatureManagementTableCellView: NSTableCellView {
             iconImageView.centerXAnchor.constraint(equalTo: iconBackgroundView.centerXAnchor),
             iconImageView.centerYAnchor.constraint(equalTo: iconBackgroundView.centerYAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
-            titleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
+            titleRowStackView.leadingAnchor.constraint(equalTo: iconBackgroundView.trailingAnchor, constant: 12),
+            titleRowStackView.trailingAnchor.constraint(lessThanOrEqualTo: activeDotView.leadingAnchor, constant: -10),
+            titleRowStackView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
 
-            descriptionLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            descriptionLabel.leadingAnchor.constraint(equalTo: titleRowStackView.leadingAnchor),
             descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: visibilityButton.leadingAnchor, constant: -12),
-            descriptionLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            descriptionLabel.topAnchor.constraint(equalTo: titleRowStackView.bottomAnchor, constant: 4),
 
             activeDotView.widthAnchor.constraint(equalToConstant: 8),
             activeDotView.heightAnchor.constraint(equalToConstant: 8),
@@ -559,16 +576,21 @@ private final class FeatureManagementTableCellView: NSTableCellView {
     private func handleVisibilityToggle(_ sender: NSButton) {
         visibilityHandler?(sender.state == .on)
     }
+
+    private func configureReleaseChannelBadge(_ rawValue: String?) {
+        releaseChannelBadgeView.rootView = PluginReleaseChannelBadge(releaseChannel: rawValue)
+        releaseChannelBadgeView.isHidden = PluginReleaseChannel(rawString: rawValue) == nil
+    }
 }
 
 private func featureManagementPresentationText(for presentation: PluginFeaturePresentation) -> String {
     switch presentation {
     case .featurePanel:
-        return "操作面板"
+        return AppL10n.plugins("plugin.presentation.featurePanel", defaultValue: "操作面板")
     case .componentPanel:
-        return "组件"
+        return AppL10n.plugins("plugin.presentation.componentPanel", defaultValue: "组件")
     case .featureAndComponentPanel:
-        return "操作面板与组件"
+        return AppL10n.plugins("plugin.presentation.featureAndComponentPanel", defaultValue: "操作面板与组件")
     }
 }
 

@@ -48,6 +48,7 @@ final class IPOverviewViewModel: ObservableObject {
     private let connectivityChecker: any IPOverviewConnectivityChecking
     private let leakTester: any IPOverviewLeakTesting
     private let storage: PluginStorage
+    private let localization: PluginLocalization
     private var refreshTask: Task<Void, Never>?
     private var connectivityTask: Task<Void, Never>?
     private var webRTCTask: Task<Void, Never>?
@@ -59,14 +60,16 @@ final class IPOverviewViewModel: ObservableObject {
     }
 
     init(
-        provider: any IPOverviewProviding = IPOverviewService(),
-        connectivityChecker: any IPOverviewConnectivityChecking = IPOverviewConnectivityService(),
-        leakTester: any IPOverviewLeakTesting = IPOverviewLeakTestService(),
-        storage: PluginStorage = UserDefaultsPluginStorage(pluginID: "ip-overview")
+        provider: (any IPOverviewProviding)? = nil,
+        connectivityChecker: (any IPOverviewConnectivityChecking)? = nil,
+        leakTester: (any IPOverviewLeakTesting)? = nil,
+        storage: PluginStorage = UserDefaultsPluginStorage(pluginID: "ip-overview"),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        self.provider = provider
-        self.connectivityChecker = connectivityChecker
-        self.leakTester = leakTester
+        self.localization = localization
+        self.provider = provider ?? IPOverviewService(localization: localization)
+        self.connectivityChecker = connectivityChecker ?? IPOverviewConnectivityService(localization: localization)
+        self.leakTester = leakTester ?? IPOverviewLeakTestService(localization: localization)
         self.storage = storage
         self.connectivityResults = Self.loadConnectivityTargets(storage: storage).map {
             IPOverviewConnectivityResult(id: $0.id, target: $0, status: .waiting)
@@ -74,8 +77,8 @@ final class IPOverviewViewModel: ObservableObject {
         self.webRTCResults = IPOverviewWebRTCTarget.defaults.map {
             IPOverviewLeakTestResult(id: $0.id, name: $0.name, status: .waiting)
         }
-        self.dnsLeakResults = (1...4).map {
-            IPOverviewLeakTestResult(id: "dns-\($0)", name: "DNS 出口检测 #\($0)", status: .waiting)
+        self.dnsLeakResults = Self.dnsLeakProbes(localization: localization).map {
+            IPOverviewLeakTestResult(id: $0.id, name: $0.name, status: .waiting)
         }
     }
 
@@ -189,10 +192,10 @@ final class IPOverviewViewModel: ObservableObject {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedURLString = Self.normalizedURLString(urlString)
         guard !trimmedName.isEmpty else {
-            return "请输入名称"
+            return localization.string("customTarget.error.emptyName", defaultValue: "请输入名称")
         }
         guard let normalizedURLString, URL(string: normalizedURLString) != nil else {
-            return "请输入有效 URL"
+            return localization.string("customTarget.error.invalidURL", defaultValue: "请输入有效 URL")
         }
 
         let target = IPOverviewConnectivityTarget(
@@ -260,7 +263,7 @@ final class IPOverviewViewModel: ObservableObject {
         }
 
         isCheckingDNSLeak = true
-        let probes = (1...4).map { (id: "dns-\($0)", name: "DNS 出口检测 #\($0)") }
+        let probes = Self.dnsLeakProbes(localization: localization)
         dnsLeakResults = probes.map {
             IPOverviewLeakTestResult(id: $0.id, name: $0.name, status: .checking)
         }
@@ -329,5 +332,14 @@ final class IPOverviewViewModel: ObservableObject {
         }
 
         return "https://\(trimmed)"
+    }
+
+    private static func dnsLeakProbes(localization: PluginLocalization) -> [(id: String, name: String)] {
+        (1...4).map {
+            (
+                id: "dns-\($0)",
+                name: localization.format("dns.probe.name", defaultValue: "DNS 出口检测 #%d", $0)
+            )
+        }
     }
 }

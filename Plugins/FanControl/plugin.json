@@ -2,7 +2,17 @@
   "id": "fan-control",
   "displayName": "风扇控制",
   "summary": "管理风扇转速预设，支持自动、全速和自定义策略",
-  "version": "1.0.6",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "风扇控制",
+      "summary": "管理风扇转速预设，支持自动、全速和自定义策略"
+    },
+    "en": {
+      "displayName": "Fan Control",
+      "summary": "Manage fan speed presets with automatic, full-speed, and custom strategies."
+    }
+  },
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "FanControl.bundle",

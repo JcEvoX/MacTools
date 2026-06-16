@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 enum IPOverviewAddressFamily: String, CaseIterable, Sendable {
     case ipv4 = "IPv4"
@@ -86,24 +87,49 @@ struct IPOverviewGeoInfo: Equatable, Sendable {
     }
 
     var proxyText: String {
+        proxyText()
+    }
+
+    func proxyText(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         switch isProxy {
         case true:
-            return "可能为代理"
+            return localization.string("geo.proxy.possible", defaultValue: "可能为代理")
         case false:
-            return "未识别为代理"
+            return localization.string("geo.proxy.notDetected", defaultValue: "未识别为代理")
         case nil:
-            return "未知"
+            return localization.string("common.unknown", defaultValue: "未知")
         }
     }
 }
 
-enum IPOverviewNetworkType: String, Sendable {
-    case residential = "住宅/宽带"
-    case mobile = "移动网络"
-    case datacenter = "数据中心"
-    case education = "教育网络"
-    case business = "企业网络"
-    case unknown = "未知"
+enum IPOverviewNetworkType: Sendable {
+    case residential
+    case mobile
+    case datacenter
+    case education
+    case business
+    case unknown
+
+    var rawValue: String {
+        title()
+    }
+
+    func title(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
+        switch self {
+        case .residential:
+            return localization.string("networkType.residential", defaultValue: "住宅/宽带")
+        case .mobile:
+            return localization.string("networkType.mobile", defaultValue: "移动网络")
+        case .datacenter:
+            return localization.string("networkType.datacenter", defaultValue: "数据中心")
+        case .education:
+            return localization.string("networkType.education", defaultValue: "教育网络")
+        case .business:
+            return localization.string("networkType.business", defaultValue: "企业网络")
+        case .unknown:
+            return localization.string("common.unknown", defaultValue: "未知")
+        }
+    }
 
     static func infer(organization: String?, isp: String?, isHosting: Bool?) -> IPOverviewNetworkType {
         if isHosting == true {
@@ -299,64 +325,99 @@ struct IPOverviewSnapshot: Equatable, Sendable {
     }
 
     var reportText: String {
+        reportText()
+    }
+
+    func reportText(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
         var lines: [String] = []
-        lines.append("IP 检测结果")
+        lines.append(localization.string("report.title", defaultValue: "IP 检测结果"))
         if let lastUpdated {
-            lines.append("更新时间：\(IPOverviewFormatter.dateTime(lastUpdated))")
+            lines.append(localization.format(
+                "report.updatedAt",
+                defaultValue: "更新时间：%@",
+                IPOverviewFormatter.dateTime(lastUpdated)
+            ))
         }
-        lines.append("公网 IPv4：\(publicIPv4?.ip ?? "未检测到")")
-        lines.append("公网 IPv6：\(publicIPv6?.ip ?? "未检测到")")
+        let notDetected = localization.string("common.notDetected", defaultValue: "未检测到")
+        lines.append(localization.format("report.publicIPv4", defaultValue: "公网 IPv4：%@", publicIPv4?.ip ?? notDetected))
+        lines.append(localization.format("report.publicIPv6", defaultValue: "公网 IPv6：%@", publicIPv6?.ip ?? notDetected))
 
         if !localAddresses.isEmpty {
             lines.append("")
-            lines.append("本地地址：")
+            lines.append(localization.string("report.localAddresses", defaultValue: "本地地址："))
             for address in localAddresses {
-                lines.append("- \(address.interfaceName) \(address.family.rawValue)：\(address.address)")
+                lines.append(localization.format(
+                    "report.localAddress",
+                    defaultValue: "- %@ %@：%@",
+                    address.interfaceName,
+                    address.family.rawValue,
+                    address.address
+                ))
             }
         }
 
         if !geoInfoByIP.isEmpty {
             lines.append("")
-            lines.append("归属地：")
+            lines.append(localization.string("report.geo", defaultValue: "归属地："))
             for info in geoInfoByIP.values.sorted(by: { $0.ip < $1.ip }) {
                 lines.append("- \(info.ip)")
                 if let country = info.countryDisplayText {
-                    lines.append("  地区：\(country)")
+                    lines.append(localization.format("report.region", defaultValue: "  地区：%@", country))
                 }
                 if let region = info.region, !region.isEmpty {
-                    lines.append("  省份：\(region)")
+                    lines.append(localization.format("report.province", defaultValue: "  省份：%@", region))
                 }
                 if let city = info.city, !city.isEmpty {
-                    lines.append("  城市：\(city)")
+                    lines.append(localization.format("report.city", defaultValue: "  城市：%@", city))
                 }
                 if let network = info.networkText {
-                    lines.append("  网络：\(network)")
+                    lines.append(localization.format("report.network", defaultValue: "  网络：%@", network))
                 }
-                lines.append("  类型：\(info.networkType.rawValue)")
-                lines.append("  代理：\(info.proxyText)")
+                lines.append(localization.format(
+                    "report.type",
+                    defaultValue: "  类型：%@",
+                    info.networkType.title(localization: localization)
+                ))
+                lines.append(localization.format(
+                    "report.proxy",
+                    defaultValue: "  代理：%@",
+                    info.proxyText(localization: localization)
+                ))
                 if let timezone = info.timezone, !timezone.isEmpty {
-                    lines.append("  时区：\(timezone)")
+                    lines.append(localization.format("report.timezone", defaultValue: "  时区：%@", timezone))
                 }
-                lines.append("  来源：\(info.source)")
+                lines.append(localization.format("report.source", defaultValue: "  来源：%@", info.source))
             }
         }
 
         if !sourceResults.isEmpty {
             lines.append("")
-            lines.append("检测源：")
+            lines.append(localization.string("report.sources", defaultValue: "检测源："))
             for result in sourceResults {
                 switch result.status {
                 case .success(let ip):
-                    lines.append("- \(result.source) \(result.family.rawValue)：\(ip)")
+                    lines.append(localization.format(
+                        "report.source.success",
+                        defaultValue: "- %@ %@：%@",
+                        result.source,
+                        result.family.rawValue,
+                        ip
+                    ))
                 case .failure(let message):
-                    lines.append("- \(result.source) \(result.family.rawValue)：失败（\(message)）")
+                    lines.append(localization.format(
+                        "report.source.failure",
+                        defaultValue: "- %@ %@：失败（%@）",
+                        result.source,
+                        result.family.rawValue,
+                        message
+                    ))
                 }
             }
         }
 
         if let errorMessage, !errorMessage.isEmpty {
             lines.append("")
-            lines.append("错误：\(errorMessage)")
+            lines.append(localization.format("report.error", defaultValue: "错误：%@", errorMessage))
         }
 
         return lines.joined(separator: "\n")
@@ -366,7 +427,7 @@ struct IPOverviewSnapshot: Equatable, Sendable {
 enum IPOverviewFormatter {
     static func dateTime(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale.current
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
         return formatter.string(from: date)

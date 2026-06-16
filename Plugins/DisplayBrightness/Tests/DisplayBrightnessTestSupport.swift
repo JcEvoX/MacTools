@@ -29,10 +29,19 @@ func makeBrightnessDisplay(
     id: CGDirectDisplayID,
     name: String,
     brightness: Double,
-    isPendingWrite: Bool = false
+    isPendingWrite: Bool = false,
+    vendorNumber: UInt32? = nil,
+    modelNumber: UInt32? = nil,
+    serialNumber: UInt32? = nil
 ) -> DisplayBrightnessDisplay {
     DisplayBrightnessDisplay(
-        display: makeTestDisplay(id: id, name: name),
+        display: makeTestDisplay(
+            id: id,
+            name: name,
+            vendorNumber: vendorNumber,
+            modelNumber: modelNumber,
+            serialNumber: serialNumber
+        ),
         brightness: brightness,
         isPendingWrite: isPendingWrite
     )
@@ -69,6 +78,20 @@ final class MockDisplayBrightnessController: DisplayBrightnessControlling {
     ) {
         setBrightnessCalls.append(
             SetBrightnessCall(value: value, displayID: displayID, phase: phase)
+        )
+        snapshotValue = DisplayBrightnessSnapshot(
+            displays: snapshotValue.displays.map { display in
+                guard display.id == displayID else {
+                    return display
+                }
+
+                return DisplayBrightnessDisplay(
+                    display: display.display,
+                    brightness: min(max(value, 0), 1),
+                    isPendingWrite: phase != .ended
+                )
+            },
+            errorMessage: snapshotValue.errorMessage
         )
     }
 }
@@ -306,7 +329,7 @@ final class MockDisplayDisableCoordinator: DisplayDisableCoordinating {
         disableCallCount += 1
     }
 
-    func restoreBuiltInDisplay() async {
+    func restoreBuiltInDisplay() {
         restoreCallCount += 1
     }
 

@@ -4,27 +4,22 @@ import MacToolsPluginKit
 
 public final class SystemStatusPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        SystemStatusPluginProvider()
+        SystemStatusPluginProvider(context: context)
     }
 }
 
 @MainActor
 private struct SystemStatusPluginProvider: PluginProvider {
+    let context: PluginRuntimeContext
+
     func makePlugins() -> [any MacToolsPlugin] {
-        [SystemStatusPlugin()]
+        [SystemStatusPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
     }
 }
 
 @MainActor
 final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
-    let metadata = PluginMetadata(
-        id: "system-status",
-        title: "系统状态",
-        iconName: "gauge.with.dots.needle.67percent",
-        iconTint: Color(nsColor: .systemTeal),
-        order: 10,
-        defaultDescription: "实时查看系统状态"
-    )
+    let metadata: PluginMetadata
 
     let descriptor = PluginComponentDescriptor(
         span: PluginComponentSpan(
@@ -34,9 +29,23 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
     )
 
     private let viewModel: SystemStatusViewModel
+    private let localization: PluginLocalization
 
-    init(viewModel: SystemStatusViewModel = SystemStatusViewModel()) {
+    init(
+        viewModel: SystemStatusViewModel? = nil,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.viewModel = viewModel
+            ?? SystemStatusViewModel(sampler: SystemStatusSampler(localization: localization))
+        self.localization = localization
+        self.metadata = PluginMetadata(
+            id: "system-status",
+            title: localization.string("metadata.title", defaultValue: "系统状态"),
+            iconName: "gauge.with.dots.needle.67percent",
+            iconTint: Color(nsColor: .systemTeal),
+            order: 10,
+            defaultDescription: localization.string("metadata.description", defaultValue: "实时查看系统状态")
+        )
     }
 
     var onStateChange: (() -> Void)?
@@ -61,7 +70,8 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
         AnyView(
             SystemStatusComponentView(
                 viewModel: viewModel,
-                isPanelVisible: context.isPanelVisible
+                isPanelVisible: context.isPanelVisible,
+                localization: localization
             )
         )
     }
@@ -125,6 +135,7 @@ final class SystemStatusViewModel: ObservableObject {
     private func runFastSamplingLoop() async {
         while !Task.isCancelled {
             let sample = await sampler.collectFast(referenceDate: Date())
+            guard !Task.isCancelled else { return }
             snapshot.cpu = sample.cpu
             snapshot.memory = sample.memory
             snapshot.network = sample.network.replacingPublicIPAddress(publicIPAddress)
@@ -140,6 +151,7 @@ final class SystemStatusViewModel: ObservableObject {
     private func runSlowSamplingLoop() async {
         while !Task.isCancelled {
             let sample = await sampler.collectSlow()
+            guard !Task.isCancelled else { return }
             snapshot.disk = sample.disk
             snapshot.battery = sample.battery
 
@@ -154,6 +166,7 @@ final class SystemStatusViewModel: ObservableObject {
     private func runProcessSamplingLoop() async {
         while !Task.isCancelled {
             let processes = await sampler.collectTopProcesses(limit: 3)
+            guard !Task.isCancelled else { return }
             snapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
 
             do {
@@ -167,6 +180,7 @@ final class SystemStatusViewModel: ObservableObject {
     private func runPublicIPSamplingLoop() async {
         while !Task.isCancelled {
             if let publicIPAddress = await sampler.collectPublicIPAddress() {
+                guard !Task.isCancelled else { return }
                 self.publicIPAddress = publicIPAddress
                 snapshot.network = snapshot.network.replacingPublicIPAddress(publicIPAddress)
             }
@@ -196,26 +210,35 @@ final class SystemStatusViewModel: ObservableObject {
 
 struct SystemStatusComponentView: View {
     private enum Layout {
-        static let spacing: CGFloat = 8
+        static let spacing = SystemStatusComponentLayout.cardSpacing
     }
 
     @ObservedObject var viewModel: SystemStatusViewModel
     let isPanelVisible: Bool
+    let localization: PluginLocalization
 
     var body: some View {
-        VStack(spacing: Layout.spacing) {
-            HStack(spacing: Layout.spacing) {
-                compactCPUCard
-                compactMemoryCard
-                compactDiskCard
-                compactBatteryCard
-            }
+        GeometryReader { proxy in
+            let rowHeight = max(0, (proxy.size.height - Layout.spacing) / 2)
 
-            HStack(spacing: Layout.spacing) {
-                networkCard
-                topProcessesCard
+            VStack(spacing: Layout.spacing) {
+                HStack(spacing: Layout.spacing) {
+                    compactCPUCard
+                    compactMemoryCard
+                    compactDiskCard
+                    compactBatteryCard
+                }
+                .frame(height: rowHeight)
+
+                HStack(spacing: Layout.spacing) {
+                    networkCard
+                    topProcessesCard
+                }
+                .frame(height: rowHeight)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if isPanelVisible {
                 viewModel.start()
@@ -227,56 +250,80 @@ struct SystemStatusComponentView: View {
     private var compactCPUCard: some View {
         let cpu = viewModel.snapshot.cpu
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.cpu.title,
+            title: SystemStatusMetricKind.cpu.title(localization: localization),
             percentText: cpu.isCollecting ? "--" : SystemStatusFormatter.percent(cpu.usage),
             detailLines: [
-                "温度 \(SystemStatusFormatter.temperature(cpu.temperatureCelsius))",
-                "功率 \(SystemStatusFormatter.power(cpu.systemPowerWatts))"
+                localization.format(
+                    "metric.temperatureFormat",
+                    defaultValue: "温度 %@",
+                    SystemStatusFormatter.temperature(cpu.temperatureCelsius)
+                ),
+                localization.format(
+                    "metric.powerFormat",
+                    defaultValue: "功率 %@",
+                    SystemStatusFormatter.power(cpu.systemPowerWatts)
+                )
             ],
-            progress: cpu.usage,
-            tone: .purple
+            progress: cpu.usage
         )
     }
 
     private var compactMemoryCard: some View {
         let memory = viewModel.snapshot.memory
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.memory.title,
+            title: SystemStatusMetricKind.memory.title(localization: localization),
             percentText: SystemStatusFormatter.percent(memory.usage),
             detailLines: [
-                "已用 \(SystemStatusFormatter.bytes(memory.usedBytes))",
-                "总量 \(SystemStatusFormatter.bytes(memory.totalBytes))"
+                localization.format(
+                    "metric.usedFormat",
+                    defaultValue: "已用 %@",
+                    SystemStatusFormatter.bytes(memory.usedBytes)
+                ),
+                localization.format(
+                    "metric.totalFormat",
+                    defaultValue: "总量 %@",
+                    SystemStatusFormatter.bytes(memory.totalBytes)
+                )
             ],
-            progress: memory.usage,
-            tone: tone(forUsage: memory.usage, normal: .blue)
+            progress: memory.usage
         )
     }
 
     private var compactDiskCard: some View {
         let disk = viewModel.snapshot.disk
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.disk.title,
+            title: SystemStatusMetricKind.disk.title(localization: localization),
             percentText: SystemStatusFormatter.percent(disk.usage),
             detailLines: [
-                "已用 \(SystemStatusFormatter.bytes(disk.usedBytes))",
-                "总量 \(SystemStatusFormatter.bytes(disk.totalBytes))"
+                localization.format(
+                    "metric.usedFormat",
+                    defaultValue: "已用 %@",
+                    SystemStatusFormatter.bytes(disk.usedBytes)
+                ),
+                localization.format(
+                    "metric.totalFormat",
+                    defaultValue: "总量 %@",
+                    SystemStatusFormatter.bytes(disk.totalBytes)
+                )
             ],
-            progress: disk.usage,
-            tone: tone(forUsage: disk.usage, normal: .teal)
+            progress: disk.usage
         )
     }
 
     private var compactBatteryCard: some View {
         let battery = viewModel.snapshot.battery
         return SystemStatusCompactMetricCard(
-            title: SystemStatusMetricKind.battery.title,
+            title: SystemStatusMetricKind.battery.title(localization: localization),
             percentText: battery.isAvailable ? SystemStatusFormatter.percent(battery.level) : "--",
             detailLines: [
-                "温度 \(SystemStatusFormatter.temperature(battery.temperatureCelsius))",
+                localization.format(
+                    "metric.temperatureFormat",
+                    defaultValue: "温度 %@",
+                    SystemStatusFormatter.temperature(battery.temperatureCelsius)
+                ),
                 batteryHealthText(for: battery)
             ],
             progress: battery.level,
-            tone: tone(for: battery),
             centerSubtext: batteryCircleStatusText(for: battery),
             centerHelpText: batteryShortText(for: battery)
         )
@@ -285,7 +332,7 @@ struct SystemStatusComponentView: View {
     private var networkCard: some View {
         let network = viewModel.snapshot.network
         return SystemStatusWideInfoCard(
-            title: SystemStatusMetricKind.network.title,
+            title: SystemStatusMetricKind.network.title(localization: localization),
             iconName: "wifi",
             tint: Color(nsColor: .systemCyan),
             headerLeadingPadding: 4
@@ -306,14 +353,17 @@ struct SystemStatusComponentView: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     SystemStatusKeyValueLine(
-                        label: "公网",
-                        value: network.publicIPAddress ?? "获取中",
-                        copyValue: network.publicIPAddress
+                        label: localization.string("network.publicIP", defaultValue: "公网"),
+                        value: network.publicIPAddress
+                            ?? localization.string("network.publicIP.collecting", defaultValue: "获取中"),
+                        copyValue: network.publicIPAddress,
+                        localization: localization
                     )
                     SystemStatusKeyValueLine(
-                        label: "内网",
+                        label: localization.string("network.localIP", defaultValue: "内网"),
                         value: network.ipAddress ?? "—",
-                        copyValue: network.ipAddress
+                        copyValue: network.ipAddress,
+                        localization: localization
                     )
                 }
             }
@@ -322,64 +372,38 @@ struct SystemStatusComponentView: View {
 
     private var topProcessesCard: some View {
         SystemStatusTopProcessesCard(
-            processes: Array(viewModel.snapshot.topProcesses.prefix(3))
+            processes: Array(viewModel.snapshot.topProcesses.prefix(3)),
+            localization: localization
         )
-    }
-
-    private func tone(forUsage usage: Double?, normal: SystemStatusMetricTone) -> SystemStatusMetricTone {
-        guard let usage else {
-            return normal
-        }
-
-        if usage >= 0.9 {
-            return .red
-        }
-        if usage >= 0.75 {
-            return .orange
-        }
-
-        return normal
-    }
-
-    private func tone(for battery: SystemStatusBatterySnapshot) -> SystemStatusMetricTone {
-        guard let level = battery.level else {
-            return .orange
-        }
-
-        if battery.state == .charging || battery.state == .charged {
-            return .green
-        }
-        if level <= 0.2 {
-            return .red
-        }
-        if level <= 0.35 {
-            return .orange
-        }
-        return .green
     }
 
     private func batteryShortText(for battery: SystemStatusBatterySnapshot) -> String {
         guard battery.isAvailable else {
-            return battery.state.title
+            return battery.state.title(localization: localization)
         }
 
         if battery.state == .charged {
-            return "已充满"
+            return localization.string("battery.state.charged", defaultValue: "已充满")
         }
 
         if let adapterWatts = battery.adapterWatts, battery.state == .charging || battery.state == .acPower {
-            return "\(battery.state.title) \(adapterWatts)W"
+            return localization.format(
+                "battery.stateWithWattsFormat",
+                defaultValue: "%@ %dW",
+                battery.state.title(localization: localization),
+                adapterWatts
+            )
         }
 
-        return SystemStatusFormatter.timeRemaining(minutes: battery.timeRemainingMinutes)
+        return SystemStatusFormatter.timeRemaining(minutes: battery.timeRemainingMinutes, localization: localization)
     }
 
     private func batteryHealthText(for battery: SystemStatusBatterySnapshot) -> String {
         guard let healthPercent = battery.healthPercent else {
-            return "健康度 —"
+            return localization.string("battery.healthUnavailable", defaultValue: "健康度 —")
         }
 
-        return "健康度 \(healthPercent)%"
+        return localization.format("battery.healthFormat", defaultValue: "健康度 %d%%", healthPercent)
     }
 
     private func batteryCircleStatusText(for battery: SystemStatusBatterySnapshot) -> String? {
@@ -389,40 +413,15 @@ struct SystemStatusComponentView: View {
 
         switch battery.state {
         case .charging, .charged, .acPower, .unplugged:
-            return battery.state.title
+            return battery.state.title(localization: localization)
         case .unavailable, .unknown:
             return nil
         }
     }
 }
 
-private enum SystemStatusMetricTone {
-    case blue
-    case cyan
-    case green
-    case orange
-    case purple
-    case red
-    case teal
-
-    var color: Color {
-        switch self {
-        case .blue:
-            return Color(nsColor: .systemBlue)
-        case .cyan:
-            return Color(nsColor: .systemCyan)
-        case .green:
-            return Color(nsColor: .systemGreen)
-        case .orange:
-            return Color(nsColor: .systemOrange)
-        case .purple:
-            return Color(nsColor: .systemPurple)
-        case .red:
-            return Color(nsColor: .systemRed)
-        case .teal:
-            return Color(nsColor: .systemTeal)
-        }
-    }
+private enum SystemStatusCircleStyle {
+    static let tint = Color(nsColor: .systemBlue)
 }
 
 private struct SystemStatusCompactMetricCard: View {
@@ -430,14 +429,13 @@ private struct SystemStatusCompactMetricCard: View {
     let percentText: String
     let detailLines: [String]
     let progress: Double?
-    let tone: SystemStatusMetricTone
     var centerSubtext: String? = nil
     var centerHelpText: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                SystemStatusCircularProgress(value: progress, tint: tone.color)
+                SystemStatusCircularProgress(value: progress, tint: SystemStatusCircleStyle.tint)
                     .frame(width: 58, height: 58)
 
                 VStack(spacing: centerSubtext == nil ? 1 : 0) {
@@ -457,7 +455,7 @@ private struct SystemStatusCompactMetricCard: View {
                     if let centerSubtext {
                         Text(centerSubtext)
                             .font(.system(size: 6.8, weight: .semibold, design: .rounded))
-                            .foregroundStyle(tone.color)
+                            .foregroundStyle(SystemStatusCircleStyle.tint)
                             .lineLimit(1)
                             .minimumScaleFactor(0.55)
                     }
@@ -481,10 +479,9 @@ private struct SystemStatusCompactMetricCard: View {
             }
             .help(detailLines.joined(separator: "\n"))
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 7)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 private struct SystemStatusWideInfoCard<Content: View>: View {
@@ -514,10 +511,9 @@ private struct SystemStatusWideInfoCard<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 }
 
@@ -555,6 +551,7 @@ private struct SystemStatusKeyValueLine: View {
     let label: String
     let value: String
     let copyValue: String?
+    let localization: PluginLocalization
 
     @State private var isHovering = false
 
@@ -584,7 +581,7 @@ private struct SystemStatusKeyValueLine: View {
                 .buttonStyle(.plain)
                 .opacity(isHovering ? 1 : 0)
                 .disabled(!isHovering)
-                .help("复制\(label) IP")
+                .help(localization.format("network.copyIPHelpFormat", defaultValue: "复制%@ IP", label))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -611,13 +608,14 @@ private struct SystemStatusKeyValueLine: View {
 
 private struct SystemStatusTopProcessesCard: View {
     let processes: [SystemStatusTopProcess]
+    let localization: PluginLocalization
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
 
             if processes.isEmpty {
-                Text("采集中…")
+                Text(localization.string("topProcesses.collecting", defaultValue: "采集中…"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -630,9 +628,9 @@ private struct SystemStatusTopProcessesCard: View {
                 .frame(maxHeight: .infinity, alignment: .center)
             }
         }
-        .padding(10)
+        .padding(SystemStatusComponentLayout.cardContentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(SystemStatusCardBackground(cornerRadius: 16))
+        .background(SystemStatusCardBackground(cornerRadius: SystemStatusComponentLayout.cardCornerRadius))
     }
 
     private var header: some View {
@@ -642,7 +640,7 @@ private struct SystemStatusTopProcessesCard: View {
                 .foregroundStyle(Color(nsColor: .systemPink))
                 .frame(width: 14, height: 14)
 
-            Text(SystemStatusMetricKind.topProcesses.title)
+            Text(SystemStatusMetricKind.topProcesses.title(localization: localization))
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

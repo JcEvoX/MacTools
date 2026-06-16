@@ -52,7 +52,7 @@ final class DisplayBrightnessControllerTests: XCTestCase {
         XCTAssertEqual(optimisticSnapshot.displays.first?.brightness, 0.8)
         XCTAssertEqual(optimisticSnapshot.displays.first?.isPendingWrite, true)
 
-        await waitUntil {
+        await waitUntil(timeout: 3) {
             controller.snapshot().displays.first?.isPendingWrite == false
         }
 
@@ -60,6 +60,35 @@ final class DisplayBrightnessControllerTests: XCTestCase {
         XCTAssertEqual(committedSnapshot.displays.first?.brightness, 0.8)
         XCTAssertEqual(backend.recordedWrites, [0.8])
         XCTAssertEqual(backend.readCount, 1)
+    }
+
+    func testSetBrightnessRefreshesTopologyBeforeFailingUnavailableDisplay() async {
+        let display = makeTestDisplay(id: 3, name: "LG UltraFine")
+        let provider = StubDisplayProvider(displays: [])
+        let backend = TestBrightnessBackend(kind: .ddc, display: display, brightness: 0.45)
+        let builder = StubBrightnessBackendBuilder { displays, _ in
+            displays.contains(where: { $0.id == display.id }) ? [display.id: backend] : [:]
+        }
+
+        let controller = DisplayBrightnessController(
+            displayProvider: provider,
+            backendBuilder: builder,
+            shortWriteDelay: 0.01,
+            minimumWriteInterval: 0
+        )
+        controller.refresh()
+
+        provider.displays = [display]
+        controller.setBrightness(0.7, for: display.id, phase: .ended)
+
+        await waitUntil {
+            backend.writeCount == 1
+        }
+
+        XCTAssertEqual(backend.recordedWrites, [0.7])
+        XCTAssertEqual(controller.snapshot().displays.map(\.id), [display.id])
+        XCTAssertNil(controller.snapshot().errorMessage)
+        XCTAssertEqual(builder.calls.map { $0.map(\.id) }, [[], [display.id]])
     }
 
     func testEndedPhaseReadsBackHardwareBrightnessAndUpdatesSnapshot() async {

@@ -86,4 +86,61 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
 
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
+
+    // MARK: - Swapped click behavior
+
+    private func mouseEvent(_ type: NSEvent.EventType, modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.mouseEvent(
+            with: type,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        )
+    }
+
+    func testSwappedLeftClickOpensFeaturePanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseDown), swapped: true),
+            .featurePanel
+        )
+    }
+
+    func testSwappedRightClickOpensComponentPanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.rightMouseDown), swapped: true),
+            .componentPanel
+        )
+    }
+
+    func testSwappedControlClickFollowsSecondaryAndOpensComponentPanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.control]), swapped: true),
+            .componentPanel
+        )
+    }
+
+    func testSwappedNilEventOpensFeaturePanel() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: nil, swapped: true),
+            .featurePanel
+        )
+    }
+
+    func testClickBehaviorPreferenceDefaultsToStandard() {
+        let suite = "MenuBarClickBehaviorPreferenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(MenuBarClickBehaviorPreference.current(defaults), .standard)
+        XCTAssertFalse(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+
+        defaults.set(MenuBarClickBehaviorPreference.swapped.rawValue, forKey: MenuBarClickBehaviorPreference.userDefaultsKey)
+        XCTAssertEqual(MenuBarClickBehaviorPreference.current(defaults), .swapped)
+        XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
+    }
 }

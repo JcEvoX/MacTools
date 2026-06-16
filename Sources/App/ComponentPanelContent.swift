@@ -15,12 +15,12 @@ enum ComponentPanelLayout {
     static let columns = metrics.columns
     static let cellWidth = metrics.cellWidth
     static let horizontalSpacing = metrics.horizontalSpacing
-    static let verticalSpacing = metrics.verticalSpacing
     static let originalCellHeight = metrics.originalCellHeight
     static let cellHeight = metrics.cellHeight
     static let spacing = horizontalSpacing
     static let horizontalPadding = MenuBarPanelLayout.outerPadding
     static let verticalPadding = MenuBarPanelLayout.outerPadding
+    static let verticalSpacing = horizontalPadding
     static let emptyContentHeight: CGFloat = 164
     static let maximumPanelHeight = MenuBarPanelLayout.maximumPanelHeight
     static let minimumPanelHeight = MenuBarPanelLayout.minimumPanelHeight
@@ -35,6 +35,10 @@ enum ComponentPanelLayout {
 
     static var contentVerticalPadding: CGFloat {
         verticalPadding * 2
+    }
+
+    static var scrollClipCornerRadius: CGFloat {
+        MenuBarPanelLayout.cornerRadius
     }
 
     static func itemWidth(for span: PluginComponentSpan) -> CGFloat {
@@ -217,10 +221,17 @@ struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     let panelHeight: CGFloat
     let isPanelVisible: Bool
+    let onPreferredHeightChange: () -> Void
     let onDismiss: () -> Void
 
     private var placements: [ComponentGridPlacement] {
         ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
+    }
+
+    private var componentLayoutSignature: String {
+        pluginHost.componentItems
+            .map { "\($0.id):\($0.span.width)x\($0.span.height)" }
+            .joined(separator: "|")
     }
 
     var body: some View {
@@ -241,16 +252,36 @@ struct ComponentPanelContent: View {
                     )
                 }
                 .background(ScrollViewScrollerVisibilityConfigurator())
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: ComponentPanelLayout.scrollClipCornerRadius,
+                        style: .continuous
+                    )
+                )
             }
         }
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
         .padding(.vertical, ComponentPanelLayout.verticalPadding)
         .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
+        .onAppear {
+            guard isPanelVisible else {
+                return
+            }
+
+            onPreferredHeightChange()
+        }
+        .onChange(of: componentLayoutSignature) {
+            guard isPanelVisible else {
+                return
+            }
+
+            onPreferredHeightChange()
+        }
     }
 
     private var emptyState: some View {
         PanelPluginEmptyState(
-            title: "暂无组件",
+            title: AppL10n.plugins("plugin.components.empty.title", defaultValue: "暂无组件"),
             systemImage: "square.grid.2x2",
             iconTint: .purple,
             onInstall: {

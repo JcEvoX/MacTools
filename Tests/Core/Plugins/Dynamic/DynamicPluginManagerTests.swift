@@ -46,7 +46,10 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .disabled)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.detailText,
-            "已移出界面，重启后彻底释放已加载代码。"
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterRemoval",
+                defaultValue: "已移出界面，重启后彻底释放已加载代码。"
+            )
         )
     }
 
@@ -94,7 +97,10 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.state, .restartRequired)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.detailText,
-            "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterUpdate",
+                defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            )
         )
     }
 
@@ -191,6 +197,72 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertEqual(manager.pluginManagementItems.first?.canInstall, true)
     }
 
+    func testInstalledCatalogItemsUseSummaryAsDetailText() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
+        let store = makeStore()
+        let installedRecord = try store.installPackage(from: sourceURL)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+        let snapshot = makeCatalogSnapshot(entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0")])
+
+        manager.rebuildManagementItems(catalogSnapshot: snapshot)
+
+        let item = try XCTUnwrap(manager.pluginManagementItems.first)
+        XCTAssertEqual(item.state, .enabled)
+        XCTAssertEqual(item.detailText, "示例插件")
+        XCTAssertNotEqual(item.detailText, installedRecord.packageURL.path)
+    }
+
+    func testInstalledItemDetailKeepsStatusSpecificMessages() {
+        let packageURL = URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin", isDirectory: true)
+        let enabledItem = makeManagementItem(state: .enabled, packageURL: packageURL)
+        let disabledItem = makeManagementItem(state: .disabled, packageURL: packageURL)
+        let restartingItem = makeManagementItem(
+            state: .enabled,
+            packageURL: packageURL,
+            requiresRestartToFullyUnload: true
+        )
+        let updatingItem = makeManagementItem(
+            state: .updateAvailable(installedVersion: "1.0.0", catalogVersion: "2.0.0"),
+            packageURL: packageURL
+        )
+
+        XCTAssertEqual(enabledItem.detailText, "示例插件")
+        XCTAssertEqual(disabledItem.detailText, "示例插件")
+        XCTAssertNotEqual(enabledItem.detailText, packageURL.path)
+        XCTAssertNotEqual(disabledItem.detailText, packageURL.path)
+        XCTAssertEqual(
+            restartingItem.detailText,
+            AppL10n.plugins(
+                "plugin.detail.restartRequiredAfterUpdate",
+                defaultValue: "新版本将在重启后启用，旧代码将在重启后彻底释放。"
+            )
+        )
+        XCTAssertEqual(
+            updatingItem.detailText,
+            AppL10n.pluginsFormat(
+                "plugin.detail.updateAvailableFormat",
+                defaultValue: "已安装 %@，可更新到 %@。",
+                "1.0.0",
+                "2.0.0"
+            )
+        )
+    }
+
+    func testManagementItemsCarryReleaseChannelFromManifestAndCatalog() throws {
+        let sourceURL = try makePackage(id: "com.example.demo", releaseChannel: "beta")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+        let snapshot = makeCatalogSnapshot(
+            entries: [makeCatalogEntry(id: "com.example.demo", version: "1.0.0", releaseChannel: "beta")]
+        )
+
+        manager.rebuildManagementItems(catalogSnapshot: snapshot)
+
+        XCTAssertEqual(manager.pluginManagementItems.first?.releaseChannel, "beta")
+        XCTAssertEqual(manager.installedReleaseChannelsByID()["com.example.demo"] ?? nil, "beta")
+    }
+
     func testCatalogEntryShowsUpdateWhenNewerThanInstalledVersion() throws {
         let sourceURL = try makePackage(id: "com.example.demo", version: "1.0.0")
         let store = makeStore()
@@ -244,7 +316,14 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertTrue(manager.installedCapabilitiesByID().isEmpty)
         XCTAssertEqual(
             manager.pluginManagementItems.first?.state,
-            .incompatible("插件 SDK 版本不兼容，已安装版本为 1，当前支持版本为 2。请更新插件。")
+            .incompatible(
+                AppL10n.pluginsFormat(
+                    "plugin.error.store.installedSDKIncompatibleFormat",
+                    defaultValue: "插件 SDK 版本不兼容，已安装版本为 %d，当前支持版本为 %d。请更新插件。",
+                    1,
+                    PluginPackageManifestLoader.supportedPluginKitVersion
+                )
+            )
         )
     }
 
@@ -261,7 +340,8 @@ final class DynamicPluginManagerTests: XCTestCase {
         version: String = "1.0.0",
         displayName: String = "Demo",
         bundleRelativePath: String = "Demo.bundle",
-        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion
+        pluginKitVersion: Int = PluginPackageManifestLoader.supportedPluginKitVersion,
+        releaseChannel: String? = nil
     ) throws -> URL {
         let packageURL = temporaryRoot
             .appendingPathComponent("Source", isDirectory: true)
@@ -277,7 +357,8 @@ final class DynamicPluginManagerTests: XCTestCase {
             version: version,
             minHostVersion: "0.1.0",
             pluginKitVersion: pluginKitVersion,
-            bundleRelativePath: bundleRelativePath
+            bundleRelativePath: bundleRelativePath,
+            releaseChannel: releaseChannel
         )
         let data = try JSONEncoder().encode(manifest)
         try data.write(to: packageURL.appendingPathComponent("plugin.json"))
@@ -285,7 +366,11 @@ final class DynamicPluginManagerTests: XCTestCase {
         return packageURL
     }
 
-    private func makeCatalogEntry(id: String, version: String) -> PluginCatalogEntry {
+    private func makeCatalogEntry(
+        id: String,
+        version: String,
+        releaseChannel: String? = nil
+    ) -> PluginCatalogEntry {
         PluginCatalogEntry(
             id: id,
             displayName: "Demo",
@@ -296,7 +381,25 @@ final class DynamicPluginManagerTests: XCTestCase {
                 url: URL(fileURLWithPath: "/tmp/Demo.mactoolsplugin"),
                 sha256: String(repeating: "a", count: 64),
                 size: 42
-            )
+            ),
+            releaseChannel: releaseChannel
+        )
+    }
+
+    private func makeManagementItem(
+        state: PluginManagementItem.State,
+        packageURL: URL,
+        requiresRestartToFullyUnload: Bool = false
+    ) -> PluginManagementItem {
+        PluginManagementItem(
+            id: "com.example.demo",
+            title: "Demo",
+            summary: "示例插件",
+            version: "1.0.0",
+            state: state,
+            packageURL: packageURL,
+            requiresRestartToFullyUnload: requiresRestartToFullyUnload,
+            releaseNotesURL: nil
         )
     }
 

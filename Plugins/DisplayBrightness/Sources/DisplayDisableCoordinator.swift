@@ -7,7 +7,7 @@ protocol DisplayDisableCoordinating: AnyObject {
 
     func refreshSnapshot()
     func disableBuiltInDisplay() async
-    func restoreBuiltInDisplay() async
+    func restoreBuiltInDisplay()
     func reconcileTopology() async
 }
 
@@ -15,15 +15,18 @@ protocol DisplayDisableCoordinating: AnyObject {
 final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     private let service: any DisplayDisableServicing
     private let store: any DisplayDisableStateStoring
+    private let verificationSettleDelay: Duration
 
     private(set) var snapshot: DisplayDisableSnapshot = .unsupported
 
     init(
         service: any DisplayDisableServicing,
-        store: any DisplayDisableStateStoring
+        store: any DisplayDisableStateStoring,
+        verificationSettleDelay: Duration = .milliseconds(800)
     ) {
         self.service = service
         self.store = store
+        self.verificationSettleDelay = verificationSettleDelay
         refreshSnapshot()
     }
 
@@ -34,6 +37,15 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         }
 
         let displays = service.listDisplays()
+        if store.snapshot != nil {
+            reconcileStoredSnapshot(displays: displays)
+            return
+        }
+
+        updateAvailableSnapshot(displays: displays)
+    }
+
+    private func updateAvailableSnapshot(displays: [DisplayDisableDisplay]) {
         guard displays.contains(where: \.isBuiltin) else {
             snapshot = DisplayDisableSnapshot(
                 status: .unavailable,
@@ -121,6 +133,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             return
         }
 
+        try? await Task.sleep(for: verificationSettleDelay)
         let verifiedDisplays = service.listDisplays()
         if disableSucceeded(targetID: builtIn.id, survivorIDs: Set(survivors.map(\.id)), displays: verifiedDisplays) {
             snapshot = DisplayDisableSnapshot(
@@ -143,7 +156,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         )
     }
 
-    func restoreBuiltInDisplay() async {
+    func restoreBuiltInDisplay() {
         guard let recoverySnapshot = store.snapshot else {
             refreshSnapshot()
             return
@@ -167,7 +180,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         do {
             try service.setDisplay(restoreTarget.id, enabled: true)
             store.snapshot = nil
-            refreshSnapshot()
+            updateAvailableSnapshot(displays: service.listDisplays())
         } catch {
             snapshot = DisplayDisableSnapshot(
                 status: .failed,
@@ -180,16 +193,19 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     }
 
     func reconcileTopology() async {
+        reconcileStoredSnapshot(displays: service.listDisplays())
+    }
+
+    private func reconcileStoredSnapshot(displays: [DisplayDisableDisplay]) {
         guard let recoverySnapshot = store.snapshot else {
-            refreshSnapshot()
+            updateAvailableSnapshot(displays: displays)
             return
         }
 
-        let displays = service.listDisplays()
         if let builtIn = restoreTarget(storedID: recoverySnapshot.builtInDisplayID, displays: displays),
            builtIn.isActive || builtIn.isVisibleToAppKit {
             store.snapshot = nil
-            refreshSnapshot()
+            updateAvailableSnapshot(displays: displays)
             return
         }
 
@@ -198,7 +214,7 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             survivorIDs.contains(display.id) && (display.isActive || display.isVisibleToAppKit)
         }
         if !survivorRemains {
-            await restoreBuiltInDisplay()
+            restoreBuiltInDisplay()
             return
         }
 

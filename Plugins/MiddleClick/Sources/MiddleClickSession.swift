@@ -111,7 +111,7 @@ final class MiddleClickSession: @unchecked Sendable {
             callback: tapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            logger.error("无法创建 CGEvent tap，请检查辅助功能授权")
+            logger.error("failed to create CGEvent tap; check Accessibility permission")
             return
         }
 
@@ -125,7 +125,7 @@ final class MiddleClickSession: @unchecked Sendable {
 
         self.eventTap = tap
         self.runLoopSrc = src
-        logger.info("CGEvent tap 已启动")
+        logger.info("CGEvent tap started")
     }
 
     private func stopEventTap() {
@@ -141,7 +141,7 @@ final class MiddleClickSession: @unchecked Sendable {
         }
         CFMachPortInvalidate(tap)
         eventTap = nil
-        logger.info("CGEvent tap 已停止")
+        logger.info("CGEvent tap stopped")
     }
 
     // MARK: - 多点触控监听
@@ -150,7 +150,7 @@ final class MiddleClickSession: @unchecked Sendable {
         guard devices.isEmpty else { return }
         devices = Self.createDeviceList()
         if devices.isEmpty {
-            logger.warning("未检测到多点触控设备，等待 IOKit 通知或唤醒重试")
+            logger.warning("no multitouch devices detected; waiting for IOKit notification or wake retry")
         }
         devices.forEach { $0.register(contactFrameCallback: touchCallback); $0.start(runMode: 0) }
     }
@@ -170,7 +170,7 @@ final class MiddleClickSession: @unchecked Sendable {
         observeSystemWake()
         observeMultitouchDeviceArrival()
         observeDisplayReconfiguration()
-        logger.info("已启动多点触控监听，设备数：\(self.devices.count)")
+        logger.info("multitouch listener started deviceCount=\(self.devices.count, privacy: .public)")
     }
 
     func stop() {
@@ -180,7 +180,7 @@ final class MiddleClickSession: @unchecked Sendable {
         removeSystemWakeObserver()
         stopEventTap()
         stopTouchListeners()
-        logger.info("已停止多点触控监听")
+        logger.info("multitouch listener stopped")
     }
 
     func activate() {
@@ -201,16 +201,16 @@ final class MiddleClickSession: @unchecked Sendable {
     /// 重启不稳定的监听器（CGEvent tap 与 MTDevice）。session 本身保留，
     /// 但所有底层监听重新创建，对应合盖唤醒、显示器重新配置、触控板重新枚举等场景。
     private func restartListeners() {
-        logger.info("重新建立多点触控与 CGEvent tap 监听")
+        logger.info("rebuilding multitouch and CGEvent tap listeners")
         stopEventTap()
         stopTouchListeners()
         startTouchListeners()
         startEventTap()
-        logger.info("监听重建完成，设备数：\(self.devices.count)")
+        logger.info("listener rebuild completed deviceCount=\(self.devices.count, privacy: .public)")
     }
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
-        logger.info("\(reason)，将在 \(delay) 秒后重启监听")
+        logger.info("scheduled listener restart reason=\(reason, privacy: .public) delay=\(delay, privacy: .public)")
         cancelPendingRestart()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -235,7 +235,7 @@ final class MiddleClickSession: @unchecked Sendable {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.scheduleRestart(after: Self.wakeRestartDelay, reason: "系统唤醒")
+            self?.scheduleRestart(after: Self.wakeRestartDelay, reason: "systemWake")
         }
     }
 
@@ -253,7 +253,7 @@ final class MiddleClickSession: @unchecked Sendable {
     private func observeMultitouchDeviceArrival() {
         guard ioNotificationPort == nil else { return }
         guard let port = IONotificationPortCreate(kIOMainPortDefault) else {
-            logger.error("无法创建 IONotificationPort，跳过设备到达监听")
+            logger.error("failed to create IONotificationPort; skipping device arrival observer")
             return
         }
 
@@ -273,7 +273,7 @@ final class MiddleClickSession: @unchecked Sendable {
                 guard let userData else { return }
                 let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
                 DispatchQueue.main.async {
-                    session.scheduleRestart(after: 2, reason: "多点触控设备已到达")
+                    session.scheduleRestart(after: 2, reason: "multitouchDeviceArrived")
                 }
             },
             userInfo,
@@ -281,7 +281,7 @@ final class MiddleClickSession: @unchecked Sendable {
         )
 
         guard result == KERN_SUCCESS else {
-            logger.error("IOServiceAddMatchingNotification 失败：\(result)")
+            logger.error("IOServiceAddMatchingNotification failed result=\(result, privacy: .public)")
             IONotificationPortDestroy(port)
             return
         }
@@ -320,7 +320,7 @@ final class MiddleClickSession: @unchecked Sendable {
         guard let userData else { return }
         let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
         DispatchQueue.main.async {
-            session.scheduleRestart(after: 2, reason: "显示器重新配置")
+            session.scheduleRestart(after: 2, reason: "displayReconfigured")
         }
     }
 
@@ -333,7 +333,7 @@ final class MiddleClickSession: @unchecked Sendable {
         if result == .success {
             displayCallbackRegistered = true
         } else {
-            logger.error("CGDisplayRegisterReconfigurationCallback 失败：\(result.rawValue)")
+            logger.error("CGDisplayRegisterReconfigurationCallback failed result=\(result.rawValue, privacy: .public)")
         }
     }
 

@@ -7,7 +7,7 @@
 - `Release`：在推送 `v*.*.*` 或 `v*.*.*-*` tag，或手动输入 tag 时运行。构建 Release 版本，使用 Developer ID 签名、公证、打包 DMG，创建或更新 GitHub Release，并提交最新 `docs/appcast.xml`。
 - `Homebrew Cask Update`：在 `Release` 成功完成后，或手动输入版本时运行。读取稳定版 Release 里的 `MacTools.dmg` 与 `MacTools.sha256`，通过 `brew bump-cask-pr` 向官方 `Homebrew/homebrew-cask` 提交 cask bump PR。
 - `Plugin Release`：在推送 `plugins-*` tag，或手动输入插件批次 tag 时运行。默认只构建和上传增量变化插件包，使用 Developer ID 签名插件 bundle，合并并提交签名后的 `docs/plugins/catalog.json`。
-- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它把 `main` 分支上的 `docs/` 发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
+- `Deploy Pages`：仅在 `Release` 或 `Plugin Release` 工作流成功完成后，或手动触发时运行。它先构建 `site/` 下的 Astro 官网，再合并 `docs/` 中的 appcast、插件 catalog、图标库等静态发布资源并发布到 GitHub Pages；普通 push / PR 不会触发这条流水线。
 
 ## 需要配置的 Secrets
 
@@ -257,7 +257,7 @@ changed: refine menu item icon names
 
 文件内容会被原样置顶到自动生成的 release notes 前。没有对应文件时，Release 工作流只使用自动生成内容。该文件也会同步进入 Sparkle 更新弹窗。
 
-稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时读取刚发布的 DMG URL 和 SHA-256，并通过 `brew bump-cask-pr mactools` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
+稳定版发布成功创建 GitHub Release 后，`Homebrew Cask Update` 工作流会在配置了 `HOMEBREW_GITHUB_API_TOKEN` 时确认 `MacTools.dmg` 存在、读取 `MacTools.sha256`，并通过 `brew bump-cask-pr mactools --version ... --sha256 ...` 向官方 `Homebrew/homebrew-cask` 打开版本更新 PR。不要传入 GitHub release asset 的展开下载 URL；官方 cask 应保留 `v#{version}` URL 模板，否则 Homebrew audit 会把它当成未版本化 URL。预发布版本不会成为默认稳定版；未配置该 secret 时可以手动运行 workflow 或手动提交 Homebrew PR。Homebrew PR 合并后，用户本地运行 `brew update` 后即可通过 `brew upgrade --cask --greedy mactools` 检测到新版本。
 
 仓库设置中需要允许 workflow 写入：`Settings` → `Actions` → `General` → `Workflow permissions` 选择 `Read and write permissions`。
 

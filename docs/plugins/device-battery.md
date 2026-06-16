@@ -5,10 +5,13 @@
 ## 数据来源
 
 - Mac 内置电池：`IOPowerSources`。
-- 蓝牙与 Apple 外设：`system_profiler SPBluetoothDataType -json`、`IOBluetoothDevice` 和相关 `IORegistry` 服务。
+- 蓝牙与 Apple 外设：`system_profiler SPBluetoothDataType -json`、`IOBluetoothDevice`、相关 `IORegistry` 服务，以及系统 BatteryCenter / bluetoothd 近期本地日志中的电源状态。
+- AirPods / Beats 分体状态：优先使用 `system_profiler` 中的盒、左耳、右耳电量；若系统日志或近场广播携带充电位，则用短时采样补齐“充电中”状态。
 - 雷柏 VT 系列鼠标：厂商 HID 接口，匹配 `VendorID = 0x24AE`、`PrimaryUsagePage = 0xFF00`、`PrimaryUsage = 0x0001`。
 
 雷柏鼠标电量来自本机 HID input report，不访问雷柏网页，也不请求网络。第一版只监听设备主动上报，不主动发送刷新命令。
+
+蓝牙日志补偿只查询最近的本机统一日志短窗口，并带有超时和目标过滤；AirPods / Beats 广播扫描只在系统已识别出 Apple/Beats 耳机目标时短时运行，不做常驻全量 BLE 扫描。所有数据均保留在本机。
 
 ## 雷柏 HID 维护依据
 

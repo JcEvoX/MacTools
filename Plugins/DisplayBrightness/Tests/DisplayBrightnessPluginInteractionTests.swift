@@ -178,7 +178,7 @@ final class DisplayBrightnessPluginInteractionTests: XCTestCase {
         }
     }
 
-    func testRestoreActionForwardsToCoordinator() async {
+    func testRestoreActionForwardsToCoordinatorSynchronously() {
         let displayDisable = MockDisplayDisableCoordinator()
         let plugin = DisplayBrightnessPlugin(
             controller: MockDisplayBrightnessController(),
@@ -187,9 +187,7 @@ final class DisplayBrightnessPluginInteractionTests: XCTestCase {
 
         plugin.handleAction(.invokeAction(controlID: "built-in-display-restore"))
 
-        await waitUntil {
-            displayDisable.restoreCallCount == 1
-        }
+        XCTAssertEqual(displayDisable.restoreCallCount, 1)
     }
 
     func testRefreshRefreshesDisplayDisableSnapshot() {
@@ -218,7 +216,7 @@ final class DisplayBrightnessPluginInteractionTests: XCTestCase {
         }
     }
 
-    func testDeactivateRestoresBuiltInDisplay() async {
+    func testDeactivateRestoresBuiltInDisplayForCleanupReason() {
         let displayDisable = MockDisplayDisableCoordinator()
         let plugin = DisplayBrightnessPlugin(
             controller: MockDisplayBrightnessController(),
@@ -227,8 +225,104 @@ final class DisplayBrightnessPluginInteractionTests: XCTestCase {
 
         plugin.deactivate(reason: .hostShutdown)
 
-        await waitUntil {
-            displayDisable.restoreCallCount == 1
-        }
+        XCTAssertEqual(displayDisable.restoreCallCount, 1)
+    }
+
+    func testDeactivateDoesNotRestoreBuiltInDisplayDuringUpdate() {
+        let displayDisable = MockDisplayDisableCoordinator()
+        let plugin = DisplayBrightnessPlugin(
+            controller: MockDisplayBrightnessController(),
+            displayDisableCoordinator: displayDisable
+        )
+
+        plugin.deactivate(reason: .updating)
+
+        XCTAssertEqual(displayDisable.restoreCallCount, 0)
+    }
+
+    func testShortcutPressAdjustsBrightnessByOnePercentInitially() {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [
+                makeBrightnessDisplay(
+                    id: 2,
+                    name: "Built-in Display",
+                    brightness: 0.6,
+                    vendorNumber: 1552,
+                    modelNumber: 1,
+                    serialNumber: 22
+                )
+            ],
+            errorMessage: nil
+        )
+        let plugin = DisplayBrightnessPlugin(controller: controller)
+        let displayKey = DisplayBrightnessPlugin.shortcutDisplayKey(
+            for: controller.snapshotValue.displays[0].display
+        )
+
+        plugin.handleShortcutEvent(
+            id: DisplayBrightnessPlugin.shortcutActionID(
+                displayKey: displayKey,
+                direction: .increase
+            ),
+            phase: .pressed
+        )
+
+        XCTAssertEqual(
+            controller.setBrightnessCalls.first,
+            .init(value: 0.61, displayID: 2, phase: .changed)
+        )
+    }
+
+    func testRepeatedShortcutPressAcceleratesWhenTappedQuickly() {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [
+                makeBrightnessDisplay(id: 2, name: "Built-in Display", brightness: 0.6)
+            ],
+            errorMessage: nil
+        )
+        let plugin = DisplayBrightnessPlugin(controller: controller)
+        let displayKey = DisplayBrightnessPlugin.shortcutDisplayKey(
+            for: controller.snapshotValue.displays[0].display
+        )
+        let actionID = DisplayBrightnessPlugin.shortcutActionID(
+            displayKey: displayKey,
+            direction: .increase
+        )
+
+        plugin.handleShortcutEvent(id: actionID, phase: .pressed)
+        plugin.handleShortcutEvent(id: actionID, phase: .released)
+        plugin.handleShortcutEvent(id: actionID, phase: .pressed)
+        plugin.handleShortcutEvent(id: actionID, phase: .released)
+
+        XCTAssertEqual(controller.setBrightnessCalls[0].value, 0.61, accuracy: 0.0001)
+        XCTAssertEqual(controller.setBrightnessCalls[2].value, 0.63, accuracy: 0.0001)
+    }
+
+    func testShortcutReleaseCommitsCurrentBrightness() {
+        let controller = MockDisplayBrightnessController()
+        controller.snapshotValue = DisplayBrightnessSnapshot(
+            displays: [
+                makeBrightnessDisplay(id: 2, name: "Built-in Display", brightness: 0.6)
+            ],
+            errorMessage: nil
+        )
+        let plugin = DisplayBrightnessPlugin(controller: controller)
+        let displayKey = DisplayBrightnessPlugin.shortcutDisplayKey(
+            for: controller.snapshotValue.displays[0].display
+        )
+        let actionID = DisplayBrightnessPlugin.shortcutActionID(
+            displayKey: displayKey,
+            direction: .decrease
+        )
+
+        plugin.handleShortcutEvent(id: actionID, phase: .pressed)
+        plugin.handleShortcutEvent(id: actionID, phase: .released)
+
+        XCTAssertEqual(
+            controller.setBrightnessCalls.last,
+            .init(value: 0.59, displayID: 2, phase: .ended)
+        )
     }
 }

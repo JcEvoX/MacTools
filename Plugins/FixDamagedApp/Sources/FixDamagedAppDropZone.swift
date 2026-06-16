@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import MacToolsPluginKit
 
 // MARK: - View Model
 
@@ -19,13 +20,16 @@ final class DropZoneViewModel: ObservableObject {
     /// drop 已被接受但 URL 异步加载还未完成时为 true，防止 dismissIfIdle 提前关闭
     private var isDropPending = false
 
+    private let localization: PluginLocalization
     private let onComplete: (String, Bool, String?) -> Void
     private let onDismiss: () -> Void
 
     init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
         onComplete: @escaping (String, Bool, String?) -> Void,
         onDismiss: @escaping () -> Void
     ) {
+        self.localization = localization
         self.onComplete = onComplete
         self.onDismiss = onDismiss
     }
@@ -46,8 +50,9 @@ final class DropZoneViewModel: ObservableObject {
         phase = .running
         Task {
             do {
+                let localization = localization
                 try await Task.detached(priority: .userInitiated) {
-                    try runQuarantineRemoval(appPath: appPath)
+                    try runQuarantineRemoval(appPath: appPath, localization: localization)
                 }.value
                 phase = .success(appName: appName)
                 onComplete(appName, true, nil)
@@ -75,6 +80,7 @@ final class DropZoneViewModel: ObservableObject {
 
 struct FixDropZoneView: View {
     @ObservedObject var viewModel: DropZoneViewModel
+    let localization: PluginLocalization
     @State private var isTargeted = false
 
     var body: some View {
@@ -107,7 +113,7 @@ struct FixDropZoneView: View {
                     .scaleEffect(isTargeted ? 1.15 : 1.0)
                     .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isTargeted)
 
-                Text("将 .app 文件拖到此处以修复")
+                Text(localization.string("dropZone.waiting", defaultValue: "将 .app 文件拖到此处以修复"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -118,7 +124,7 @@ struct FixDropZoneView: View {
                 ProgressView()
                     .scaleEffect(1.2)
 
-                Text("修复中…")
+                Text(localization.string("dropZone.running", defaultValue: "修复中…"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -129,7 +135,7 @@ struct FixDropZoneView: View {
                     .font(.system(size: 34))
                     .foregroundStyle(.green)
 
-                Text("已修复：\(name)")
+                Text(localization.format("dropZone.successFormat", defaultValue: "已修复：%@", name))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
@@ -148,7 +154,7 @@ struct FixDropZoneView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
 
-                Button("关闭") {
+                Button(localization.string("dropZone.close", defaultValue: "关闭")) {
                     viewModel.dismiss()
                 }
                 .buttonStyle(.bordered)
@@ -185,9 +191,14 @@ struct FixDropZoneView: View {
 final class FixDamagedAppDropZonePanel: NSPanel {
 
     private let viewModel: DropZoneViewModel
+    private let localization: PluginLocalization
 
-    init(viewModel: DropZoneViewModel) {
+    init(
+        viewModel: DropZoneViewModel,
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.viewModel = viewModel
+        self.localization = localization
         let size = NSSize(width: 280, height: 160)
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -211,7 +222,10 @@ final class FixDamagedAppDropZonePanel: NSPanel {
         effectView.maskImage = Self.makeRoundedMaskImage(size: size, cornerRadius: 20)
 
         // SwiftUI 层只负责边框和内容，背景透明叠在 effectView 上方。
-        let hostingView = NSHostingView(rootView: FixDropZoneView(viewModel: viewModel))
+        let hostingView = NSHostingView(rootView: FixDropZoneView(
+            viewModel: viewModel,
+            localization: localization
+        ))
         hostingView.frame = effectView.bounds
         hostingView.autoresizingMask = [.width, .height]
         effectView.addSubview(hostingView)

@@ -1,0 +1,74 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "NSAppleEventsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MacTools needs to control Calendar when you click a date so it can open that day in the system Calendar app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击日历日期时需要控制系统日历应用并定位到对应日期。"
+          }
+        }
+      }
+    },
+    "NSBluetoothAlwaysUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MacTools reads Bluetooth accessory battery levels to show mouse, keyboard, and headset status in the device battery component."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取蓝牙外设电量，用于在设备电量组件中显示鼠标、键盘和耳机状态。"
+          }
+        }
+      }
+    },
+    "NSCalendarsFullAccessUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MacTools reads calendar events to show your schedule in the calendar component."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取系统日历事件，用于在右键日历组件中显示当天日程。"
+          }
+        }
+      }
+    },
+    "NSCalendarsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MacTools reads calendar events to show your schedule in the calendar component."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取系统日历事件，用于在右键日历组件中显示当天日程。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -2,7 +2,17 @@
   "id": "display-true-color",
   "displayName": "原彩显示",
   "summary": "自动调节显示器颜色以适应环境光",
-  "version": "1.0.4",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "原彩显示",
+      "summary": "自动调节显示器颜色以适应环境光"
+    },
+    "en": {
+      "displayName": "True Tone",
+      "summary": "Automatically adjust display colors to match ambient light."
+    }
+  },
+  "version": "1.0.5",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayTrueColor.bundle",
