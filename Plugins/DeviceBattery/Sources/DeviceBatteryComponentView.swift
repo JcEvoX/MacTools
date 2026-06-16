@@ -40,7 +40,6 @@ struct DeviceBatteryComponentView: View {
                 )
             }
         }
-        .onDisappear { viewModel.stop() }
     }
 
     private var visibleItems: [DeviceBatteryItem] {

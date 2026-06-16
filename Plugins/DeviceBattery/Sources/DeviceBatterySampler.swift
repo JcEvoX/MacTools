@@ -31,38 +31,51 @@ struct DeviceBatterySampler: DeviceBatterySampling {
                 referenceDate: referenceDate,
                 localization: localization
             ))
-            items.append(contentsOf: Self.collectBluetoothPowerLogDevices(
-                from: bluetoothData,
-                existingItems: items,
-                referenceDate: referenceDate,
-                localization: localization
-            ))
-            items.append(contentsOf: Self.collectBatteryCenterLogDevices(
-                from: bluetoothData,
-                referenceDate: referenceDate
-            ))
             items.append(contentsOf: Self.collectMagicAccessoryDevices(
                 from: bluetoothData,
                 referenceDate: referenceDate,
                 localization: localization
             ))
+            let targets = Self.bluetoothBatteryTargets(from: bluetoothData)
             return DeviceBatteryBaseSample(
                 items: Self.deduplicated(items),
-                bluetoothBatteryTargets: Self.bluetoothBatteryTargets(from: bluetoothData)
+                bluetoothBatteryTargets: targets,
+                shouldReadBatteryCenterLog: !targets.isEmpty
+                    || !bluetoothData.connectedDevices.isEmpty
+                    || !bluetoothData.batteryDevices.isEmpty
             )
         }.value
 
-        let appleHeadphoneAdvertisementItems = await DeviceBatteryAppleHeadphoneAdvertisementReader.collectBatteryDevices(
+        async let bluetoothPowerLogItems = Task.detached(priority: .utility) {
+            Self.collectBluetoothPowerLogDevices(
+                targets: baseSample.bluetoothBatteryTargets,
+                existingItems: baseSample.items,
+                referenceDate: referenceDate,
+                localization: localization
+            )
+        }.value
+        async let batteryCenterLogItems = Task.detached(priority: .utility) {
+            Self.collectBatteryCenterLogDevices(
+                shouldReadLog: baseSample.shouldReadBatteryCenterLog,
+                targets: baseSample.bluetoothBatteryTargets,
+                referenceDate: referenceDate
+            )
+        }.value
+        async let appleHeadphoneAdvertisementItems = DeviceBatteryAppleHeadphoneAdvertisementReader.collectBatteryDevices(
             targets: baseSample.bluetoothBatteryTargets,
             referenceDate: referenceDate,
             localization: localization
         )
-        let bluetoothBatteryItems = await DeviceBatteryBLEBatteryReader.collectBatteryDevices(
+        async let bluetoothBatteryItems = DeviceBatteryBLEBatteryReader.collectBatteryDevices(
             targets: baseSample.bluetoothBatteryTargets,
             referenceDate: referenceDate,
             localization: localization
         )
-        return Self.deduplicated(baseSample.items + appleHeadphoneAdvertisementItems + bluetoothBatteryItems)
+        let powerLogItems = await bluetoothPowerLogItems
+        let batteryLogItems = await batteryCenterLogItems
+        let advertisementItems = await appleHeadphoneAdvertisementItems
+        let bleItems = await bluetoothBatteryItems
+        return Self.deduplicated(baseSample.items + powerLogItems + batteryLogItems + advertisementItems + bleItems)
     }
 
     private static func collectInternalBattery(
@@ -320,12 +333,12 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func collectBluetoothPowerLogDevices(
-        from profile: BluetoothProfile,
+        targets allTargets: [BluetoothBatteryTarget],
         existingItems: [DeviceBatteryItem],
         referenceDate: Date,
         localization: PluginLocalization
     ) -> [DeviceBatteryItem] {
-        let targets = bluetoothBatteryTargets(from: profile).filter { target in
+        let targets = allTargets.filter { target in
             needsBluetoothPowerLogFallback(target: target, existingItems: existingItems)
         }
         guard !targets.isEmpty else {
@@ -408,11 +421,11 @@ struct DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func collectBatteryCenterLogDevices(
-        from profile: BluetoothProfile,
+        shouldReadLog: Bool,
+        targets: [BluetoothBatteryTarget],
         referenceDate: Date
     ) -> [DeviceBatteryItem] {
-        let targets = bluetoothBatteryTargets(from: profile)
-        guard !targets.isEmpty || !profile.connectedDevices.isEmpty || !profile.batteryDevices.isEmpty else {
+        guard shouldReadLog else {
             return []
         }
 
@@ -1584,6 +1597,7 @@ private struct BluetoothProfileDevice {
 private struct DeviceBatteryBaseSample: Sendable {
     let items: [DeviceBatteryItem]
     let bluetoothBatteryTargets: [BluetoothBatteryTarget]
+    let shouldReadBatteryCenterLog: Bool
 }
 
 fileprivate struct BluetoothBatteryTarget: Sendable {
