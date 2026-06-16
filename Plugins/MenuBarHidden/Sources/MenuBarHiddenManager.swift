@@ -25,6 +25,19 @@ final class MenuBarHiddenManager: ObservableObject {
         hasAccessibility: false,
         hasScreenRecording: false
     )
+    /// Fail-closed host compatibility gate. On macOS 27 beta the menu bar was
+    /// composited into a single WindowServer window and the CGS per-item
+    /// window list comes back empty (a future seed might instead return
+    /// implausibly shaped data — `MenuBarHiddenHostProbe` rejects both) —
+    /// every mechanism of this plugin (10000pt
+    /// expanding divider, item enumeration, synthesised drags/clicks) then
+    /// either silently spins or risks swallowing menu bar clicks. Probed at
+    /// first activation; determinate verdicts are cached for the manager's
+    /// lifetime, while indeterminate ones (no active displays, transient
+    /// CGWindow lookup failure) stay fail-closed but re-probe on a later
+    /// activation. When unsupported the plugin installs nothing and surfaces
+    /// an explicit incompatibility message instead.
+    @Published private(set) var isHostMenuBarSupported = true
 
     let iconCache: MenuBarHiddenIconCache
 
@@ -35,6 +48,8 @@ final class MenuBarHiddenManager: ObservableObject {
     private let events: MenuBarHiddenEventSynthesis
     private let localization: PluginLocalization
     private let permissionProvider: () -> MenuBarHiddenPermissionsStatus
+    private let hostSupportProbe: () -> MenuBarHiddenHostProbe.Outcome
+    private var hasProbedHostSupport = false
 
     private struct PendingClickRequest {
         let item: MenuBarItem
@@ -75,9 +90,13 @@ final class MenuBarHiddenManager: ObservableObject {
                 hasAccessibility: AXIsProcessTrusted(),
                 hasScreenRecording: MenuBarHiddenScreenRecordingPermission.isGranted()
             )
+        },
+        hostSupportProbe: @escaping () -> MenuBarHiddenHostProbe.Outcome = {
+            MenuBarHiddenHostProbe.hostMenuBarSupport()
         }
     ) {
         self.store = store
+        self.hostSupportProbe = hostSupportProbe
         self.divider = MenuBarHiddenDivider(kind: .hidden)
         self.alwaysHiddenDivider = MenuBarHiddenDivider(kind: .alwaysHidden)
         self.enumerator = MenuBarHiddenItemEnumerator()
@@ -117,6 +136,14 @@ final class MenuBarHiddenManager: ObservableObject {
 
     func activate() {
         guard !isActive else { return }
+        probeHostSupportIfNeeded()
+        guard isHostMenuBarSupported else {
+            // Fail closed: never install the dividers (no 10000pt expansion),
+            // never enumerate, never synthesise events. `isActive` stays
+            // false so every refresh/drag/recovery entry point is inert.
+            refreshPermissions()
+            return
+        }
         isActive = true
         refreshPermissions()
         if store.isEnabled {
@@ -129,6 +156,31 @@ final class MenuBarHiddenManager: ObservableObject {
         recoverControlItemOrderIfNeeded(sessionID: nil)
         scheduleStoredLayoutRestoreIfNeeded(delay: .milliseconds(700))
         scheduleAlwaysHiddenItemsRestoreIfNeeded(delay: .milliseconds(600))
+    }
+
+    private func probeHostSupportIfNeeded() {
+        guard !hasProbedHostSupport else { return }
+        switch hostSupportProbe() {
+        case .supported:
+            hasProbedHostSupport = true
+            isHostMenuBarSupported = true
+        case .unsupported:
+            hasProbedHostSupport = true
+            isHostMenuBarSupported = false
+            // The probe logs the specific rejection reason (empty vs
+            // implausibly shaped enumeration) before returning.
+            MenuBarHiddenLog.plugin.error(
+                "Menu bar host support probe failed; entering fail-closed unsupported mode (incompatible menu bar host)"
+            )
+        case .indeterminate:
+            // No positive evidence either way: stay fail-closed for this
+            // activation, but leave the verdict uncached so a later
+            // activate() re-probes once the environment recovers.
+            isHostMenuBarSupported = false
+            MenuBarHiddenLog.plugin.error(
+                "Menu bar host support probe was indeterminate; staying fail-closed until a later activation re-probes"
+            )
+        }
     }
 
     func deactivate() {
@@ -161,6 +213,7 @@ final class MenuBarHiddenManager: ObservableObject {
     var isEnabled: Bool {
         get { store.isEnabled }
         set {
+            guard isHostMenuBarSupported else { return }
             guard store.isEnabled != newValue else { return }
             hiddenRestoreTask?.cancel()
             hiddenRestoreTask = nil
@@ -182,6 +235,7 @@ final class MenuBarHiddenManager: ObservableObject {
     var isAlwaysHiddenEnabled: Bool {
         get { store.isAlwaysHiddenEnabled }
         set {
+            guard isHostMenuBarSupported else { return }
             guard store.isAlwaysHiddenEnabled != newValue else { return }
             alwaysHiddenRestoreTask?.cancel()
             alwaysHiddenRestoreTask = nil
@@ -259,6 +313,7 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     func setDraggingMenuBarItem(_ dragging: Bool, startLocation: NSPoint?) {
+        guard isActive else { return }
         guard isDraggingMenuBarItem != dragging else { return }
         isDraggingMenuBarItem = dragging
 
@@ -300,6 +355,7 @@ final class MenuBarHiddenManager: ObservableObject {
         to section: MenuBarHiddenSection,
         placement: MenuBarHiddenMovePlacement
     ) {
+        guard isActive else { return }
         guard permissions.canManageItems else {
             MenuBarHiddenLog.plugin.debug("moveItem ignored — missing permissions")
             return
@@ -331,6 +387,7 @@ final class MenuBarHiddenManager: ObservableObject {
     // MARK: - Click forwarding (Function 3, requires both permissions)
 
     func clickItem(_ item: MenuBarItem, button: CGMouseButton) {
+        guard isActive else { return }
         guard permissions.canManageItems else { return }
         pendingClickRequests.append(PendingClickRequest(item: item, button: button))
         startClickProcessingIfNeeded()
@@ -421,6 +478,17 @@ final class MenuBarHiddenManager: ObservableObject {
     }
 
     private func rebuildSnapshot() {
+        guard isHostMenuBarSupported else {
+            // No CGS churn in unsupported mode; the empty snapshot is the
+            // explicit "nothing works here" state the UI layers key off.
+            snapshot = MenuBarHiddenSnapshot(
+                visibleItems: [],
+                hiddenItems: [],
+                alwaysHiddenItems: [],
+                permissions: permissions
+            )
+            return
+        }
         divider.refreshWindowID()
         alwaysHiddenDivider.refreshWindowID()
         let result = enumerator.enumerate(

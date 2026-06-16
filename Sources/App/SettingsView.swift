@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import MacToolsPluginKit
 
@@ -207,6 +208,23 @@ private struct MenuBarClickBehaviorSettingsRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+
+                // macOS 27 routes right-clicks nowhere high-level on its
+                // rehosted menu bar; a listen-only event tap revives them by
+                // reading the icon's live frame on each click (verified working
+                // on device). The tap needs Accessibility permission, so the
+                // notice points users at that and offers Option+left as the
+                // no-permission alternative. On macOS ≤26 right-click never
+                // broke, so nothing shows.
+                if #available(macOS 27.0, *) {
+                    Text(AppL10n.settings(
+                        "menuBarClick.betaRightClickNotice",
+                        defaultValue: "在 macOS 27 上，右键菜单栏图标需开启「辅助功能」权限才生效；也可用 Option+左键打开次级面板。"
+                    ))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

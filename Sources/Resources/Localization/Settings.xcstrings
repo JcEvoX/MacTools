@@ -855,6 +855,23 @@
         }
       }
     },
+    "menuBarClick.betaRightClickNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On macOS 27, right-clicking the menu bar icon needs Accessibility permission to work; Option-click also opens the secondary panel."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 macOS 27 上，右键菜单栏图标需开启「辅助功能」权限才生效；也可用 Option+左键打开次级面板。"
+          }
+        }
+      }
+    },
     "menuBarClick.description": {
       "extractionState": "manual",
       "localizations": {
