@@ -9,6 +9,8 @@ typedef CGError (*MTConfigureDisplayEnabledFn)(
 );
 
 static MTConfigureDisplayEnabledFn MTResolveConfigureDisplayEnabled(void) {
+    // The Swift caller is @MainActor-isolated, so this lazy cache is only
+    // touched from one thread. Concurrent calls would race on these statics.
     static MTConfigureDisplayEnabledFn cachedFunction = NULL;
     static bool didResolve = false;
 

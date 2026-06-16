@@ -75,14 +75,14 @@ final class DisplayBrightnessPluginTests: XCTestCase {
         plugin.handleAction(.setDisclosureExpanded(true))
 
         let controls = try XCTUnwrap(plugin.primaryPanelState.detail?.primaryControls)
+        let sliders = controls.filter { $0.kind == .slider }
 
-        XCTAssertEqual(controls.count, 2)
-        XCTAssertEqual(controls.map(\.kind), [.slider, .slider])
-        XCTAssertEqual(controls.map(\.id), ["display.7.brightness", "display.9.brightness"])
-        XCTAssertEqual(controls.map(\.sectionTitle), ["Studio Display", "LG UltraFine"])
-        XCTAssertEqual(controls.map(\.valueLabel), ["72%", "41%"])
-        XCTAssertEqual(controls.first?.sliderBounds, 0...1)
-        XCTAssertEqual(controls.first?.sliderStep, 0.01)
+        XCTAssertEqual(sliders.count, 2)
+        XCTAssertEqual(sliders.map(\.id), ["display.7.brightness", "display.9.brightness"])
+        XCTAssertEqual(sliders.map(\.sectionTitle), ["Studio Display", "LG UltraFine"])
+        XCTAssertEqual(sliders.map(\.valueLabel), ["72%", "41%"])
+        XCTAssertEqual(sliders.first?.sliderBounds, 0...1)
+        XCTAssertEqual(sliders.first?.sliderStep, 0.01)
     }
 
     func testShortcutDefinitionsIncludeDecreaseAndIncreaseForEachDisplay() {

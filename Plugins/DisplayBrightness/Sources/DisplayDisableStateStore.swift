@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 @MainActor
 final class UserDefaultsDisplayDisableStateStore: DisplayDisableStateStoring {
@@ -6,6 +7,10 @@ final class UserDefaultsDisplayDisableStateStore: DisplayDisableStateStoring {
         static let key = "DisplayBrightness.DisplayDisableRecoverySnapshot"
     }
 
+    private let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
+        category: "DisplayDisableStateStore"
+    )
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -26,8 +31,11 @@ final class UserDefaultsDisplayDisableStateStore: DisplayDisableStateStoring {
                 return
             }
 
-            if let data = try? JSONEncoder().encode(newValue) {
+            do {
+                let data = try JSONEncoder().encode(newValue)
                 userDefaults.set(data, forKey: Constants.key)
+            } catch {
+                logger.error("failed to encode display disable recovery snapshot: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

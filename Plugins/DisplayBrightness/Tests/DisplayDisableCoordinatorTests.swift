@@ -1,4 +1,5 @@
 import XCTest
+@testable import MacTools
 @testable import DisplayBrightnessPlugin
 
 @MainActor
@@ -156,6 +157,43 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
         ])
         XCTAssertEqual(coordinator.snapshot.status, .failed)
         XCTAssertEqual(coordinator.snapshot.message, "关闭内建显示屏失败，已尝试恢复")
+    }
+
+    func testDisableCancellationStopsBeforeVerificationAndRollback() async {
+        let builtIn = DisplayDisableDisplay(
+            id: 1,
+            name: "内建显示屏",
+            isBuiltin: true,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let external = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [builtIn, external])
+        service.displaysAfterDisable = [builtIn, external]
+        let store = InMemoryDisplayDisableStateStore()
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .seconds(5)
+        )
+
+        let task = Task { @MainActor in
+            await coordinator.disableBuiltInDisplay()
+        }
+        await Task.yield()
+        task.cancel()
+        await task.value
+
+        XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: false)])
+        XCTAssertEqual(store.snapshot?.builtInDisplayID, 1)
     }
 
     func testRestoreUsesOnlineBuiltInDisplayWhenStoredIDChanged() {

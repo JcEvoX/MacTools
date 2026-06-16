@@ -133,7 +133,16 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             return
         }
 
-        try? await Task.sleep(for: verificationSettleDelay)
+        do {
+            try await Task.sleep(for: verificationSettleDelay)
+        } catch {
+            return
+        }
+
+        guard !Task.isCancelled else {
+            return
+        }
+
         let verifiedDisplays = service.listDisplays()
         if disableSucceeded(targetID: builtIn.id, survivorIDs: Set(survivors.map(\.id)), displays: verifiedDisplays) {
             snapshot = DisplayDisableSnapshot(
@@ -143,6 +152,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 externalDisplayCount: survivors.count,
                 message: nil
             )
+            return
+        }
+
+        guard !Task.isCancelled else {
             return
         }
 

@@ -12,6 +12,7 @@ private func MTConfigureDisplayEnabled(
 @_silgen_name("MTDisplayEnableSPIAvailable")
 private func MTDisplayEnableSPIAvailable() -> Bool
 
+@MainActor
 protocol DisplayDisableServicing: AnyObject {
     var isSupported: Bool { get }
 
@@ -44,6 +45,7 @@ enum DisplayDisableServiceError: Error, LocalizedError {
     }
 }
 
+@MainActor
 final class SystemDisplayDisableService: DisplayDisableServicing {
     var isSupported: Bool {
         MTDisplayEnableSPIAvailable()
