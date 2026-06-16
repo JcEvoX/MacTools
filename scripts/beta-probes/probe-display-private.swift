@@ -100,11 +100,15 @@ func probeManagedDisplaySpacesSchema() {
     var spaceTypes: Set<Int> = []
 
     func checkSpace(_ space: [String: Any], label: String) {
-        if (space["uuid"] as? String) == nil { missingKeys.insert("\(label).uuid") }
-        if let type = (space["type"] as? NSNumber)?.intValue {
-            spaceTypes.insert(type)
-        } else {
+        guard let type = (space["type"] as? NSNumber)?.intValue else {
             missingKeys.insert("\(label).type")
+            return
+        }
+        spaceTypes.insert(type)
+        // HideNotchManagedDisplaySpaceResolver only consults `uuid` for type-0
+        // (desktop) spaces, so a missing/empty uuid is only a concern there.
+        if type == 0, (space["uuid"] as? String)?.isEmpty != false {
+            missingKeys.insert("\(label).uuid")
         }
     }
 
@@ -156,15 +160,18 @@ func probeCoreDisplayInfoDictionary() {
         return
     }
 
-    // "IODisplayLocation" (kIODisplayLocationKey) is what DisplayBrightnessDDC
-    // uses to match DCPAVServiceProxy candidates to CGDirectDisplayIDs.
+    // "IODisplayLocation" (kIODisplayLocationKey) is the PREFERRED key
+    // DisplayBrightnessDDC uses to match DCPAVServiceProxy candidates to
+    // CGDirectDisplayIDs; when it is absent the DDC backend falls back to a
+    // framebuffer service lookup via displayLocation(), so a miss degrades
+    // matching rather than breaking it.
     if let location = info["IODisplayLocation"] as? String {
         report(.ok, name, "main display \(mainDisplay): \(info.count) keys, IODisplayLocation=\(location)")
     } else {
         report(
-            .broken,
+            .degraded,
             name,
-            "main display \(mainDisplay): \(info.count) keys but IODisplayLocation missing — DDC display matching loses its primary key"
+            "main display \(mainDisplay): \(info.count) keys but IODisplayLocation missing — DDC matching falls back to the framebuffer service lookup"
         )
     }
 }

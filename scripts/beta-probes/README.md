@@ -25,7 +25,7 @@ swift scripts/beta-probes/probe-gamma.swift
 | `degraded` | 已知回归仍在，但 App 已绕过/有兜底 —— 持续观察，无需立即行动 |
 | `broken` | App **当前代码路径**依赖的面坏了 —— 需要行动，run-all 非零退出 |
 | `inconclusive` | 环境不足以定论（离线、设备空闲、超时等），按详情提示重跑 |
-| `skip` | 本机硬件/环境不适用（无外接屏、无刘海、非 Apple silicon 等） |
+| `skip` | 本机硬件/环境不适用（无外接屏、无刘海、非 Apple Silicon 等） |
 
 ## 安全红线（全部探针严格遵守）
 
@@ -58,7 +58,7 @@ swift scripts/beta-probes/probe-gamma.swift
 
 ## 环境假设
 
-- DDC 探针只在 **Apple silicon** 上有意义（非 arm64 自动 skip）。SMC 探针两种架构都跑：
+- DDC 探针只在 **Apple Silicon** 上有意义（非 arm64 自动 skip）。SMC 探针两种架构都跑：
   Intel 上 CH0B/BCLM 在、CHIE 缺属预期，输出按架构标注哪组键缺失是正常的。
 - `ddc-endtoend-readonly` 需要外接显示器在线，否则 skip。
 - `catalog-ed25519-canonicalization` 需要网络；公钥实时读取自
