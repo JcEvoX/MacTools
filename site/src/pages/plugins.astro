@@ -22,11 +22,58 @@ const categoryFilters = [...categories.entries()].map(([key, count]) => ({
   count,
   label: categoryLabel(key === "other" ? null : key),
 }));
+
+const pageTitle = "MacTools 插件目录 | macOS 菜单栏工具 Plugin Catalog";
+const pageDescription = "浏览 MacTools 在线插件目录，查看显示器、菜单栏、清理、系统状态、电池、风扇、启动台和开发者工具等 macOS 菜单栏插件。";
+const pluginKeywords = [
+  "MacTools plugins",
+  "macOS plugin catalog",
+  "macOS menu bar plugin",
+  "Mac menu bar utilities",
+  "Display Brightness plugin",
+  "Display Resolution plugin",
+  "Menu Bar Hidden plugin",
+  "Disk Cleanup plugin",
+  "Xcode Cleanup plugin",
+  "Launchpad plugin",
+  "System Status plugin",
+  "Device Battery plugin",
+  "Fan Control plugin",
+  "Battery Charge Limit plugin",
+  "One Switch alternative",
+  "AnySwitch alternative",
+  "Bartender alternative",
+  "Ice alternative",
+  "Thaw alternative",
+];
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: pageTitle,
+  description: pageDescription,
+  url: new URL(Astro.url.pathname, Astro.site).href,
+  mainEntity: {
+    "@type": "ItemList",
+    numberOfItems: plugins.length,
+    itemListElement: plugins.slice(0, 30).map((plugin, index) => {
+      const text = localizedPluginText(plugin);
+      return {
+        "@type": "ListItem",
+        position: index + 1,
+        name: text.en.displayName || text.zh.displayName,
+        description: text.en.summary || text.zh.summary,
+      };
+    }),
+  },
+};
 ---
 
 <BaseLayout
-  title="MacTools 插件 | Plugin Catalog"
-  description="浏览 MacTools 在线插件 catalog，查看插件分类、版本、能力和下载包。"
+  title={pageTitle}
+  description={pageDescription}
+  keywords={pluginKeywords}
+  image="/assets/screenshots/settings-plugins-en-dark.png"
+  structuredData={structuredData}
   page="plugins"
 >
   <SiteNav active="plugins" />

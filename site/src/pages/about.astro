@@ -64,11 +64,43 @@ const poemLines = [
     en: "Ask how to claim the treasure today: one brew install opens the way.",
   },
 ];
+
+const pageTitle = "关于 MacTools | 免费开源 macOS 菜单栏工具";
+const pageDescription = "了解 MacTools 项目故事：一个免费、开源、原生、安静的 macOS 菜单栏工具箱，适合显示器控制、菜单栏整理、清理维护和插件扩展。";
+const aboutKeywords = [
+  "MacTools about",
+  "open source macOS app",
+  "free macOS menu bar app",
+  "native macOS utility",
+  "SwiftUI AppKit macOS app",
+  "macOS menu bar toolbox",
+  "One Switch alternative",
+  "AnySwitch alternative",
+  "Bartender alternative",
+  "Ice alternative",
+  "Thaw alternative",
+];
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: pageTitle,
+  description: pageDescription,
+  url: new URL(Astro.url.pathname, Astro.site).href,
+  about: {
+    "@type": "SoftwareApplication",
+    name: "MacTools",
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "macOS 14.0 or later",
+    codeRepository: "https://github.com/ggbond268/MacTools",
+  },
+};
 ---
 
 <BaseLayout
-  title="关于 MacTools | About"
-  description="MacTools 的项目故事。开源、免费、原生、安静。"
+  title={pageTitle}
+  description={pageDescription}
+  keywords={aboutKeywords}
+  structuredData={structuredData}
   page="about"
 >
   <SiteNav active="about" />

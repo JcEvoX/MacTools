@@ -52,6 +52,7 @@
 
 ## Pull Request Checklist
 - PR 范围聚焦，并说明变更目的、验证方式和用户影响。
+- commit message、Pull Request 标题/描述和 issue 优先使用英文。
 - 构建或测试已通过；如无法运行，请在 PR 中说明原因。
 - 用户可见行为变化已同步更新 `README.md` 或相关设计文档。
 - 高风险功能已覆盖安全校验、错误状态和权限不足场景。

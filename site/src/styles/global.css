@@ -200,6 +200,7 @@ main {
 
 .home-hero,
 .showcase,
+.search-intent,
 .page-hero,
 .plugin-directory,
 .source-story,
@@ -524,6 +525,10 @@ h1 {
   padding-block: 96px 120px;
 }
 
+.search-intent {
+  padding-block: 92px 124px;
+}
+
 .section-heading {
   max-width: 780px;
   margin-bottom: 54px;
@@ -698,6 +703,86 @@ h1 {
 :root[data-lang="en"][data-theme="dark"] .settings-shot-variant[data-settings-lang="en"][data-settings-theme="dark"] {
   opacity: 1;
   visibility: visible;
+}
+
+.intent-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.68fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: stretch;
+}
+
+.intent-copy,
+.intent-keywords article {
+  background: var(--surface);
+}
+
+.intent-copy {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 32px;
+  border-radius: var(--radius-md);
+}
+
+.intent-copy h3,
+.intent-keywords h3 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.intent-copy p {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.58;
+  letter-spacing: 0;
+}
+
+.intent-copy a {
+  align-self: flex-start;
+  color: var(--blue);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.intent-copy a:hover {
+  color: var(--blue-pressed);
+}
+
+.intent-keywords {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--hairline);
+}
+
+.intent-keywords article {
+  min-height: 236px;
+  padding: 28px;
+}
+
+.intent-keywords div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.intent-keywords span {
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .page-hero {
@@ -981,6 +1066,11 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .intent-grid,
+  .intent-keywords {
+    grid-template-columns: 1fr;
+  }
+
   .category-rail,
   .source-story > div:first-child {
     position: static;
@@ -1052,6 +1142,7 @@ h1 {
 
   .home-hero,
   .showcase,
+  .search-intent,
   .page-hero,
   .plugin-directory,
   .source-story,
@@ -1129,6 +1220,10 @@ h1 {
     padding-block: 58px 72px;
   }
 
+  .search-intent {
+    padding-block: 58px 76px;
+  }
+
   .section-heading {
     margin-bottom: 34px;
   }
@@ -1152,11 +1247,25 @@ h1 {
     padding: 22px 20px;
   }
 
+  .intent-copy,
+  .intent-keywords article {
+    padding: 22px 20px;
+  }
+
   .feature-notes h3 {
     font-size: 21px;
   }
 
+  .intent-copy h3,
+  .intent-keywords h3 {
+    font-size: 21px;
+  }
+
   .feature-notes p {
+    font-size: 16px;
+  }
+
+  .intent-copy p {
     font-size: 16px;
   }
 
