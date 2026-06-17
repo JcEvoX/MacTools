@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-17T04:19:47Z",
-  "minimumHostVersion": "1.0.19",
+  "generatedAt": "2026-06-17T10:59:52Z",
+  "minimumHostVersion": "1.0.20",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -348,16 +348,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "60eb000d5744b7547f9c5da7893b637ff6622e974aa93369c4849b2a4b99df47",
-        "size": 362224,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/display-brightness.mactoolsplugin.zip"
+        "sha256": "1b99813886fc0683b6e789edea425b1bebdb5b6a45739bebe17e58d6abc0de8a",
+        "size": 375805,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.21/display-brightness.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.21",
       "summary": "快速调节每个显示器的亮度",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "WO/JAVRCnNI0tDU5a+CHqWrPvxIju42B7E3B6qp9y0MqBuWnLD9rJsVbdF3+nhS0hINDN+UcFKUZCI9i8N8qCQ=="
+    "value": "pgq37o89AK2M0ybl0hfXovEj84vzEiRf3fl5UCxh2cvIYhzHw7HMWZ0cLuLIKj69qcPBoRH0wS5l5Uzpa+0AAg=="
   }
 }
