@@ -90,6 +90,13 @@ struct DisplayDisableSnapshot: Equatable {
     )
 }
 
+struct DisplaySurvivorIdentity: Codable, Equatable {
+    let id: CGDirectDisplayID
+    let vendorNumber: UInt32?
+    let modelNumber: UInt32?
+    let serialNumber: UInt32?
+}
+
 struct DisplayDisableRecoverySnapshot: Codable, Equatable {
     let createdAt: Date
     let builtInDisplayID: CGDirectDisplayID
@@ -97,5 +104,28 @@ struct DisplayDisableRecoverySnapshot: Codable, Equatable {
     let modelNumber: UInt32?
     let serialNumber: UInt32?
     let survivorDisplayIDs: [CGDirectDisplayID]
+    // 外接 survivor 的稳定身份（EDID：vendor/model/serial）。CGDirectDisplayID 在睡眠/唤醒后
+    // 可能变号，恢复判定优先按身份匹配、ID 兜底。可选以兼容升级前已持久化的旧快照。
+    let survivorIdentities: [DisplaySurvivorIdentity]?
     let originalMainDisplayID: CGDirectDisplayID?
+
+    init(
+        createdAt: Date,
+        builtInDisplayID: CGDirectDisplayID,
+        vendorNumber: UInt32?,
+        modelNumber: UInt32?,
+        serialNumber: UInt32?,
+        survivorDisplayIDs: [CGDirectDisplayID],
+        survivorIdentities: [DisplaySurvivorIdentity]? = nil,
+        originalMainDisplayID: CGDirectDisplayID?
+    ) {
+        self.createdAt = createdAt
+        self.builtInDisplayID = builtInDisplayID
+        self.vendorNumber = vendorNumber
+        self.modelNumber = modelNumber
+        self.serialNumber = serialNumber
+        self.survivorDisplayIDs = survivorDisplayIDs
+        self.survivorIdentities = survivorIdentities
+        self.originalMainDisplayID = originalMainDisplayID
+    }
 }
