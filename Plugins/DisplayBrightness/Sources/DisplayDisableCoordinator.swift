@@ -16,17 +16,22 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     private let service: any DisplayDisableServicing
     private let store: any DisplayDisableStateStoring
     private let verificationSettleDelay: Duration
+    private let dateProvider: () -> Date
 
     private(set) var snapshot: DisplayDisableSnapshot = .unsupported
+    private var disabledByCurrentSession = false
+    private var selfDisableTopologyDeadline: Date?
 
     init(
         service: any DisplayDisableServicing,
         store: any DisplayDisableStateStoring,
-        verificationSettleDelay: Duration = .milliseconds(800)
+        verificationSettleDelay: Duration = .milliseconds(800),
+        dateProvider: @escaping () -> Date = Date.init
     ) {
         self.service = service
         self.store = store
         self.verificationSettleDelay = verificationSettleDelay
+        self.dateProvider = dateProvider
         refreshSnapshot()
     }
 
@@ -38,6 +43,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
 
         let displays = service.listDisplays()
         if store.snapshot != nil {
+            if !disabledByCurrentSession {
+                restoreBuiltInDisplay()
+                return
+            }
             reconcileStoredSnapshot(displays: displays)
             return
         }
@@ -118,11 +127,15 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             originalMainDisplayID: nil
         )
         store.snapshot = recoverySnapshot
+        disabledByCurrentSession = true
+        selfDisableTopologyDeadline = dateProvider().addingTimeInterval(3)
 
         do {
             try service.setDisplay(builtIn.id, enabled: false)
         } catch {
             store.snapshot = nil
+            disabledByCurrentSession = false
+            selfDisableTopologyDeadline = nil
             snapshot = DisplayDisableSnapshot(
                 status: .failed,
                 isDisableAllowed: true,
@@ -171,34 +184,56 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
 
     func restoreBuiltInDisplay() {
         guard let recoverySnapshot = store.snapshot else {
-            refreshSnapshot()
+            restoreCurrentBuiltInDisplay()
             return
         }
 
         let displays = service.listDisplays()
-        guard let restoreTarget = restoreTarget(
+        let restoreCandidates = restoreTargetIDs(
             storedID: recoverySnapshot.builtInDisplayID,
             displays: displays
-        ) else {
-            snapshot = DisplayDisableSnapshot(
-                status: .failed,
-                isDisableAllowed: false,
-                isRestoreAllowed: true,
-                externalDisplayCount: externalSurvivors(in: displays).count,
-                message: "无法找到内建显示屏"
-            )
+        )
+
+        for displayID in restoreCandidates {
+            do {
+                try service.setDisplay(displayID, enabled: true)
+                store.snapshot = nil
+                disabledByCurrentSession = false
+                selfDisableTopologyDeadline = nil
+                updateAvailableSnapshot(displays: service.listDisplays())
+                return
+            } catch {
+                continue
+            }
+        }
+
+        snapshot = DisplayDisableSnapshot(
+            status: .failed,
+            isDisableAllowed: false,
+            isRestoreAllowed: true,
+            externalDisplayCount: externalSurvivors(in: displays).count,
+            message: "恢复内建显示屏失败"
+        )
+    }
+
+    private func restoreCurrentBuiltInDisplay() {
+        let displays = service.listDisplays()
+        guard let builtIn = displays.first(where: \.isBuiltin) else {
+            updateAvailableSnapshot(displays: displays)
             return
         }
 
         do {
-            try service.setDisplay(restoreTarget.id, enabled: true)
+            try service.setDisplay(builtIn.id, enabled: true)
             store.snapshot = nil
+            disabledByCurrentSession = false
+            selfDisableTopologyDeadline = nil
             updateAvailableSnapshot(displays: service.listDisplays())
         } catch {
             snapshot = DisplayDisableSnapshot(
                 status: .failed,
                 isDisableAllowed: false,
-                isRestoreAllowed: true,
+                isRestoreAllowed: false,
                 externalDisplayCount: externalSurvivors(in: displays).count,
                 message: "恢复内建显示屏失败"
             )
@@ -206,7 +241,19 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     }
 
     func reconcileTopology() async {
-        reconcileStoredSnapshot(displays: service.listDisplays())
+        let displays = service.listDisplays()
+        guard let recoverySnapshot = store.snapshot else {
+            updateAvailableSnapshot(displays: displays)
+            return
+        }
+
+        let storedSurvivorIDs = Set(recoverySnapshot.survivorDisplayIDs)
+        if shouldTreatAsSelfDisableTopologyEvent(displays: displays, storedSurvivorIDs: storedSurvivorIDs) {
+            reconcileStoredSnapshot(displays: displays)
+            return
+        }
+
+        restoreBuiltInDisplay()
     }
 
     private func reconcileStoredSnapshot(displays: [DisplayDisableDisplay]) {
@@ -218,6 +265,8 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         if let builtIn = restoreTarget(storedID: recoverySnapshot.builtInDisplayID, displays: displays),
            builtIn.isActive || builtIn.isVisibleToAppKit {
             store.snapshot = nil
+            disabledByCurrentSession = false
+            selfDisableTopologyDeadline = nil
             updateAvailableSnapshot(displays: displays)
             return
         }
@@ -246,6 +295,20 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         }
     }
 
+    private func shouldTreatAsSelfDisableTopologyEvent(
+        displays: [DisplayDisableDisplay],
+        storedSurvivorIDs: Set<CGDirectDisplayID>
+    ) -> Bool {
+        guard let deadline = selfDisableTopologyDeadline,
+              dateProvider() <= deadline
+        else {
+            return false
+        }
+
+        let currentSurvivorIDs = Set(externalSurvivors(in: displays).map(\.id))
+        return currentSurvivorIDs == storedSurvivorIDs
+    }
+
     private func disableSucceeded(
         targetID: CGDirectDisplayID,
         survivorIDs: Set<CGDirectDisplayID>,
@@ -269,5 +332,17 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         }
 
         return displays.first(where: \.isBuiltin)
+    }
+
+    private func restoreTargetIDs(
+        storedID: CGDirectDisplayID,
+        displays: [DisplayDisableDisplay]
+    ) -> [CGDirectDisplayID] {
+        var ids = [storedID]
+        if let visibleBuiltInID = displays.first(where: \.isBuiltin)?.id,
+           visibleBuiltInID != storedID {
+            ids.append(visibleBuiltInID)
+        }
+        return ids
     }
 }

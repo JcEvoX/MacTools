@@ -223,16 +223,54 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
             isVisibleToAppKit: true
         )
         let service = FakeDisplayDisableService(onlineDisplays: [currentBuiltIn, external])
-        let store = InMemoryDisplayDisableStateStore(snapshot: oldSnapshot)
+        service.failingSetEnabledCalls = [.init(displayID: 1, enabled: true)]
+        let store = InMemoryDisplayDisableStateStore()
         let coordinator = DisplayDisableCoordinator(
             service: service,
             store: store,
             verificationSettleDelay: .zero
         )
+        store.snapshot = oldSnapshot
 
         coordinator.restoreBuiltInDisplay()
 
-        XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 9, enabled: true)])
+        XCTAssertEqual(service.setEnabledCalls, [
+            .init(displayID: 1, enabled: true),
+            .init(displayID: 9, enabled: true)
+        ])
+        XCTAssertNil(store.snapshot)
+    }
+
+    func testRestoreUsesStoredDisplayIDWhenDisabledBuiltInIsNotOnline() {
+        let disabledSnapshot = DisplayDisableRecoverySnapshot(
+            createdAt: Date(timeIntervalSince1970: 1),
+            builtInDisplayID: 1,
+            vendorNumber: nil,
+            modelNumber: nil,
+            serialNumber: nil,
+            survivorDisplayIDs: [2],
+            originalMainDisplayID: 2
+        )
+        let external = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [external])
+        let store = InMemoryDisplayDisableStateStore()
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .zero
+        )
+        store.snapshot = disabledSnapshot
+
+        coordinator.restoreBuiltInDisplay()
+
+        XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: true)])
         XCTAssertNil(store.snapshot)
     }
 
@@ -255,16 +293,108 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
             isVisibleToAppKit: false
         )
         let service = FakeDisplayDisableService(onlineDisplays: [builtIn])
-        let store = InMemoryDisplayDisableStateStore(snapshot: disabledSnapshot)
+        let store = InMemoryDisplayDisableStateStore()
         let coordinator = DisplayDisableCoordinator(
             service: service,
             store: store,
             verificationSettleDelay: .zero
         )
+        store.snapshot = disabledSnapshot
 
         await coordinator.reconcileTopology()
 
         XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: true)])
+    }
+
+    func testReconcileRestoresWhenExternalSurvivorChanges() async {
+        let builtIn = DisplayDisableDisplay(
+            id: 1,
+            name: "内建显示屏",
+            isBuiltin: true,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let originalExternal = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let replacementExternal = DisplayDisableDisplay(
+            id: 3,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [builtIn, originalExternal])
+        service.displaysAfterDisable = [
+            builtIn.withActive(false).withVisibleToAppKit(false),
+            originalExternal
+        ]
+        let store = InMemoryDisplayDisableStateStore()
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .zero
+        )
+        await coordinator.disableBuiltInDisplay()
+        service.onlineDisplays = [
+            builtIn.withActive(false).withVisibleToAppKit(false),
+            replacementExternal
+        ]
+
+        await coordinator.reconcileTopology()
+
+        XCTAssertEqual(service.setEnabledCalls, [
+            .init(displayID: 1, enabled: false),
+            .init(displayID: 1, enabled: true)
+        ])
+        XCTAssertNil(store.snapshot)
+    }
+
+    func testReconcileKeepsDisabledForInitialSelfDisableTopologyEvent() async {
+        var now = Date(timeIntervalSince1970: 1)
+        let builtIn = DisplayDisableDisplay(
+            id: 1,
+            name: "内建显示屏",
+            isBuiltin: true,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let external = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [builtIn, external])
+        service.displaysAfterDisable = [
+            builtIn.withActive(false).withVisibleToAppKit(false),
+            external
+        ]
+        let store = InMemoryDisplayDisableStateStore()
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .zero,
+            dateProvider: { now }
+        )
+
+        await coordinator.disableBuiltInDisplay()
+        now = now.addingTimeInterval(1)
+        await coordinator.reconcileTopology()
+
+        XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: false)])
+        XCTAssertEqual(coordinator.snapshot.status, .disabled)
+        XCTAssertNotNil(store.snapshot)
     }
 
     func testInitRestoresWhenStoredSnapshotHasNoExternalSurvivor() {

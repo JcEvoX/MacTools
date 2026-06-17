@@ -273,7 +273,7 @@ final class InMemoryDisplayDisableStateStore: DisplayDisableStateStoring {
 }
 
 final class FakeDisplayDisableService: DisplayDisableServicing {
-    struct SetEnabledCall: Equatable {
+    struct SetEnabledCall: Equatable, Hashable {
         let displayID: CGDirectDisplayID
         let enabled: Bool
     }
@@ -281,6 +281,7 @@ final class FakeDisplayDisableService: DisplayDisableServicing {
     var isSupported: Bool
     var onlineDisplays: [DisplayDisableDisplay]
     var displaysAfterDisable: [DisplayDisableDisplay]?
+    var failingSetEnabledCalls: Set<SetEnabledCall> = []
     private(set) var setEnabledCalls: [SetEnabledCall] = []
 
     init(
@@ -296,7 +297,11 @@ final class FakeDisplayDisableService: DisplayDisableServicing {
     }
 
     func setDisplay(_ displayID: CGDirectDisplayID, enabled: Bool) throws {
-        setEnabledCalls.append(SetEnabledCall(displayID: displayID, enabled: enabled))
+        let call = SetEnabledCall(displayID: displayID, enabled: enabled)
+        setEnabledCalls.append(call)
+        if failingSetEnabledCalls.contains(call) {
+            throw DisplayDisableServiceError.configureDisplayFailed(.failure)
+        }
         if !enabled, let displaysAfterDisable {
             onlineDisplays = displaysAfterDisable
         }

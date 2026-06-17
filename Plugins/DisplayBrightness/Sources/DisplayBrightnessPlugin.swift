@@ -148,7 +148,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     private let showsDisplayDisableControls: Bool
     private let localization: PluginLocalization
     private var isExpanded = false
-    private var displayDisableTask: Task<Void, Never>?
+    private var displayDisableActionTask: Task<Void, Never>?
+    private var displayTopologyTask: Task<Void, Never>?
     private var shortcutAcceleration = DisplayBrightnessShortcutAcceleration()
     private var shortcutSessions: [String: DisplayBrightnessShortcutSession] = [:]
 
@@ -229,9 +230,9 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
 
     func refreshDisplayTopology() {
         controller.refresh()
-        displayDisableTask?.cancel()
         let coordinator = displayDisableCoordinator
-        displayDisableTask = Task { @MainActor [weak self, coordinator] in
+        displayTopologyTask?.cancel()
+        displayTopologyTask = Task { @MainActor [weak self, coordinator] in
             await coordinator.reconcileTopology()
             self?.onStateChange?()
         }
@@ -283,7 +284,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        displayDisableTask?.cancel()
+        displayDisableActionTask?.cancel()
+        displayTopologyTask?.cancel()
         stopAllShortcutActions()
         guard reason.requiresStateCleanup else { return }
         displayDisableCoordinator.restoreBuiltInDisplay()
@@ -443,14 +445,14 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     private func handleInvokeAction(controlID: String) {
         switch controlID {
         case Constants.disableBuiltInDisplayControlID:
-            displayDisableTask?.cancel()
+            displayDisableActionTask?.cancel()
             let coordinator = displayDisableCoordinator
-            displayDisableTask = Task { @MainActor [weak self, coordinator] in
+            displayDisableActionTask = Task { @MainActor [weak self, coordinator] in
                 await coordinator.disableBuiltInDisplay()
                 self?.onStateChange?()
             }
         case Constants.restoreBuiltInDisplayControlID:
-            displayDisableTask?.cancel()
+            displayDisableActionTask?.cancel()
             displayDisableCoordinator.restoreBuiltInDisplay()
             onStateChange?()
         default:
