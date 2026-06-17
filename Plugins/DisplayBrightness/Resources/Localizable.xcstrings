@@ -154,6 +154,40 @@
         }
       }
     },
+    "displayDisable.action.disable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Off Built-in Display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭内建显示屏"
+          }
+        }
+      }
+    },
+    "displayDisable.action.restore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Built-in Display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复内建显示屏"
+          }
+        }
+      }
+    },
     "error.displayUnavailable": {
       "extractionState": "manual",
       "localizations": {

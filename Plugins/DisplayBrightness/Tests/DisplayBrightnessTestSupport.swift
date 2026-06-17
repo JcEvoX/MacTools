@@ -263,6 +263,81 @@ final class TestBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable
     }
 }
 
+@MainActor
+final class InMemoryDisplayDisableStateStore: DisplayDisableStateStoring {
+    var snapshot: DisplayDisableRecoverySnapshot?
+
+    init(snapshot: DisplayDisableRecoverySnapshot? = nil) {
+        self.snapshot = snapshot
+    }
+}
+
+final class FakeDisplayDisableService: DisplayDisableServicing {
+    struct SetEnabledCall: Equatable {
+        let displayID: CGDirectDisplayID
+        let enabled: Bool
+    }
+
+    var isSupported: Bool
+    var onlineDisplays: [DisplayDisableDisplay]
+    var displaysAfterDisable: [DisplayDisableDisplay]?
+    private(set) var setEnabledCalls: [SetEnabledCall] = []
+
+    init(
+        isSupported: Bool = true,
+        onlineDisplays: [DisplayDisableDisplay] = []
+    ) {
+        self.isSupported = isSupported
+        self.onlineDisplays = onlineDisplays
+    }
+
+    func listDisplays() -> [DisplayDisableDisplay] {
+        onlineDisplays
+    }
+
+    func setDisplay(_ displayID: CGDirectDisplayID, enabled: Bool) throws {
+        setEnabledCalls.append(SetEnabledCall(displayID: displayID, enabled: enabled))
+        if !enabled, let displaysAfterDisable {
+            onlineDisplays = displaysAfterDisable
+        }
+    }
+}
+
+@MainActor
+final class MockDisplayDisableCoordinator: DisplayDisableCoordinating {
+    var snapshotValue = DisplayDisableSnapshot(
+        status: .unsupported,
+        isDisableAllowed: false,
+        isRestoreAllowed: false,
+        externalDisplayCount: 0,
+        message: nil
+    )
+    private(set) var refreshSnapshotCallCount = 0
+    private(set) var disableCallCount = 0
+    private(set) var restoreCallCount = 0
+    private(set) var reconcileCallCount = 0
+
+    var snapshot: DisplayDisableSnapshot {
+        snapshotValue
+    }
+
+    func refreshSnapshot() {
+        refreshSnapshotCallCount += 1
+    }
+
+    func disableBuiltInDisplay() async {
+        disableCallCount += 1
+    }
+
+    func restoreBuiltInDisplay() {
+        restoreCallCount += 1
+    }
+
+    func reconcileTopology() async {
+        reconcileCallCount += 1
+    }
+}
+
 private extension NSLock {
     func withLock<T>(_ body: () throws -> T) rethrows -> T {
         lock()

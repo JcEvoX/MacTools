@@ -126,6 +126,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     private enum Constants {
         static let displayControlPrefix = "display."
         static let brightnessControlSuffix = ".brightness"
+        static let disableBuiltInDisplayControlID = "built-in-display-disable"
+        static let restoreBuiltInDisplayControlID = "built-in-display-restore"
         static let shortcutActionPrefix = "display-brightness.display."
         static let shortcutDisplayGroupPrefix = "display-brightness.display-group."
     }
@@ -142,17 +144,27 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let controller: DisplayBrightnessControlling
+    private let displayDisableCoordinator: any DisplayDisableCoordinating
+    private let showsDisplayDisableControls: Bool
     private let localization: PluginLocalization
     private var isExpanded = false
+    private var displayDisableTask: Task<Void, Never>?
     private var shortcutAcceleration = DisplayBrightnessShortcutAcceleration()
     private var shortcutSessions: [String: DisplayBrightnessShortcutSession] = [:]
 
     init(
         controller: DisplayBrightnessControlling? = nil,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        displayDisableCoordinator: (any DisplayDisableCoordinating)? = nil,
+        showsDisplayDisableControls: Bool = true
     ) {
         self.localization = localization
         self.controller = controller ?? DisplayBrightnessController(localization: localization)
+        self.displayDisableCoordinator = displayDisableCoordinator ?? DisplayDisableCoordinator(
+            service: Self.defaultDisplayDisableService(),
+            store: UserDefaultsDisplayDisableStateStore()
+        )
+        self.showsDisplayDisableControls = showsDisplayDisableControls
         self.metadata = PluginMetadata(
             id: "display-brightness",
             title: localization.string("metadata.title", defaultValue: "显示器亮度"),
@@ -212,10 +224,17 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
 
     func refresh() {
         controller.refresh()
+        displayDisableCoordinator.refreshSnapshot()
     }
 
     func refreshDisplayTopology() {
         controller.refresh()
+        displayDisableTask?.cancel()
+        let coordinator = displayDisableCoordinator
+        displayDisableTask = Task { @MainActor [weak self, coordinator] in
+            await coordinator.reconcileTopology()
+            self?.onStateChange?()
+        }
     }
 
     func handleAction(_ action: PluginPanelAction) {
@@ -233,12 +252,13 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
 
             controller.setBrightness(value, for: displayID, phase: phase)
             onStateChange?()
+        case let .invokeAction(controlID):
+            handleInvokeAction(controlID: controlID)
         case .setSwitch,
              .setSelection,
              .setNavigationSelection,
              .clearNavigationSelection,
-             .setDate,
-             .invokeAction:
+             .setDate:
             return
         }
     }
@@ -263,7 +283,10 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        displayDisableTask?.cancel()
         stopAllShortcutActions()
+        guard reason.requiresStateCleanup else { return }
+        displayDisableCoordinator.restoreBuiltInDisplay()
     }
 
     static func parseDisplayID(from controlID: String) -> CGDirectDisplayID? {
@@ -294,31 +317,153 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     }
 
     private func buildDetail(for displays: [DisplayBrightnessDisplay]) -> PluginPanelDetail {
-        PluginPanelDetail(
-            primaryControls: displays.map { display in
-                PluginPanelControl(
-                    id: "\(Constants.displayControlPrefix)\(display.display.id)\(Constants.brightnessControlSuffix)",
-                    kind: .slider,
-                    options: [],
-                    selectedOptionID: nil,
-                    dateValue: nil,
-                    minimumDate: nil,
-                    displayedComponents: nil,
-                    datePickerStyle: nil,
-                    sectionTitle: display.display.name,
-                    sliderValue: display.brightness,
-                    sliderBounds: 0...1,
-                    sliderStep: 0.01,
-                    valueLabel: Self.percentText(for: display.brightness),
-                    isEnabled: true
-                )
-            },
+        let brightnessControls = displays.map { display in
+            PluginPanelControl(
+                id: "\(Constants.displayControlPrefix)\(display.display.id)\(Constants.brightnessControlSuffix)",
+                kind: .slider,
+                options: [],
+                selectedOptionID: nil,
+                dateValue: nil,
+                minimumDate: nil,
+                displayedComponents: nil,
+                datePickerStyle: nil,
+                sectionTitle: display.display.name,
+                sliderValue: display.brightness,
+                sliderBounds: 0...1,
+                sliderStep: 0.01,
+                valueLabel: Self.percentText(for: display.brightness),
+                isEnabled: true
+            )
+        }
+
+        return PluginPanelDetail(
+            primaryControls: brightnessControls + displayDisableControls(),
             secondaryPanel: nil
         )
     }
 
+    private func displayDisableControls() -> [PluginPanelControl] {
+        guard showsDisplayDisableControls else {
+            return []
+        }
+
+        let snapshot = displayDisableCoordinator.snapshot
+        switch snapshot.status {
+        case .unsupported:
+            return [displayDisableActionControl(
+                id: Constants.disableBuiltInDisplayControlID,
+                title: localization.string(
+                    "displayDisable.action.disable",
+                    defaultValue: "关闭内建显示屏"
+                ),
+                iconName: "display",
+                isEnabled: false
+            )]
+        case .unavailable:
+            var controls = [displayDisableActionControl(
+                id: Constants.disableBuiltInDisplayControlID,
+                title: localization.string(
+                    "displayDisable.action.disable",
+                    defaultValue: "关闭内建显示屏"
+                ),
+                iconName: "display",
+                isEnabled: false
+            )]
+            if snapshot.isRestoreAllowed {
+                controls.append(displayDisableActionControl(
+                    id: Constants.restoreBuiltInDisplayControlID,
+                    title: localization.string(
+                        "displayDisable.action.restore",
+                        defaultValue: "恢复内建显示屏"
+                    ),
+                    iconName: "display",
+                    isEnabled: true
+                ))
+            }
+            return controls
+        case .disabled:
+            return [displayDisableActionControl(
+                id: Constants.restoreBuiltInDisplayControlID,
+                title: localization.string(
+                    "displayDisable.action.restore",
+                    defaultValue: "恢复内建显示屏"
+                ),
+                iconName: "display",
+                isEnabled: snapshot.isRestoreAllowed
+            )]
+        case .available, .failed, .busy:
+            var controls: [PluginPanelControl] = []
+            controls.append(displayDisableActionControl(
+                id: Constants.disableBuiltInDisplayControlID,
+                title: localization.string(
+                    "displayDisable.action.disable",
+                    defaultValue: "关闭内建显示屏"
+                ),
+                iconName: "display",
+                isEnabled: snapshot.isDisableAllowed
+            ))
+            if snapshot.isRestoreAllowed {
+                controls.append(displayDisableActionControl(
+                    id: Constants.restoreBuiltInDisplayControlID,
+                    title: localization.string(
+                        "displayDisable.action.restore",
+                        defaultValue: "恢复内建显示屏"
+                    ),
+                    iconName: "display",
+                    isEnabled: true
+                ))
+            }
+            return controls
+        }
+    }
+
+    private func displayDisableActionControl(
+        id: String,
+        title: String,
+        iconName: String,
+        isEnabled: Bool
+    ) -> PluginPanelControl {
+        PluginPanelControl(
+            id: id,
+            kind: .actionRow,
+            options: [],
+            selectedOptionID: nil,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            actionTitle: title,
+            actionIconSystemName: iconName,
+            showsLeadingDivider: true,
+            isEnabled: isEnabled
+        )
+    }
+
+    private func handleInvokeAction(controlID: String) {
+        switch controlID {
+        case Constants.disableBuiltInDisplayControlID:
+            displayDisableTask?.cancel()
+            let coordinator = displayDisableCoordinator
+            displayDisableTask = Task { @MainActor [weak self, coordinator] in
+                await coordinator.disableBuiltInDisplay()
+                self?.onStateChange?()
+            }
+        case Constants.restoreBuiltInDisplayControlID:
+            displayDisableTask?.cancel()
+            displayDisableCoordinator.restoreBuiltInDisplay()
+            onStateChange?()
+        default:
+            return
+        }
+    }
+
     private static func percentText(for brightness: Double) -> String {
         "\(Int((brightness * 100).rounded()))%"
+    }
+
+    private static func defaultDisplayDisableService() -> any DisplayDisableServicing {
+        SystemDisplayDisableService()
     }
 
     private func shortcutDefinition(
