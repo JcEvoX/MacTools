@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-14T15:41:06Z",
-  "minimumHostVersion": "1.0.18",
+  "generatedAt": "2026-06-17T04:19:47Z",
+  "minimumHostVersion": "1.0.19",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -25,16 +25,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "383c44384e95461edc174e32c08750f1e624e5d8c74ebd52f092a6e9be55445a",
-        "size": 774658,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/activity-bar.mactoolsplugin.zip"
+        "sha256": "659180e110ef4d9c83594c10a38bd1e5ff4fa37e1a5baa985bc148f56e40fbc5",
+        "size": 763433,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
-      "releaseChannel": "beta",
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -217,9 +217,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "06b8cfa01523decddb42addc0b306a26b3a28424cb4f5b748762d5de0b5943a9",
-        "size": 312305,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/calendar.mactoolsplugin.zip"
+        "sha256": "74fc4455661ba497210eba182d3d9d4aed25c2d30774fa18ea96fdca14d4b7b6",
+        "size": 312300,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/calendar.mactoolsplugin.zip"
       },
       "permissions": [
         "calendarFullAccess",
@@ -227,9 +227,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
       "summary": "查看日期、节假日和系统日程",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -284,16 +284,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "0d656a44991be48da6a2611d482271158fff453f862700a77ff433898081817c",
-        "size": 629720,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.19/device-battery.mactoolsplugin.zip"
+        "sha256": "fac719700426cd936a52f264f9336f8b295e261c3f5c8e3e1083e91aa44427a7",
+        "size": 639023,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.19",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
       "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -348,16 +348,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "3334b6f12a067c62f6cc96a9870be3ca0b39ec5543b3600e3b667ae9e9038e01",
-        "size": 305394,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/display-brightness.mactoolsplugin.zip"
+        "sha256": "60eb000d5744b7547f9c5da7893b637ff6622e974aa93369c4849b2a4b99df47",
+        "size": 362224,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/display-brightness.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
       "summary": "快速调节每个显示器的亮度",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "5Vb95NjJVyYgSSE9MqKTMElgz+hcqerh/VtVCjyeLyW19BQZD4vDNXa1jMwqr6Zb9niuJoM78is2Qnh/ASzUBA=="
+    "value": "WO/JAVRCnNI0tDU5a+CHqWrPvxIju42B7E3B6qp9y0MqBuWnLD9rJsVbdF3+nhS0hINDN+UcFKUZCI9i8N8qCQ=="
   }
 }
