@@ -485,4 +485,49 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
         XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: true)])
         XCTAssertNil(store.snapshot)
     }
+
+    func testInitKeepsDisabledWhenStoredSnapshotHasExternalSurvivor() {
+        // 模拟插件热重载/重建：持久化快照仍在、外接 survivor 仍在线，
+        // 新建 coordinator 不应无条件恢复内建屏，而应保持禁用。
+        let disabledSnapshot = DisplayDisableRecoverySnapshot(
+            createdAt: Date(timeIntervalSince1970: 1),
+            builtInDisplayID: 1,
+            vendorNumber: nil,
+            modelNumber: nil,
+            serialNumber: nil,
+            survivorDisplayIDs: [2],
+            survivorIdentities: [
+                DisplaySurvivorIdentity(id: 2, vendorNumber: nil, modelNumber: nil, serialNumber: nil)
+            ],
+            originalMainDisplayID: 2
+        )
+        let disabledBuiltIn = DisplayDisableDisplay(
+            id: 1,
+            name: "内建显示屏",
+            isBuiltin: true,
+            isActive: false,
+            isInMirrorSet: false,
+            isVisibleToAppKit: false
+        )
+        let external = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [disabledBuiltIn, external])
+        let store = InMemoryDisplayDisableStateStore(snapshot: disabledSnapshot)
+
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .zero
+        )
+
+        XCTAssertEqual(service.setEnabledCalls, [])
+        XCTAssertEqual(coordinator.snapshot.status, .disabled)
+        XCTAssertNotNil(store.snapshot)
+    }
 }

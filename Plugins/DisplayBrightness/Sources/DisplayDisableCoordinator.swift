@@ -18,7 +18,6 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     private let verificationSettleDelay: Duration
 
     private(set) var snapshot: DisplayDisableSnapshot = .unsupported
-    private var disabledByCurrentSession = false
 
     init(
         service: any DisplayDisableServicing,
@@ -39,10 +38,8 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
 
         let displays = service.listDisplays()
         if store.snapshot != nil {
-            if !disabledByCurrentSession {
-                restoreBuiltInDisplay()
-                return
-            }
+            // 重新初始化（App 重启、插件热重载/重建）一律按 survivor 是否还在线来决定：
+            // 外接屏还在就保持禁用，外接屏已断开才恢复内建屏；不因“非本会话禁用”而无条件恢复。
             reconcileStoredSnapshot(displays: displays)
             return
         }
@@ -124,13 +121,11 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             originalMainDisplayID: nil
         )
         store.snapshot = recoverySnapshot
-        disabledByCurrentSession = true
 
         do {
             try service.setDisplay(builtIn.id, enabled: false)
         } catch {
             store.snapshot = nil
-            disabledByCurrentSession = false
             snapshot = DisplayDisableSnapshot(
                 status: .failed,
                 isDisableAllowed: true,
@@ -193,7 +188,6 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             do {
                 try service.setDisplay(displayID, enabled: true)
                 store.snapshot = nil
-                disabledByCurrentSession = false
                 updateAvailableSnapshot(displays: service.listDisplays())
                 return
             } catch {
@@ -220,7 +214,6 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         do {
             try service.setDisplay(builtIn.id, enabled: true)
             store.snapshot = nil
-            disabledByCurrentSession = false
             updateAvailableSnapshot(displays: service.listDisplays())
         } catch {
             snapshot = DisplayDisableSnapshot(
@@ -254,7 +247,6 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
         if let builtIn = restoreTarget(storedID: recoverySnapshot.builtInDisplayID, displays: displays),
            builtIn.isActive || builtIn.isVisibleToAppKit {
             store.snapshot = nil
-            disabledByCurrentSession = false
             updateAvailableSnapshot(displays: displays)
             return
         }
