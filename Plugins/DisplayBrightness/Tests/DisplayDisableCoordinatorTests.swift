@@ -357,8 +357,7 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
         XCTAssertNil(store.snapshot)
     }
 
-    func testReconcileKeepsDisabledForInitialSelfDisableTopologyEvent() async {
-        var now = Date(timeIntervalSince1970: 1)
+    func testReconcileKeepsDisabledWhileExternalSurvivorStaysConnected() async {
         let builtIn = DisplayDisableDisplay(
             id: 1,
             name: "内建显示屏",
@@ -384,12 +383,71 @@ final class DisplayDisableCoordinatorTests: XCTestCase {
         let coordinator = DisplayDisableCoordinator(
             service: service,
             store: store,
-            verificationSettleDelay: .zero,
-            dateProvider: { now }
+            verificationSettleDelay: .zero
         )
 
         await coordinator.disableBuiltInDisplay()
-        now = now.addingTimeInterval(1)
+        // 外接屏仍在线时的良性拓扑事件（息屏/唤醒、改分辨率等）不得恢复内建屏。
+        await coordinator.reconcileTopology()
+
+        XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: false)])
+        XCTAssertEqual(coordinator.snapshot.status, .disabled)
+        XCTAssertNotNil(store.snapshot)
+    }
+
+    func testReconcileKeepsDisabledWhenSurvivorDisplayIDChangesButEDIDMatches() async {
+        let builtIn = DisplayDisableDisplay(
+            id: 1,
+            name: "内建显示屏",
+            isBuiltin: true,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true,
+            vendorNumber: 0x610,
+            modelNumber: 0xA050,
+            serialNumber: 0x01
+        )
+        let external = DisplayDisableDisplay(
+            id: 2,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true,
+            vendorNumber: 0x610,
+            modelNumber: 0xA035,
+            serialNumber: 0x99
+        )
+        // 同一台外接屏睡眠/唤醒后 CGDirectDisplayID 变号（2 -> 7），但 EDID 不变。
+        let externalAfterWake = DisplayDisableDisplay(
+            id: 7,
+            name: "Studio Display",
+            isBuiltin: false,
+            isActive: true,
+            isInMirrorSet: false,
+            isVisibleToAppKit: true,
+            vendorNumber: 0x610,
+            modelNumber: 0xA035,
+            serialNumber: 0x99
+        )
+        let service = FakeDisplayDisableService(onlineDisplays: [builtIn, external])
+        service.displaysAfterDisable = [
+            builtIn.withActive(false).withVisibleToAppKit(false),
+            external
+        ]
+        let store = InMemoryDisplayDisableStateStore()
+        let coordinator = DisplayDisableCoordinator(
+            service: service,
+            store: store,
+            verificationSettleDelay: .zero
+        )
+
+        await coordinator.disableBuiltInDisplay()
+        service.onlineDisplays = [
+            builtIn.withActive(false).withVisibleToAppKit(false),
+            externalAfterWake
+        ]
+
         await coordinator.reconcileTopology()
 
         XCTAssertEqual(service.setEnabledCalls, [.init(displayID: 1, enabled: false)])
