@@ -765,19 +765,35 @@ final class MenuBarStatusItemController: NSObject {
     @objc
     private func handleStatusItemAction(_ sender: NSStatusBarButton) {
         let currentEvent = NSApp.currentEvent
+        // Read the preference live on each click so a settings change takes
+        // effect immediately without re-observing.
+        let swapped = MenuBarClickBehaviorPreference.current().isSwapped
+
+        // macOS ≤26: run the exact pre-27 action path. The live keyboard-state
+        // read, the bounce suppressor and the diagnostics trace are all macOS 27
+        // stub-host workarounds; on a healthy host they are inert, but gating
+        // them keeps the shipping (≤26) click path byte-for-byte identical to
+        // upstream so no extra work runs on the click that could read as lag.
+        guard MenuBarStatusItemHostCompatibility.isMacOS27OrLater else {
+            switch MenuBarStatusItemInvocation.invocation(for: currentEvent, swapped: swapped) {
+            case .featurePanel:
+                toggleFeaturePanel(relativeTo: sender)
+            case .componentPanel:
+                toggleComponentPanel(relativeTo: sender)
+            }
+            return
+        }
+
         MenuBarStatusItemDiagnostics.trace(
             "action event=\(currentEvent.map { String(describing: $0.type) } ?? "nil") "
                 + "modifiers=\(currentEvent?.modifierFlags.rawValue ?? 0) "
                 + MenuBarStatusItemDiagnostics.describeButtonWindow(sender)
         )
-        // Read the preference live on each click so a settings change takes
-        // effect immediately without re-observing.
-        let swapped = MenuBarClickBehaviorPreference.current().isSwapped
         let invocation = MenuBarStatusItemInvocation.invocation(
             for: currentEvent,
             swapped: swapped,
             liveModifierFlags: NSEvent.modifierFlags,
-            isMacOS27OrLater: MenuBarStatusItemHostCompatibility.isMacOS27OrLater
+            isMacOS27OrLater: true
         )
 
         // Stub host only: the outside-click monitor may have just dismissed
