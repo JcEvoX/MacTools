@@ -13,7 +13,10 @@ private struct SystemStatusPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [SystemStatusPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
+        [SystemStatusPlugin(
+            supportDirectory: context.supportDirectory,
+            localization: PluginLocalization(bundle: context.resourceBundle)
+        )]
     }
 }
 
@@ -24,7 +27,9 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
     let descriptor = PluginComponentDescriptor(
         span: PluginComponentSpan(
             width: 4,
-            height: PluginComponentPanelLayoutMetrics.default.heightSpan(closestToOriginalSpanHeight: 2)
+            height: PluginComponentPanelLayoutMetrics.default.heightSpan(
+                fittingContentHeight: SystemStatusComponentLayout.dashboardContentHeight
+            )
         )!
     )
 
@@ -33,10 +38,16 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
 
     init(
         viewModel: SystemStatusViewModel? = nil,
+        supportDirectory: URL? = nil,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
         self.viewModel = viewModel
-            ?? SystemStatusViewModel(sampler: SystemStatusSampler(localization: localization))
+            ?? SystemStatusViewModel(
+                sampler: SystemStatusSampler(localization: localization),
+                historyStore: SystemStatusHistoryStore(
+                    fileURL: SystemStatusHistoryStore.defaultFileURL(supportDirectory: supportDirectory)
+                )
+            )
         self.localization = localization
         self.metadata = PluginMetadata(
             id: "system-status",
@@ -70,13 +81,18 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
         AnyView(
             SystemStatusComponentView(
                 viewModel: viewModel,
-                isPanelVisible: context.isPanelVisible,
                 localization: localization
             )
         )
     }
 
-    func refresh() {}
+    func refresh() {
+        viewModel.startBackground()
+    }
+
+    func deactivate(reason: PluginDeactivationReason) {
+        viewModel.stop()
+    }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         PluginPermissionState(isGranted: true, footnote: nil)
@@ -88,109 +104,347 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
 }
 
 @MainActor
+struct SystemStatusSamplingSchedule: Sendable {
+    let backgroundFastInterval: Duration
+    let foregroundFastInterval: Duration
+    let backgroundSlowInterval: TimeInterval
+    let foregroundSlowInterval: TimeInterval
+    let backgroundProcessInterval: TimeInterval
+    let foregroundProcessInterval: TimeInterval
+    let backgroundHistoryInterval: TimeInterval
+    let foregroundHistoryInterval: TimeInterval
+
+    static let production = SystemStatusSamplingSchedule(
+        backgroundFastInterval: .seconds(10),
+        foregroundFastInterval: .seconds(1),
+        backgroundSlowInterval: 30,
+        foregroundSlowInterval: 5,
+        backgroundProcessInterval: 60,
+        foregroundProcessInterval: 5,
+        backgroundHistoryInterval: 60,
+        foregroundHistoryInterval: 60
+    )
+}
+
+@MainActor
 final class SystemStatusViewModel: ObservableObject {
     @Published private(set) var snapshot = SystemStatusSnapshot.empty
 
-    private let sampler: any SystemStatusSampling
-    private var fastTask: Task<Void, Never>?
-    private var slowTask: Task<Void, Never>?
-    private var processTask: Task<Void, Never>?
-    private var publicIPTask: Task<Void, Never>?
-    private var publicIPAddress: String?
+    private enum SamplingMode: Equatable {
+        case background
+        case foreground
 
-    init(sampler: any SystemStatusSampling = SystemStatusSampler()) {
+        func fastInterval(schedule: SystemStatusSamplingSchedule) -> Duration {
+            switch self {
+            case .background:
+                return schedule.backgroundFastInterval
+            case .foreground:
+                return schedule.foregroundFastInterval
+            }
+        }
+
+        func slowInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundSlowInterval
+            case .foreground:
+                return schedule.foregroundSlowInterval
+            }
+        }
+
+        func processInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundProcessInterval
+            case .foreground:
+                return schedule.foregroundProcessInterval
+            }
+        }
+
+        func historyInterval(schedule: SystemStatusSamplingSchedule) -> TimeInterval {
+            switch self {
+            case .background:
+                return schedule.backgroundHistoryInterval
+            case .foreground:
+                return schedule.foregroundHistoryInterval
+            }
+        }
+    }
+
+    private let sampler: any SystemStatusSampling
+    private let historyStore: any SystemStatusHistoryStoring
+    private let schedule: SystemStatusSamplingSchedule
+    private var samplingTask: Task<Void, Never>?
+    private var mode: SamplingMode = .background
+    private var lastSlowDate: Date?
+    private var lastProcessDate: Date?
+    private var lastHistoryDate: Date?
+    private var displayHistory: [SystemStatusHistoryPoint] = []
+    private var didLoadHistory = false
+    private var lastDisplayHistoryPublishDate: Date?
+
+    private static let displayHistoryRetention: TimeInterval = 30 * 60
+    private static let maximumDisplayHistoryCount = 1_800
+    private static let foregroundDisplayHistoryInterval: TimeInterval = 2
+    private static let backgroundDisplayHistoryInterval: TimeInterval = 30
+
+    init(
+        sampler: any SystemStatusSampling = SystemStatusSampler(),
+        historyStore: (any SystemStatusHistoryStoring)? = nil,
+        schedule: SystemStatusSamplingSchedule = .production
+    ) {
         self.sampler = sampler
+        self.historyStore = historyStore ?? SystemStatusHistoryStore(
+            fileURL: SystemStatusHistoryStore.defaultFileURL(supportDirectory: nil)
+        )
+        self.schedule = schedule
     }
 
     func start() {
-        guard fastTask == nil, slowTask == nil, processTask == nil, publicIPTask == nil else {
+        startForeground()
+    }
+
+    func startForeground() {
+        let previousMode = mode
+        mode = .foreground
+
+        if previousMode != .foreground, samplingTask != nil {
+            restartSamplingLoop()
             return
         }
 
-        fastTask = Task { @MainActor [weak self] in
-            await self?.runFastSamplingLoop()
+        startSamplingIfNeeded()
+    }
+
+    func startBackground() {
+        guard mode != .foreground else {
+            return
         }
-        slowTask = Task { @MainActor [weak self] in
-            await self?.runSlowSamplingLoop()
-        }
-        processTask = Task { @MainActor [weak self] in
-            await self?.runProcessSamplingLoop()
-        }
-        publicIPTask = Task { @MainActor [weak self] in
-            await self?.runPublicIPSamplingLoop()
-        }
+
+        mode = .background
+        startSamplingIfNeeded()
+    }
+
+    func returnToBackground() {
+        mode = .background
+    }
+
+    func refreshSnapshotNow(referenceDate: Date = Date()) async {
+        await collectFast(referenceDate: referenceDate, mode: .foreground, forcePublishHistory: true)
+
+        let slowSample = await sampler.collectSlow()
+        guard !Task.isCancelled else { return }
+        var slowSnapshot = snapshot
+        slowSnapshot.disk = slowSnapshot.disk.replacingCapacity(from: slowSample.disk)
+        slowSnapshot.battery = slowSample.battery
+        slowSnapshot.gpu = slowSample.gpu
+        slowSnapshot.hardware = slowSample.hardware
+        publishSnapshotIfChanged(slowSnapshot)
+
+        let processes = await sampler.collectTopProcesses(limit: 3)
+        guard !Task.isCancelled else { return }
+        var processSnapshot = snapshot
+        processSnapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
+        publishSnapshotIfChanged(processSnapshot)
+
+        let point = SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: snapshot)
+        appendDisplayHistoryPoint(point, referenceDate: referenceDate)
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        _ = await historyStore.append(point, referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
     }
 
     func stop() {
-        fastTask?.cancel()
-        slowTask?.cancel()
-        processTask?.cancel()
-        publicIPTask?.cancel()
-        fastTask = nil
-        slowTask = nil
-        processTask = nil
-        publicIPTask = nil
+        samplingTask?.cancel()
+        samplingTask = nil
+        mode = .background
     }
 
-    private func runFastSamplingLoop() async {
+    private func startSamplingIfNeeded() {
+        guard samplingTask == nil else {
+            return
+        }
+
+        samplingTask = Task { @MainActor [weak self] in
+            await self?.loadHistory()
+            await self?.runSamplingLoop()
+        }
+    }
+
+    private func restartSamplingLoop() {
+        samplingTask?.cancel()
+        samplingTask = nil
+        startSamplingIfNeeded()
+    }
+
+    private func loadHistory() async {
+        guard !didLoadHistory else {
+            return
+        }
+
+        let referenceDate = Date()
+        displayHistory = Self.prunedDisplayHistory(
+            await historyStore.load(referenceDate: referenceDate),
+            referenceDate: referenceDate
+        )
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        didLoadHistory = true
+    }
+
+    private func runSamplingLoop() async {
         while !Task.isCancelled {
-            let sample = await sampler.collectFast(referenceDate: Date())
+            let currentMode = mode
+            let now = Date()
+            await collectFast(referenceDate: now, mode: currentMode)
             guard !Task.isCancelled else { return }
-            snapshot.cpu = sample.cpu
-            snapshot.memory = sample.memory
-            snapshot.network = sample.network.replacingPublicIPAddress(publicIPAddress)
-
-            do {
-                try await Task.sleep(for: .seconds(1))
-            } catch {
-                return
-            }
-        }
-    }
-
-    private func runSlowSamplingLoop() async {
-        while !Task.isCancelled {
-            let sample = await sampler.collectSlow()
+            await collectSlowIfNeeded(referenceDate: now, mode: currentMode)
             guard !Task.isCancelled else { return }
-            snapshot.disk = sample.disk
-            snapshot.battery = sample.battery
-
-            do {
-                try await Task.sleep(for: .seconds(5))
-            } catch {
-                return
-            }
-        }
-    }
-
-    private func runProcessSamplingLoop() async {
-        while !Task.isCancelled {
-            let processes = await sampler.collectTopProcesses(limit: 3)
+            await collectProcessesIfNeeded(referenceDate: now, mode: currentMode)
             guard !Task.isCancelled else { return }
-            snapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
+            await persistHistoryIfNeeded(referenceDate: now, mode: currentMode)
+            guard !Task.isCancelled else { return }
 
             do {
-                try await Task.sleep(for: .seconds(3))
+                try await Task.sleep(for: currentMode.fastInterval(schedule: schedule))
             } catch {
                 return
             }
         }
     }
 
-    private func runPublicIPSamplingLoop() async {
-        while !Task.isCancelled {
-            if let publicIPAddress = await sampler.collectPublicIPAddress() {
-                guard !Task.isCancelled else { return }
-                self.publicIPAddress = publicIPAddress
-                snapshot.network = snapshot.network.replacingPublicIPAddress(publicIPAddress)
-            }
+    private func collectFast(
+        referenceDate: Date,
+        mode: SamplingMode,
+        forcePublishHistory: Bool = false
+    ) async {
+        let sample = await sampler.collectFast(referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
 
-            do {
-                try await Task.sleep(for: .seconds(60))
-            } catch {
-                return
-            }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.cpu = sample.cpu
+        updatedSnapshot.memory = sample.memory
+        updatedSnapshot.network = sample.network
+        updatedSnapshot.disk = updatedSnapshot.disk.replacingActivity(from: sample.disk)
+        appendDisplayHistoryPoint(
+            SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: updatedSnapshot),
+            referenceDate: referenceDate
+        )
+
+        if shouldPublishDisplayHistory(referenceDate: referenceDate, mode: mode) || forcePublishHistory {
+            updatedSnapshot.history = displayHistory
+            lastDisplayHistoryPublishDate = referenceDate
+        } else {
+            updatedSnapshot.history = snapshot.history
         }
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func collectSlowIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastSlowDate, referenceDate: referenceDate, interval: mode.slowInterval(schedule: schedule)) else {
+            return
+        }
+
+        lastSlowDate = referenceDate
+        let sample = await sampler.collectSlow()
+        guard !Task.isCancelled else { return }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.disk = updatedSnapshot.disk.replacingCapacity(from: sample.disk)
+        updatedSnapshot.battery = sample.battery
+        updatedSnapshot.gpu = sample.gpu
+        updatedSnapshot.hardware = sample.hardware
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func collectProcessesIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastProcessDate, referenceDate: referenceDate, interval: mode.processInterval(schedule: schedule)) else {
+            return
+        }
+
+        lastProcessDate = referenceDate
+        let processes = await sampler.collectTopProcesses(limit: 3)
+        guard !Task.isCancelled else { return }
+        var updatedSnapshot = snapshot
+        updatedSnapshot.topProcesses = await Self.resolveApplicationNames(for: processes)
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func persistHistoryIfNeeded(referenceDate: Date, mode: SamplingMode) async {
+        guard shouldRun(lastDate: lastHistoryDate, referenceDate: referenceDate, interval: mode.historyInterval(schedule: schedule)) else {
+            return
+        }
+
+        lastHistoryDate = referenceDate
+        let point = SystemStatusHistoryPoint(timestamp: referenceDate.timeIntervalSince1970, snapshot: snapshot)
+        appendDisplayHistoryPoint(point, referenceDate: referenceDate)
+        publishDisplayHistory(referenceDate: referenceDate, force: true)
+        _ = await historyStore.append(point, referenceDate: referenceDate)
+        guard !Task.isCancelled else { return }
+    }
+
+    private func shouldRun(lastDate: Date?, referenceDate: Date, interval: TimeInterval) -> Bool {
+        guard let lastDate else {
+            return true
+        }
+
+        return referenceDate.timeIntervalSince(lastDate) >= interval
+    }
+
+    private func appendDisplayHistoryPoint(_ point: SystemStatusHistoryPoint, referenceDate: Date) {
+        if let lastIndex = displayHistory.indices.last,
+           displayHistory[lastIndex].timestamp == point.timestamp {
+            displayHistory[lastIndex] = point
+        } else {
+            displayHistory.append(point)
+        }
+
+        displayHistory = Self.prunedDisplayHistory(displayHistory, referenceDate: referenceDate)
+    }
+
+    private func shouldPublishDisplayHistory(referenceDate: Date, mode: SamplingMode) -> Bool {
+        let interval: TimeInterval
+        switch mode {
+        case .foreground:
+            interval = Self.foregroundDisplayHistoryInterval
+        case .background:
+            interval = Self.backgroundDisplayHistoryInterval
+        }
+
+        return shouldRun(lastDate: lastDisplayHistoryPublishDate, referenceDate: referenceDate, interval: interval)
+    }
+
+    private func publishDisplayHistory(referenceDate: Date, force: Bool = false) {
+        guard force || shouldPublishDisplayHistory(referenceDate: referenceDate, mode: mode) else {
+            return
+        }
+
+        var updatedSnapshot = snapshot
+        updatedSnapshot.history = displayHistory
+        lastDisplayHistoryPublishDate = referenceDate
+        publishSnapshotIfChanged(updatedSnapshot)
+    }
+
+    private func publishSnapshotIfChanged(_ updatedSnapshot: SystemStatusSnapshot) {
+        guard updatedSnapshot != snapshot else {
+            return
+        }
+
+        snapshot = updatedSnapshot
+    }
+
+    private static func prunedDisplayHistory(
+        _ points: [SystemStatusHistoryPoint],
+        referenceDate: Date
+    ) -> [SystemStatusHistoryPoint] {
+        let cutoff = referenceDate.timeIntervalSince1970 - displayHistoryRetention
+        let recentPoints = points
+            .filter { $0.timestamp >= cutoff && $0.timestamp <= referenceDate.timeIntervalSince1970 + 60 }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard recentPoints.count > maximumDisplayHistoryCount else {
+            return recentPoints
+        }
+
+        return Array(recentPoints.suffix(maximumDisplayHistoryCount))
     }
 
     private static func resolveApplicationNames(for processes: [SystemStatusTopProcess]) async -> [SystemStatusTopProcess] {
@@ -214,37 +468,13 @@ struct SystemStatusComponentView: View {
     }
 
     @ObservedObject var viewModel: SystemStatusViewModel
-    let isPanelVisible: Bool
     let localization: PluginLocalization
 
     var body: some View {
-        GeometryReader { proxy in
-            let rowHeight = max(0, (proxy.size.height - Layout.spacing) / 2)
-
-            VStack(spacing: Layout.spacing) {
-                HStack(spacing: Layout.spacing) {
-                    compactCPUCard
-                    compactMemoryCard
-                    compactDiskCard
-                    compactBatteryCard
-                }
-                .frame(height: rowHeight)
-
-                HStack(spacing: Layout.spacing) {
-                    networkCard
-                    topProcessesCard
-                }
-                .frame(height: rowHeight)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            if isPanelVisible {
-                viewModel.start()
-            }
-        }
-        .onDisappear { viewModel.stop() }
+        SystemStatusDashboardView(snapshot: viewModel.snapshot, localization: localization)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .onAppear { viewModel.startForeground() }
+        .onDisappear { viewModel.returnToBackground() }
     }
 
     private var compactCPUCard: some View {

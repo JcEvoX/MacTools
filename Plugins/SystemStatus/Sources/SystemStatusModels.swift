@@ -3,6 +3,7 @@ import MacToolsPluginKit
 
 enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
     case cpu
+    case gpu
     case memory
     case disk
     case battery
@@ -13,6 +14,8 @@ enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
         switch self {
         case .cpu:
             return "CPU"
+        case .gpu:
+            return "GPU"
         case .memory:
             return localization.string("metric.memory", defaultValue: "内存")
         case .disk:
@@ -25,6 +28,25 @@ enum SystemStatusMetricKind: String, CaseIterable, Equatable, Sendable {
             return localization.string("metric.topProcesses", defaultValue: "进程")
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .cpu:
+            return "cpu"
+        case .gpu:
+            return "display"
+        case .memory:
+            return "memorychip"
+        case .disk:
+            return "internaldrive"
+        case .battery:
+            return "battery.75percent"
+        case .network:
+            return "wifi"
+        case .topProcesses:
+            return "list.bullet.rectangle"
+        }
+    }
 }
 
 struct SystemStatusGridPosition: Equatable, Sendable {
@@ -35,16 +57,26 @@ struct SystemStatusGridPosition: Equatable, Sendable {
 enum SystemStatusComponentLayout {
     static let cardCornerRadius = PluginComponentPanelLayoutMetrics.cardCornerRadius
     static let cardSpacing: CGFloat = 6
-    static let cardContentPadding: CGFloat = 6
-    static let columns = 4
-    static let rows = 2
+    static let cardContentPadding: CGFloat = 8
+    static let columns = 2
+    static let rows = 3
+
+    static let dashboardSectionSpacing: CGFloat = cardSpacing
+    static let dashboardMetricTileHeight: CGFloat = 99
+    static let dashboardLowerTileHeight: CGFloat = 96
+    static let dashboardMetricGridHeight = CGFloat(rows) * dashboardMetricTileHeight
+        + CGFloat(max(rows - 1, 0)) * cardSpacing
+    static let dashboardContentHeight = dashboardMetricGridHeight
+        + dashboardSectionSpacing
+        + dashboardLowerTileHeight
+
     static let orderedMetricKinds: [SystemStatusMetricKind] = [
         .cpu,
+        .gpu,
         .memory,
-        .disk,
-        .battery,
         .network,
-        .topProcesses
+        .disk,
+        .battery
     ]
 
     static func position(for metric: SystemStatusMetricKind) -> SystemStatusGridPosition? {
@@ -53,27 +85,33 @@ enum SystemStatusComponentLayout {
         }
 
         return SystemStatusGridPosition(
-            row: index < columns ? 0 : 1,
-            column: index < columns ? index : (index - columns) * 2
+            row: index / columns,
+            column: index % columns
         )
     }
 }
 
 struct SystemStatusSnapshot: Equatable, Sendable {
     var cpu: SystemStatusCPUSnapshot
+    var gpu: SystemStatusGPUSnapshot
     var memory: SystemStatusMemorySnapshot
     var disk: SystemStatusDiskSnapshot
     var battery: SystemStatusBatterySnapshot
     var network: SystemStatusNetworkSnapshot
     var topProcesses: [SystemStatusTopProcess]
+    var hardware: SystemStatusHardwareSnapshot
+    var history: [SystemStatusHistoryPoint]
 
     static let empty = SystemStatusSnapshot(
         cpu: .empty,
+        gpu: .empty,
         memory: .empty,
         disk: .empty,
         battery: .empty,
         network: .empty,
-        topProcesses: []
+        topProcesses: [],
+        hardware: .empty,
+        history: []
     )
 }
 
@@ -81,23 +119,44 @@ struct SystemStatusFastSample: Equatable, Sendable {
     let cpu: SystemStatusCPUSnapshot
     let memory: SystemStatusMemorySnapshot
     let network: SystemStatusNetworkSnapshot
+    let disk: SystemStatusDiskSnapshot
 }
 
 struct SystemStatusSlowSample: Equatable, Sendable {
     let disk: SystemStatusDiskSnapshot
     let battery: SystemStatusBatterySnapshot
+    let gpu: SystemStatusGPUSnapshot
+    let hardware: SystemStatusHardwareSnapshot
 }
 
 struct SystemStatusCPUSnapshot: Equatable, Sendable {
     let usage: Double?
+    let loadAverage1Minute: Double?
     let temperatureCelsius: Double?
     let systemPowerWatts: Double?
     let isCollecting: Bool
 
     static let empty = SystemStatusCPUSnapshot(
         usage: nil,
+        loadAverage1Minute: nil,
         temperatureCelsius: nil,
         systemPowerWatts: nil,
+        isCollecting: true
+    )
+}
+
+struct SystemStatusGPUSnapshot: Equatable, Sendable {
+    let usage: Double?
+    let name: String?
+    let temperatureCelsius: Double?
+    let isAvailable: Bool
+    let isCollecting: Bool
+
+    static let empty = SystemStatusGPUSnapshot(
+        usage: nil,
+        name: nil,
+        temperatureCelsius: nil,
+        isAvailable: false,
         isCollecting: true
     )
 }
@@ -105,6 +164,9 @@ struct SystemStatusCPUSnapshot: Equatable, Sendable {
 struct SystemStatusMemorySnapshot: Equatable, Sendable {
     let usedBytes: UInt64?
     let totalBytes: UInt64?
+    let swapUsedBytes: UInt64?
+    let swapTotalBytes: UInt64?
+    let pressure: SystemStatusMemoryPressure
 
     var usage: Double? {
         guard let usedBytes, let totalBytes, totalBytes > 0 else {
@@ -116,13 +178,38 @@ struct SystemStatusMemorySnapshot: Equatable, Sendable {
 
     static let empty = SystemStatusMemorySnapshot(
         usedBytes: nil,
-        totalBytes: nil
+        totalBytes: nil,
+        swapUsedBytes: nil,
+        swapTotalBytes: nil,
+        pressure: .unknown
     )
+}
+
+enum SystemStatusMemoryPressure: String, Equatable, Sendable {
+    case normal
+    case warning
+    case critical
+    case unknown
+
+    func label(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String? {
+        switch self {
+        case .normal:
+            return localization.string("memory.pressure.normal", defaultValue: "正常")
+        case .warning:
+            return localization.string("memory.pressure.warning", defaultValue: "偏高")
+        case .critical:
+            return localization.string("memory.pressure.critical", defaultValue: "紧张")
+        case .unknown:
+            return nil
+        }
+    }
 }
 
 struct SystemStatusDiskSnapshot: Equatable, Sendable {
     let usedBytes: UInt64?
     let totalBytes: UInt64?
+    let readBytesPerSecond: UInt64?
+    let writeBytesPerSecond: UInt64?
 
     var usage: Double? {
         guard let usedBytes, let totalBytes, totalBytes > 0 else {
@@ -134,8 +221,28 @@ struct SystemStatusDiskSnapshot: Equatable, Sendable {
 
     static let empty = SystemStatusDiskSnapshot(
         usedBytes: nil,
-        totalBytes: nil
+        totalBytes: nil,
+        readBytesPerSecond: nil,
+        writeBytesPerSecond: nil
     )
+
+    func replacingActivity(from disk: SystemStatusDiskSnapshot) -> SystemStatusDiskSnapshot {
+        SystemStatusDiskSnapshot(
+            usedBytes: usedBytes,
+            totalBytes: totalBytes,
+            readBytesPerSecond: disk.readBytesPerSecond,
+            writeBytesPerSecond: disk.writeBytesPerSecond
+        )
+    }
+
+    func replacingCapacity(from disk: SystemStatusDiskSnapshot) -> SystemStatusDiskSnapshot {
+        SystemStatusDiskSnapshot(
+            usedBytes: disk.usedBytes,
+            totalBytes: disk.totalBytes,
+            readBytesPerSecond: readBytesPerSecond,
+            writeBytesPerSecond: writeBytesPerSecond
+        )
+    }
 }
 
 enum SystemStatusBatteryState: Equatable, Sendable {
@@ -172,6 +279,7 @@ struct SystemStatusBatterySnapshot: Equatable, Sendable {
     let adapterWatts: Int?
     let temperatureCelsius: Double?
     let healthPercent: Int?
+    let cycleCount: Int?
 
     static let empty = SystemStatusBatterySnapshot(
         isAvailable: false,
@@ -180,7 +288,8 @@ struct SystemStatusBatterySnapshot: Equatable, Sendable {
         timeRemainingMinutes: nil,
         adapterWatts: nil,
         temperatureCelsius: nil,
-        healthPercent: nil
+        healthPercent: nil,
+        cycleCount: nil
     )
 }
 
@@ -222,6 +331,7 @@ struct SystemStatusTopProcess: Identifiable, Equatable, Sendable {
     let command: String
     let cpuPercent: Double
     let memoryPercent: Double
+    let memoryBytes: UInt64?
 
     var id: Int { pid }
 
@@ -231,9 +341,91 @@ struct SystemStatusTopProcess: Identifiable, Equatable, Sendable {
             displayName: displayName,
             command: command,
             cpuPercent: cpuPercent,
-            memoryPercent: memoryPercent
+            memoryPercent: memoryPercent,
+            memoryBytes: memoryBytes
         )
     }
+}
+
+struct SystemStatusHardwareSnapshot: Equatable, Sendable {
+    let modelName: String?
+    let chipName: String?
+    let macOSVersion: String
+    let uptimeSeconds: TimeInterval?
+    let totalMemoryBytes: UInt64?
+
+    static let empty = SystemStatusHardwareSnapshot(
+        modelName: nil,
+        chipName: nil,
+        macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+        uptimeSeconds: nil,
+        totalMemoryBytes: nil
+    )
+
+    func replacingUptime(_ uptimeSeconds: TimeInterval?) -> SystemStatusHardwareSnapshot {
+        SystemStatusHardwareSnapshot(
+            modelName: modelName,
+            chipName: chipName,
+            macOSVersion: macOSVersion,
+            uptimeSeconds: uptimeSeconds,
+            totalMemoryBytes: totalMemoryBytes
+        )
+    }
+}
+
+struct SystemStatusHistoryPoint: Codable, Equatable, Sendable {
+    let timestamp: TimeInterval
+    let cpuUsage: Double?
+    let gpuUsage: Double?
+    let memoryUsage: Double?
+    let diskUsage: Double?
+    let diskReadBytesPerSecond: UInt64?
+    let diskWriteBytesPerSecond: UInt64?
+    let networkDownloadBytesPerSecond: UInt64?
+    let networkUploadBytesPerSecond: UInt64?
+    let batteryLevel: Double?
+
+    init(timestamp: TimeInterval, snapshot: SystemStatusSnapshot) {
+        self.timestamp = timestamp
+        self.cpuUsage = snapshot.cpu.usage
+        self.gpuUsage = snapshot.gpu.usage
+        self.memoryUsage = snapshot.memory.usage
+        self.diskUsage = snapshot.disk.usage
+        self.diskReadBytesPerSecond = snapshot.disk.readBytesPerSecond
+        self.diskWriteBytesPerSecond = snapshot.disk.writeBytesPerSecond
+        self.networkDownloadBytesPerSecond = snapshot.network.downloadBytesPerSecond
+        self.networkUploadBytesPerSecond = snapshot.network.uploadBytesPerSecond
+        self.batteryLevel = snapshot.battery.level
+    }
+
+    init(
+        timestamp: TimeInterval,
+        cpuUsage: Double? = nil,
+        gpuUsage: Double? = nil,
+        memoryUsage: Double? = nil,
+        diskUsage: Double? = nil,
+        diskReadBytesPerSecond: UInt64? = nil,
+        diskWriteBytesPerSecond: UInt64? = nil,
+        networkDownloadBytesPerSecond: UInt64? = nil,
+        networkUploadBytesPerSecond: UInt64? = nil,
+        batteryLevel: Double? = nil
+    ) {
+        self.timestamp = timestamp
+        self.cpuUsage = cpuUsage
+        self.gpuUsage = gpuUsage
+        self.memoryUsage = memoryUsage
+        self.diskUsage = diskUsage
+        self.diskReadBytesPerSecond = diskReadBytesPerSecond
+        self.diskWriteBytesPerSecond = diskWriteBytesPerSecond
+        self.networkDownloadBytesPerSecond = networkDownloadBytesPerSecond
+        self.networkUploadBytesPerSecond = networkUploadBytesPerSecond
+        self.batteryLevel = batteryLevel
+    }
+}
+
+struct SystemStatusHistoryDocument: Codable, Equatable, Sendable {
+    let schemaVersion: Int
+    var samples: [SystemStatusHistoryPoint]
 }
 
 struct SystemStatusCPUTicks: Equatable, Sendable {
@@ -314,6 +506,21 @@ struct SystemStatusNetworkCounter: Equatable, Sendable {
     let sentBytes: UInt64
     let ipAddress: String?
     let isUp: Bool
+
+    func replacingCounters(from counter: SystemStatusNetworkCounter?) -> SystemStatusNetworkCounter {
+        guard let counter else {
+            return self
+        }
+
+        return SystemStatusNetworkCounter(
+            key: counter.key,
+            displayName: displayName,
+            receivedBytes: counter.receivedBytes,
+            sentBytes: counter.sentBytes,
+            ipAddress: ipAddress,
+            isUp: isUp
+        )
+    }
 }
 
 struct SystemStatusNetworkRate: Equatable, Sendable {
@@ -322,6 +529,8 @@ struct SystemStatusNetworkRate: Equatable, Sendable {
 }
 
 enum SystemStatusNetworkRateCalculator {
+    private static let maximumBytesPerSecond: UInt64 = 2_000_000_000
+
     static func rate(
         current: SystemStatusNetworkCounter,
         previous: SystemStatusNetworkCounter,
@@ -335,13 +544,67 @@ enum SystemStatusNetworkRateCalculator {
         let sentDelta = positiveDelta(current.sentBytes, previous.sentBytes)
 
         return SystemStatusNetworkRate(
-            downloadBytesPerSecond: UInt64(Double(receivedDelta) / elapsedSeconds),
-            uploadBytesPerSecond: UInt64(Double(sentDelta) / elapsedSeconds)
+            downloadBytesPerSecond: clampedBytesPerSecond(receivedDelta, elapsedSeconds: elapsedSeconds),
+            uploadBytesPerSecond: clampedBytesPerSecond(sentDelta, elapsedSeconds: elapsedSeconds)
         )
     }
 
     private static func positiveDelta(_ current: UInt64, _ previous: UInt64) -> UInt64 {
         current >= previous ? current - previous : 0
+    }
+
+    private static func clampedBytesPerSecond(_ delta: UInt64, elapsedSeconds: TimeInterval) -> UInt64 {
+        let bytesPerSecond = UInt64(Double(delta) / elapsedSeconds)
+        guard bytesPerSecond <= maximumBytesPerSecond else {
+            return 0
+        }
+
+        return bytesPerSecond
+    }
+}
+
+struct SystemStatusDiskIOCounter: Equatable, Sendable {
+    let readBytes: UInt64
+    let writeBytes: UInt64
+}
+
+struct SystemStatusDiskIORate: Equatable, Sendable {
+    let readBytesPerSecond: UInt64
+    let writeBytesPerSecond: UInt64
+}
+
+enum SystemStatusDiskIORateCalculator {
+    private static let maximumBytesPerSecond: UInt64 = 10_000_000_000
+
+    static func rate(
+        current: SystemStatusDiskIOCounter,
+        previous: SystemStatusDiskIOCounter,
+        elapsedSeconds: TimeInterval
+    ) -> SystemStatusDiskIORate? {
+        guard elapsedSeconds > 0 else {
+            return nil
+        }
+
+        let readDelta = positiveDelta(current.readBytes, previous.readBytes)
+        let writeDelta = positiveDelta(current.writeBytes, previous.writeBytes)
+
+        return SystemStatusDiskIORate(
+            readBytesPerSecond: clampedBytesPerSecond(readDelta, elapsedSeconds: elapsedSeconds),
+            writeBytesPerSecond: clampedBytesPerSecond(writeDelta, elapsedSeconds: elapsedSeconds)
+        )
+    }
+
+    private static func positiveDelta(_ current: UInt64, _ previous: UInt64) -> UInt64 {
+        current >= previous ? current - previous : 0
+    }
+
+    private static func clampedBytesPerSecond(_ delta: UInt64, elapsedSeconds: TimeInterval) -> UInt64 {
+        let bytesPerSecond = UInt64(Double(delta) / elapsedSeconds)
+        guard bytesPerSecond <= maximumBytesPerSecond else {
+            return 0
+        }
+
+        return bytesPerSecond
     }
 }
 
@@ -380,10 +643,10 @@ enum SystemStatusFormatter {
 
     static func temperature(_ celsius: Double?) -> String {
         guard let celsius else {
-            return "—℃"
+            return "—°C"
         }
 
-        return "\(format(celsius, fractionDigits: 0))℃"
+        return "\(format(celsius, fractionDigits: 0))°C"
     }
 
     static func power(_ watts: Double?) -> String {
@@ -393,6 +656,14 @@ enum SystemStatusFormatter {
 
         let fractionDigits = watts < 10 ? 1 : 0
         return "\(format(watts, fractionDigits: fractionDigits))W"
+    }
+
+    static func rpm(_ rpm: Double?) -> String {
+        guard let rpm else {
+            return "—"
+        }
+
+        return "\(format(rpm, fractionDigits: 0)) RPM"
     }
 
     static func timeRemaining(
@@ -414,6 +685,21 @@ enum SystemStatusFormatter {
         }
 
         return "\(hours)h \(remainingMinutes)m"
+    }
+
+    static func uptime(_ seconds: TimeInterval?) -> String {
+        guard let seconds, seconds >= 0 else {
+            return "—"
+        }
+
+        let totalHours = Int(seconds / 3_600)
+        let days = totalHours / 24
+        let hours = totalHours % 24
+        if days > 0 {
+            return "\(days)d \(hours)h"
+        }
+
+        return "\(max(totalHours, 0))h"
     }
 
     private static func numericPercent(_ value: Double, fractionDigits: Int) -> String {

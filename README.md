@@ -48,7 +48,7 @@
 | Lock Screen | Lock the screen immediately, equivalent to Cmd+Ctrl+Q. |
 | Launch Items | Browse LaunchAgent/LaunchDaemon entries with search, field explanations, and user-level enable/disable controls. |
 | Calendar Widget | View a monthly calendar, lunar calendar data, holidays, and today's events in the component panel. |
-| System Status | Show CPU, memory, disk, battery, network throughput, and high-usage processes. |
+| System Status | Show 1-hour charts for CPU, GPU, memory, disk, network, battery, and high-usage processes. |
 | Activity Stats | Track keyboard, mouse, scroll, and foreground app usage, with manual hooks for Claude Code, Cursor, and Codex activity. |
 | Device Battery | Aggregate battery levels for the Mac, Bluetooth peripherals, AirPods/Beats split batteries and charging state, and Rapoo VT series mice, with multiple widget layouts. |
 | Fan Control | Manage fan speed presets with automatic, full-speed, and custom fixed-RPM modes; installs the bundled helper and requests administrator authorization on first control. |
