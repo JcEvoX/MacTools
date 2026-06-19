@@ -5,24 +5,23 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.20</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.20</link>
-            <sparkle:version>50</sparkle:version>
-            <sparkle:shortVersionString>1.0.20</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.20 -->
+            <title>Version 1.0.21</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.21</link>
+            <sparkle:version>51</sparkle:version>
+            <sparkle:shortVersionString>1.0.21</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.21 -->
 
 ## What's Changed
 ### Other Changes
-* Fix ActivityBar component card chrome by @char1eslu in https://github.com/ggbond268/MacTools/pull/140
-* Fix brightness refresh for reconnected displays by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/141
-* Feature/display power switch by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/144
+* Make built-in display restore more conservative by @rkrkrkk in https://github.com/ggbond268/MacTools/pull/145
+* macOS 27: revive menu-bar right-click + fix beta breakages (macOS ≤26 byte-identical) by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/142
 
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.19...v1.0.20
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.20...v1.0.21
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Wed, 17 Jun 2026 04:23:18 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.20/MacTools.dmg" length="6129278" type="application/octet-stream" sparkle:edSignature="HddGA5YKyGf95qYC4snXS6DgC7ermBAb+bAwM3GfzCA2BFI9IK//Mx+7wXV76yB+ss/5Ee+ipbD+83y1TS1SDQ==" />
+            <pubDate>Fri, 19 Jun 2026 07:08:26 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.21/MacTools.dmg" length="6124617" type="application/octet-stream" sparkle:edSignature="OBNiXkjx1RBnbkdPP0JT7Qxp5rKbUE5iMejfb98jcY1hm1Xp456sXqIIB2y0nOCo0UDXI6K0ZCE0AQfIIyZ9Cw==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
