@@ -73,6 +73,7 @@ final class MenuBarStatusItemCompatibilityTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testMissingBackingWindowIsTreatedAsStub() {
         XCTAssertTrue(MenuBarStatusItemHostCompatibility.isStubBackingWindow(nil))
     }
@@ -91,33 +92,33 @@ final class MenuBarStatusItemCompatibilityTests: XCTestCase {
         )
     }
 
-    func testStubWindowSwitchesToUpMask() {
+    func testStubWindowSwitchesToLeftUpMask() {
         XCTAssertEqual(
             MenuBarStatusItemHostCompatibility.sendActionMask(
                 buttonWindowIsStub: true,
                 isMacOS27OrLater: false
             ),
-            [.leftMouseUp, .rightMouseUp]
+            [.leftMouseUp]
         )
     }
 
-    func testMacOS27GateSwitchesToUpMaskEvenWithoutStubProbe() {
+    func testMacOS27GateSwitchesToLeftUpMaskEvenWithoutStubProbe() {
         XCTAssertEqual(
             MenuBarStatusItemHostCompatibility.sendActionMask(
                 buttonWindowIsStub: false,
                 isMacOS27OrLater: true
             ),
-            [.leftMouseUp, .rightMouseUp]
+            [.leftMouseUp]
         )
     }
 
-    func testStubAndOSGateTogetherStillUpMask() {
+    func testStubAndOSGateTogetherStillLeftUpMask() {
         XCTAssertEqual(
             MenuBarStatusItemHostCompatibility.sendActionMask(
                 buttonWindowIsStub: true,
                 isMacOS27OrLater: true
             ),
-            [.leftMouseUp, .rightMouseUp]
+            [.leftMouseUp]
         )
     }
 

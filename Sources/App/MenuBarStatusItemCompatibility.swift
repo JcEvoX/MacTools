@@ -12,7 +12,8 @@ import AppKit
 // In that hosting mode the system only delivers `.leftMouseUp` to the
 // button's action (mouseDown never arrives, so a down-only sendAction mask
 // makes the item completely dead; right mouse events are not routed to
-// third-party items at all). Older systems must keep the historical
+// third-party items at all). MacTools keeps the secondary panel reachable on
+// that host with Option+left-click. Older systems must keep the historical
 // down-mask byte-for-byte: registering both down and up there would
 // double-trigger every click.
 
@@ -32,6 +33,7 @@ enum MenuBarStatusItemHostCompatibility {
     /// A status item button without any backing window is treated as stub
     /// hosting as well — on every shipping macOS (14…26) the button is placed
     /// into a real status bar window synchronously at creation.
+    @MainActor
     static func isStubBackingWindow(_ window: NSWindow?) -> Bool {
         guard let window else { return true }
         return isStubBackingWindow(
@@ -58,7 +60,7 @@ enum MenuBarStatusItemHostCompatibility {
         return false
     }
 
-    /// Pure mask decision, OS-gated by the caller. Up-mask only when the new
+    /// Pure mask decision, OS-gated by the caller. Left-up only when the new
     /// single-window menu bar host was detected (runtime stub probe) or the
     /// OS is known to use it (macOS 27+); otherwise the legacy down-mask is
     /// preserved unchanged.
@@ -67,7 +69,7 @@ enum MenuBarStatusItemHostCompatibility {
         isMacOS27OrLater: Bool
     ) -> NSEvent.EventTypeMask {
         if buttonWindowIsStub || isMacOS27OrLater {
-            return [.leftMouseUp, .rightMouseUp]
+            return [.leftMouseUp]
         }
         return [.leftMouseDown, .rightMouseDown]
     }

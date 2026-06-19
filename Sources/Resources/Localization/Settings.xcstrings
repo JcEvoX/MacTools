@@ -855,19 +855,19 @@
         }
       }
     },
-    "menuBarClick.betaRightClickNotice": {
+    "menuBarClick.secondaryShortcutNotice": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "On macOS 27, right-clicking the menu bar icon needs Accessibility permission to work; Option-click also opens the secondary panel."
+            "value": "Use Option-click to trigger secondary click behavior. On macOS 14-26, right-click and Control-click also work."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 macOS 27 上，右键菜单栏图标需开启「辅助功能」权限才生效；也可用 Option+左键打开次级面板。"
+            "value": "可用 Option+左键触发次点击；macOS 14-26 也支持右键或 Control+点按。"
           }
         }
       }
@@ -878,13 +878,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When off, left-click opens the dashboard and right-click opens the feature panel. When on, the click behaviors are swapped."
+            "value": "When off, primary click opens the dashboard and secondary click opens the feature panel. When on, the behaviors are swapped."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭时左键打开仪表盘、右键打开功能面板；开启后左右键行为互换。"
+            "value": "关闭时主点击打开仪表盘、次点击打开功能面板；开启后互换。"
           }
         }
       }
@@ -895,13 +895,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When enabled, left-click opens the feature panel and right-click opens the dashboard"
+            "value": "When enabled, primary click opens the feature panel and secondary click opens the dashboard"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开启后左键打开功能面板，右键打开仪表盘"
+            "value": "开启后主点击打开功能面板，次点击打开仪表盘"
           }
         }
       }
@@ -912,13 +912,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Swap Left and Right Click"
+            "value": "Swap Primary and Secondary Click"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "交换左右键点击行为"
+            "value": "交换主/次点击行为"
           }
         }
       }
@@ -929,13 +929,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Swap left and right click behavior"
+            "value": "Swap primary and secondary click behavior"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "交换左右键点击行为"
+            "value": "交换主/次点击行为"
           }
         }
       }

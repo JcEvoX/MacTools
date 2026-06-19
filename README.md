@@ -60,7 +60,7 @@
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, and restore the default icon. |
 | Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
 
-> **macOS 27 note:** The new single-window menu bar host no longer routes right-clicks to third-party menu bar icons through the usual channels. MacTools restores right-click with a listen-only accessibility event tap that reads the icon's live position on each click, so **grant Accessibility permission** for it to work. **Option-click** on the MacTools icon also opens the secondary panel and needs no permission.
+> **Secondary click:** Option-click the MacTools icon to open the secondary panel on every supported macOS version. On macOS 27, use Option-click because the new single-window menu bar host no longer routes right-clicks to third-party menu bar icons through the usual channels.
 
 ## Install
 

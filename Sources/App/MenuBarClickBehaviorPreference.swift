@@ -1,9 +1,11 @@
 import Foundation
 
-/// Whether the left/right click behaviors on the menu bar status item are swapped.
+/// Whether the primary/secondary click behaviors on the menu bar status item are swapped.
 ///
 /// - `.standard`: primary click (left) opens the dashboard (component panel);
-///   secondary click (right or Control-click) opens the feature panel.
+///   secondary click opens the feature panel. Option+left-click is supported
+///   on every macOS version; macOS 14...26 also keep native right-click and
+///   Control-click when AppKit routes them.
 /// - `.swapped`: primary click opens the feature panel; secondary click opens
 ///   the dashboard.
 enum MenuBarClickBehaviorPreference: String {

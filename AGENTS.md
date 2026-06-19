@@ -91,7 +91,7 @@
 ## 文档与资源
 - 用户可见功能变化需同步更新 `README.md`。
 - 插件目录、manifest、catalog 或发布流程变化需同步更新 `docs/plugins/` 和 `CONTRIBUTING.md`。
-- 大型产品/交互变更可在 `docs/superpowers/specs/` 或 `docs/superpowers/plans/` 添加日期前缀文档。
+- 大型产品/交互变更可在 `docs/superpowers/plans/` 添加日期前缀文档。
 - 图标、asset catalog、`LocalConfig.xcconfig`、发布 env 文件通常由用户或生成流程维护；不要无关改动。
 
 ## Agent 工作流

@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import OSLog
 import SwiftUI
 import MacToolsPluginKit
 
@@ -14,32 +13,33 @@ enum MenuBarStatusItemInvocation: Hashable {
         liveModifierFlags: NSEvent.ModifierFlags = [],
         isMacOS27OrLater: Bool = false
     ) -> MenuBarStatusItemInvocation {
-        // A secondary click is a right-click or a Control-click on EVERY OS;
-        // everything else (including a nil event for programmatic fallback) is
-        // a primary click.
+        // Option+left-click is always a secondary click. On macOS ≤26 the
+        // historical right-click / Control-click routes stay secondary too.
+        // macOS 27's rehosted single-window menu bar does not route right mouse
+        // events to third-party status items, so Option+left-click is the
+        // supported secondary pointer path there.
         //
-        // Option+left and the live keyboard-state channel are macOS 27-only
-        // additions, gated on `isMacOS27OrLater`. The rehosted single-window
-        // menu bar host there does not route right mouse events to third-party
-        // status items at all, and it SYNTHESIZES the action's leftMouseUp with
-        // its modifiers stripped (observed live on 26A5353q: modifiers always 0
-        // even for physical Option-clicks), so on 27 the event alone cannot
-        // carry the user's intent — Option+left plus the caller-sampled live
-        // keyboard state (`NSEvent.modifierFlags` class property) are the only
-        // secondary channels left. On macOS ≤26 they are deliberately NOT
-        // consulted, so right/Control-click behavior stays byte-for-byte
-        // identical to the pre-27 path.
+        // The macOS 27 host also synthesizes the action's leftMouseUp with its
+        // modifiers stripped (observed live on 26A5353q: modifiers always 0
+        // even for physical Option-clicks), so the caller-sampled live keyboard
+        // state (`NSEvent.modifierFlags` class property) carries the Option
+        // intent there. On macOS ≤26 the live channel is deliberately NOT
+        // consulted, preserving the pre-27 path.
         let isSecondary: Bool = {
             guard let event else { return false }
+            let isLeftClick = event.type == .leftMouseDown || event.type == .leftMouseUp
+            if isLeftClick, event.modifierFlags.contains(.option) {
+                return true
+            }
+            if isMacOS27OrLater {
+                return isLeftClick && liveModifierFlags.contains(.option)
+            }
             if event.type == .rightMouseDown
                 || event.type == .rightMouseUp
                 || event.modifierFlags.contains(.control) {
                 return true
             }
-            guard isMacOS27OrLater else { return false }
-            return event.modifierFlags.contains(.option)
-                || liveModifierFlags.contains(.control)
-                || liveModifierFlags.contains(.option)
+            return false
         }()
 
         let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
@@ -51,26 +51,16 @@ enum MenuBarStatusItemInvocation: Hashable {
     /// carries no NSEvent, so left vs. right click cannot be distinguished
     /// there at all; the caller-sampled live keyboard state
     /// (`NSEvent.modifierFlags` class property) is the only modifier channel.
-    /// Control or Option held at session begin selects the secondary panel,
-    /// mirroring the event-based rules above.
+    /// Option held at session begin selects the secondary panel, mirroring the
+    /// macOS 27 event-based rule above.
     static func invocationForExpandedSession(
         swapped: Bool,
         liveModifierFlags: NSEvent.ModifierFlags
     ) -> MenuBarStatusItemInvocation {
-        let isSecondary = liveModifierFlags.contains(.control)
-            || liveModifierFlags.contains(.option)
+        let isSecondary = liveModifierFlags.contains(.option)
         let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
         let secondary: MenuBarStatusItemInvocation = swapped ? .componentPanel : .featurePanel
         return isSecondary ? secondary : primary
-    }
-
-    /// macOS 27 secondary-click event-tap entry. A right-click reaches the app
-    /// only through the listen-only CGEvent tap there; that path is
-    /// unconditionally a secondary gesture, so it always selects the secondary
-    /// panel (feature panel by default, dashboard when the click behavior is
-    /// swapped).
-    static func invocationForSecondaryClickTap(swapped: Bool) -> MenuBarStatusItemInvocation {
-        swapped ? .componentPanel : .featurePanel
     }
 }
 
@@ -108,21 +98,6 @@ final class MenuBarStatusItemController: NSObject {
     // controller must own the adapter strongly or callbacks silently stop.
     private let expandedInterfaceAdapter = MenuBarStatusItemExpandedInterfaceAdapter()
     private let expandedSessionCoordinator = MenuBarExpandedSessionCoordinator()
-    // macOS 27 only: revives the right-click on our icon (the rehosted menu bar
-    // routes it nowhere high-level). nil when uninstalled — no Accessibility
-    // trust or tap-create failure — in which case Option+left-click remains the
-    // secondary path. Owns its own permission observer so granting/revoking
-    // Accessibility at runtime installs/tears down the tap without a relaunch.
-    private var secondaryClickTap: MenuBarSecondaryClickTap?
-    private var secondaryClickAccessibilityObserver: AccessibilityPermissionObserver?
-    // True for the whole lifetime of a panel opened by the right-click tap.
-    // While set, the macOS 27 host's expandedInterfaceSession events for that
-    // panel are neutralized: a didBegin is adopted (so a later close can cancel
-    // the host session) but never re-resolved into a second panel, and a
-    // host-initiated didEnd does NOT dismiss — the panel is owned by the tap and
-    // the outside-click monitors, not by the host's jittery session lifecycle.
-    // Cleared when the panel is actually closed (requestPanelClose/dismissPanels).
-    private var secondaryClickPanelActive = false
     private var animationTimer: DispatchSourceTimer?
     private var animationLoadSampleTimer: Timer?
     private let animationLoadMonitor = MenuBarIconAnimationLoadMonitor()
@@ -224,14 +199,10 @@ final class MenuBarStatusItemController: NSObject {
             if let statusItemWindowMoveObserver {
                 NotificationCenter.default.removeObserver(statusItemWindowMoveObserver)
             }
-            secondaryClickTap?.stop()
         }
     }
 
     func dismissPanels() {
-        // Backstop: any final close clears the right-click ownership flag, even
-        // on paths that reach dismissPanels without going through requestPanelClose.
-        secondaryClickPanelActive = false
         panelPresenter.dismissPanels()
         removeDismissMonitorsIfNeeded()
     }
@@ -244,10 +215,6 @@ final class MenuBarStatusItemController: NSObject {
     /// no active session this is a plain `dismissPanels()`, identical to the
     /// macOS ≤26 behavior.
     private func requestPanelClose() {
-        // The panel is closing; from here the host session lifecycle is handled
-        // normally again. Cleared BEFORE cancel so the synchronous didEnd it
-        // triggers takes the normal dismissing path rather than being ignored.
-        secondaryClickPanelActive = false
         expandedSessionCoordinator.requestClose(
             cancel: { session in
                 MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: session)
@@ -263,22 +230,6 @@ final class MenuBarStatusItemController: NSObject {
     /// plus the live keyboard state. Presentation reuses the existing toggle
     /// paths so `installDismissMonitorsIfNeeded` keeps owning the close side.
     private func handleExpandedSessionBegin(_ session: NSObject) {
-        if secondaryClickPanelActive {
-            // While our right-click panel is up the host keeps emitting session
-            // begins for it (the initial present side-effect, plus re-begins
-            // after its own jittery didEnd). Adopt the session so a later close
-            // can cancel it, but never re-resolve the invocation or re-toggle —
-            // a host-resolved begin would open a conflicting primary panel.
-            if let replaced = expandedSessionCoordinator.sessionDidBegin(session) {
-                MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: replaced)
-                _ = expandedSessionCoordinator.sessionDidBegin(session)
-            }
-            MenuBarStatusItemDiagnostics.trace(
-                "expanded session adopted by active right-click panel (no re-toggle)"
-            )
-            return
-        }
-
         if let replacedSession = expandedSessionCoordinator.sessionDidBegin(session) {
             // A superseded session must not stay alive host-side; cancelling
             // fires its didEnd synchronously on this same delegate. didEnd
@@ -340,17 +291,6 @@ final class MenuBarStatusItemController: NSObject {
     /// inside `requestPanelClose()` (coordinator re-entry guard absorbs the
     /// loop) or directly should the host ever end a session itself.
     private func handleExpandedSessionEnd(animated: Bool) {
-        if secondaryClickPanelActive {
-            // Host ended the session on its own (lifecycle jitter) while our
-            // right-click panel is still up. Clear the coordinator's session
-            // WITHOUT dismissing — the panel stays until the user closes it
-            // (re-right-click or outside click, both via requestPanelClose).
-            expandedSessionCoordinator.sessionDidEnd(dismiss: {})
-            MenuBarStatusItemDiagnostics.trace(
-                "expanded session end ignored; right-click panel stays"
-            )
-            return
-        }
         expandedSessionCoordinator.sessionDidEnd { [weak self] in
             self?.dismissPanels()
         }
@@ -405,133 +345,6 @@ final class MenuBarStatusItemController: NSObject {
             }
         }
 
-        configureSecondaryClickTapIfNeeded()
-    }
-
-    /// macOS 27 only: install the listen-only right-click event tap. On macOS
-    /// ≤26 the right-click already reaches the action route, so the tap is
-    /// never installed and host behavior is byte-for-byte unchanged.
-    private func configureSecondaryClickTapIfNeeded() {
-        guard #available(macOS 27.0, *) else { return }
-        guard secondaryClickTap == nil else { return }
-
-        let tap = MenuBarSecondaryClickTap(
-            onSecondaryClick: { [weak self] appKitLocation in
-                self?.handleSecondaryClickFromTap(at: appKitLocation)
-            },
-            // Live frame, never cached: read the button's backing-window frame
-            // on every event. NOT statusItemButtonScreenRect() — that collapses
-            // to nil under the stub host by design.
-            //
-            // IMPORTANT (recorded device fact, 26A5353q): the raw window frame
-            // is degenerate only at LAUNCH (`{{0,0},{22,0}}`, zero height); the
-            // host finishes placing the item a moment later, and by click time
-            // it reports a real icon rect (observed `{{1478,1084},{22,33}}`).
-            // Because the frame is read LIVE on every event, an on-icon
-            // right-click hits and opens the secondary panel — VERIFIED WORKING
-            // on device (diag log: dozens of `hit=true` → `featurePanel`). A
-            // frame still degenerate for a given event (item not placed yet, or
-            // a transient relayout) is rejected by
-            // MenuBarSecondaryClickHitTest.isUsableFrame, so the tap just misses
-            // that one event. The path is fail-safe either way (listen-only,
-            // never a false trigger) and needs Accessibility permission to
-            // install; Option+left is the no-permission fallback.
-            buttonFrameProvider: { [weak self] in
-                self?.statusItem.button?.window?.frame
-            }
-        )
-
-        // Try once now; success depends on Accessibility trust. Whether or not
-        // it installs, observe permission changes so a later grant installs the
-        // tap (and a revoke tears it down) without relaunching.
-        secondaryClickTap = tap
-        let started = tap.start()
-        MenuBarStatusItemDiagnostics.trace("secondary-click tap configure: start()=\(started) axTrusted=\(AccessibilityCheck.isTrusted())")
-        observeAccessibilityForSecondaryClickTap()
-    }
-
-    private func observeAccessibilityForSecondaryClickTap() {
-        guard secondaryClickAccessibilityObserver == nil else { return }
-        let observer = AccessibilityPermissionObserver()
-        observer.onPermissionChange = { [weak self] in
-            self?.refreshSecondaryClickTapForPermissionChange()
-        }
-        secondaryClickAccessibilityObserver = observer
-    }
-
-    private func refreshSecondaryClickTapForPermissionChange() {
-        guard let tap = secondaryClickTap else { return }
-        if AccessibilityCheck.isTrusted() {
-            tap.start()
-        } else {
-            tap.stop()
-        }
-    }
-
-    /// Secondary-click tap fired (macOS 27 right-click on our icon, AppKit
-    /// global coordinates). The tap is listen-only and the host gives this path
-    /// no expanded-interface session (that is the left-click delegate channel
-    /// only), so present directly and close through the same `requestPanelClose`
-    /// directDismiss route the outside-click monitors use. The session desync
-    /// guard already keeps a later left-click session and this sessionless
-    /// present/dismiss from conflicting.
-    private func handleSecondaryClickFromTap(at screenLocation: CGPoint) {
-        let swapped = MenuBarClickBehaviorPreference.current().isSwapped
-        let invocation = MenuBarStatusItemInvocation.invocationForSecondaryClickTap(swapped: swapped)
-        MenuBarStatusItemDiagnostics.trace(
-            "secondary-click tap invocation=\(String(describing: invocation)) "
-                + MenuBarStatusItemDiagnostics.describeButtonWindow(statusItem.button)
-        )
-
-        // Stub-host de-dup, mirroring the action route. One physical right-click
-        // can reach BOTH this tap and, after it, the async global outside-click
-        // monitor or the workspace-activation observer — each can fire
-        // `requestPanelClose()` for the SAME click. If one of those closed the
-        // panel first, the suppressor (armed on the close, keyed by screen
-        // location + time) marks this click's toggle-off as already done so the
-        // tap does not re-open it. On healthy hosts nothing is ever armed, so
-        // this never matches and behavior is unchanged.
-        let identity = MenuBarStatusItemClickIdentity(
-            eventNumber: 0,
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            screenLocation: screenLocation
-        )
-        if toggleSuppressor.shouldSuppressToggle(for: identity, target: invocation) {
-            MenuBarStatusItemDiagnostics.trace(
-                "secondary-click tap suppressed: same click already dismissed its target panel"
-            )
-            return
-        }
-
-        if panelPresenter.isAnyPanelShown {
-            // Arm suppression for this click before closing so a later
-            // monitor/activation close for the same physical right-click is
-            // absorbed instead of bouncing the panel back open.
-            armToggleSuppressionIfNeeded(for: identity, screenLocation: screenLocation)
-            requestPanelClose()
-            return
-        }
-
-        guard let button = statusItem.button else {
-            AppLog.menuBarSecondaryClickTap.error(
-                "Secondary-click tap fired but the status item button is unavailable"
-            )
-            return
-        }
-
-        switch invocation {
-        case .featurePanel:
-            toggleFeaturePanel(relativeTo: button)
-        case .componentPanel:
-            toggleComponentPanel(relativeTo: button)
-        }
-
-        // Claim tap ownership only if a panel actually opened — the toggle is a
-        // no-op if presentation failed, and a stranded `true` would push every
-        // later expanded-session begin into the adopt/ignore branch and make
-        // normal opens look inert. While genuinely owned, the host session
-        // events for this panel are neutralized — see secondaryClickPanelActive.
-        secondaryClickPanelActive = panelPresenter.isAnyPanelShown
     }
 
     private func observePluginHost() {
@@ -963,10 +776,10 @@ final class MenuBarStatusItemController: NSObject {
         _ click: MenuBarStatusItemClickIdentity,
         screenLocation: NSPoint
     ) {
-        // A click on our own icon is NOT an outside click — the right-click tap
-        // and the action route own it. The global monitor sees the physical
-        // right-up of the very click that opened the panel; without this guard
-        // it lands here and closes the panel a moment after it opened. The
+        // A click on our own icon is NOT an outside click — the status item
+        // action route owns it. The global monitor can see the physical up of
+        // the same click that opened the panel; without this guard it lands
+        // here and closes the panel a moment after it opened. The
         // button's backing-window frame is live and valid even on the macOS 27
         // stub (only its windowNumber is fake), unlike statusItemButtonScreenRect()
         // which is deliberately nil there, so the geometry test works here.

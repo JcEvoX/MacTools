@@ -42,7 +42,8 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
     func testLiveModifierChannelMakesStrippedEventSecondaryOnMacOS27() {
         // macOS 27 reality: the forwarded action event carries no modifiers
         // even for a physical Option-click; the caller-sampled live keyboard
-        // state must carry the intent instead. This channel is macOS 27-only.
+        // state must carry the intent instead. This Option-only channel is
+        // macOS 27-only.
         let strippedEvent = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -65,7 +66,7 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             MenuBarStatusItemInvocation.invocation(
                 for: strippedEvent, liveModifierFlags: [.control], isMacOS27OrLater: true
             ),
-            .featurePanel
+            .componentPanel
         )
         // Non-secondary live modifiers must not flip the invocation.
         XCTAssertEqual(
@@ -74,8 +75,8 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             ),
             .componentPanel
         )
-        // macOS ≤26: the live keyboard channel is NOT consulted; a stripped
-        // event with Option held stays primary (byte-identical to pre-27).
+        // macOS ≤26: the live keyboard channel is NOT consulted; only the
+        // event's own Option flag can make Option+left a secondary click.
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(
                 for: strippedEvent, liveModifierFlags: [.option]
@@ -125,6 +126,25 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
+    func testRightMouseUpStaysPrimaryOnMacOS27FallbackPath() {
+        let event = NSEvent.mouseEvent(
+            with: .rightMouseUp,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        )
+
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
+            .componentPanel
+        )
+    }
+
     func testControlClickOpensFeaturePanel() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
@@ -141,12 +161,28 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    // MARK: - Option+left (macOS 27 secondary-click reachability channel)
+    func testControlClickStaysPrimaryOnMacOS27FallbackPath() {
+        let event = NSEvent.mouseEvent(
+            with: .leftMouseUp,
+            location: .zero,
+            modifierFlags: [.control],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        )
 
-    func testOptionLeftMouseUpOpensFeaturePanelOnMacOS27() {
-        // On the macOS 27 single-window menu bar host right mouse events are
-        // never routed to third-party items, so Option+left must carry the
-        // secondary (feature panel) semantics; the action arrives as mouseUp.
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
+            .componentPanel
+        )
+    }
+
+    // MARK: - Option+left secondary-click channel
+
+    func testOptionLeftMouseUpOpensFeaturePanelOnAllHosts() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -159,16 +195,14 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
             .featurePanel
         )
     }
 
-    func testOptionLeftClickStaysPrimaryOnLegacyHosts() {
-        // macOS ≤26: Option+left is NOT a secondary gesture — right-click and
-        // Control-click already work there, so Option behavior stays
-        // byte-for-byte identical to the shipping pre-27 releases (primary).
+    func testOptionLeftMouseDownOpensFeaturePanelOnAllHosts() {
         let down = NSEvent.mouseEvent(
             with: .leftMouseDown,
             location: .zero,
@@ -180,20 +214,12 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             clickCount: 1,
             pressure: 0
         )
-        let up = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: .zero,
-            modifierFlags: [.option],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: down), .componentPanel)
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: up), .componentPanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: down), .featurePanel)
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: down, isMacOS27OrLater: true),
+            .featurePanel
+        )
     }
 
     // MARK: - Swapped click behavior
@@ -251,14 +277,13 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testSwappedOptionLeftClickStaysPrimaryOnLegacyHosts() {
-        // macOS ≤26: Option ignored → swapped primary stays the feature panel.
+    func testSwappedOptionLeftClickFollowsSecondaryOnLegacyHosts() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(
                 for: mouseEvent(.leftMouseUp, modifiers: [.option]),
                 swapped: true
             ),
-            .featurePanel
+            .componentPanel
         )
     }
 
@@ -279,8 +304,7 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
 
     // didBegin carries no NSEvent, so the resolution is driven purely by the
     // swapped preference and the live keyboard modifier state. Full
-    // combination coverage: {none, shift, control, option} x {standard,
-    // swapped}.
+    // combination coverage: {none, shift, option} x {standard, swapped}.
 
     func testExpandedSessionNoModifiersOpensPrimaryPanel() {
         XCTAssertEqual(
@@ -317,20 +341,20 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testExpandedSessionControlOpensSecondaryPanel() {
+    func testExpandedSessionControlStaysPrimary() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocationForExpandedSession(
                 swapped: false,
                 liveModifierFlags: [.control]
             ),
-            .featurePanel
+            .componentPanel
         )
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocationForExpandedSession(
                 swapped: true,
                 liveModifierFlags: [.control]
             ),
-            .componentPanel
+            .featurePanel
         )
     }
 
