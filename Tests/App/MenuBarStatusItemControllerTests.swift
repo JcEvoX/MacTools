@@ -39,61 +39,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
     }
 
-    func testLiveModifierChannelMakesStrippedEventSecondaryOnMacOS27() {
-        // macOS 27 reality: the forwarded action event carries no modifiers
-        // even for a physical Option-click; the caller-sampled live keyboard
-        // state must carry the intent instead. This Option-only channel is
-        // macOS 27-only.
-        let strippedEvent = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: strippedEvent, liveModifierFlags: [.option], isMacOS27OrLater: true
-            ),
-            .featurePanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: strippedEvent, liveModifierFlags: [.control], isMacOS27OrLater: true
-            ),
-            .componentPanel
-        )
-        // Non-secondary live modifiers must not flip the invocation.
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: strippedEvent, liveModifierFlags: [.shift], isMacOS27OrLater: true
-            ),
-            .componentPanel
-        )
-        // macOS ≤26: the live keyboard channel is NOT consulted; only the
-        // event's own Option flag can make Option+left a secondary click.
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: strippedEvent, liveModifierFlags: [.option]
-            ),
-            .componentPanel
-        )
-    }
-
-    func testLiveFlagsAreIgnoredForProgrammaticNilEvent() {
-        // A programmatic invocation (no event) stays primary even if the
-        // user happens to be holding Option at that moment.
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: nil, liveModifierFlags: [.option]),
-            .componentPanel
-        )
-    }
-
     func testRightMouseDownOpensFeaturePanelImmediately() {
         let event = NSEvent.mouseEvent(
             with: .rightMouseDown,
@@ -126,26 +71,7 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    func testRightMouseUpStaysPrimaryOnMacOS27FallbackPath() {
-        let event = NSEvent.mouseEvent(
-            with: .rightMouseUp,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
-            .componentPanel
-        )
-    }
-
-    func testControlClickOpensFeaturePanel() {
+    func testControlLeftClickUsesLeftClickAction() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -158,31 +84,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             pressure: 0
         )
 
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
+        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .componentPanel)
     }
 
-    func testControlClickStaysPrimaryOnMacOS27FallbackPath() {
-        let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: .zero,
-            modifierFlags: [.control],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
-            .componentPanel
-        )
-    }
-
-    // MARK: - Option+left secondary-click channel
-
-    func testOptionLeftMouseUpOpensFeaturePanelOnAllHosts() {
+    func testOptionLeftClickOpensFeaturePanel() {
         let event = NSEvent.mouseEvent(
             with: .leftMouseUp,
             location: .zero,
@@ -196,30 +101,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: event, isMacOS27OrLater: true),
-            .featurePanel
-        )
-    }
-
-    func testOptionLeftMouseDownOpensFeaturePanelOnAllHosts() {
-        let down = NSEvent.mouseEvent(
-            with: .leftMouseDown,
-            location: .zero,
-            modifierFlags: [.option],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-        )
-
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: down), .featurePanel)
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: down, isMacOS27OrLater: true),
-            .featurePanel
-        )
     }
 
     // MARK: - Swapped click behavior
@@ -252,10 +133,10 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testSwappedControlClickFollowsSecondaryAndOpensComponentPanel() {
+    func testSwappedControlLeftClickUsesLeftClickAction() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.control]), swapped: true),
-            .componentPanel
+            .featurePanel
         )
     }
 
@@ -266,18 +147,7 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testSwappedOptionLeftClickFollowsSecondaryOnMacOS27() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(
-                for: mouseEvent(.leftMouseUp, modifiers: [.option]),
-                swapped: true,
-                isMacOS27OrLater: true
-            ),
-            .componentPanel
-        )
-    }
-
-    func testSwappedOptionLeftClickFollowsSecondaryOnLegacyHosts() {
+    func testSwappedOptionLeftClickFollowsSecondary() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(
                 for: mouseEvent(.leftMouseUp, modifiers: [.option]),
@@ -300,12 +170,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
     }
 
-    // MARK: - Expanded-interface session invocation (macOS 27, eventless)
-
-    // didBegin carries no NSEvent, so the resolution is driven purely by the
-    // swapped preference and the live keyboard modifier state. Full
-    // combination coverage: {none, shift, option} x {standard, swapped}.
-
     func testExpandedSessionNoModifiersOpensPrimaryPanel() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocationForExpandedSession(
@@ -318,41 +182,6 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
             MenuBarStatusItemInvocation.invocationForExpandedSession(
                 swapped: true,
                 liveModifierFlags: []
-            ),
-            .featurePanel
-        )
-    }
-
-    func testExpandedSessionShiftStaysPrimary() {
-        // Shift is not a secondary modifier and must not flip the invocation.
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.shift]
-            ),
-            .componentPanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: true,
-                liveModifierFlags: [.shift]
-            ),
-            .featurePanel
-        )
-    }
-
-    func testExpandedSessionControlStaysPrimary() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.control]
-            ),
-            .componentPanel
-        )
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: true,
-                liveModifierFlags: [.control]
             ),
             .featurePanel
         )
@@ -375,116 +204,21 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testExpandedSessionSecondaryModifierWinsWhenCombinedWithShift() {
-        // A non-secondary modifier held alongside a secondary one must not
-        // mask the secondary intent.
+    func testExpandedSessionControlUsesLeftClickAction() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocationForExpandedSession(
                 swapped: false,
-                liveModifierFlags: [.option, .shift]
+                liveModifierFlags: [.control]
             ),
-            .featurePanel
+            .componentPanel
         )
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocationForExpandedSession(
-                swapped: false,
-                liveModifierFlags: [.control, .option]
+                swapped: true,
+                liveModifierFlags: [.control]
             ),
             .featurePanel
         )
     }
 
-    // MARK: - Replaced-session cancel sequence (controller recovery contract)
-
-    @MainActor
-    func testReplacedSessionCancelSequenceKeepsNewSessionTracked() {
-        // Mirrors handleExpandedSessionBegin under the COMPOSED takeover
-        // semantics: sessionDidBegin(new) arms a one-shot expectation that
-        // swallows the synchronous, session-LESS didEnd produced by
-        // cancelling the replaced session — the freshly stored NEW session
-        // survives untouched and no dismissal fires. The controller's
-        // follow-up re-begin of the identical session is then a harmless
-        // no-op that must NOT re-arm the expectation.
-        let coordinator = MenuBarExpandedSessionCoordinator()
-        let staleSession = NSObject()
-        let newSession = NSObject()
-        _ = coordinator.sessionDidBegin(staleSession)
-
-        // didBegin for the new session while the stale one is still tracked.
-        let replaced = coordinator.sessionDidBegin(newSession)
-        XCTAssertTrue(replaced === staleSession)
-
-        // cancel(replaced) → host fires didEnd synchronously; the armed
-        // expectation absorbs it: no dismissal, new session stays tracked.
-        var dismissCount = 0
-        coordinator.sessionDidEnd { dismissCount += 1 }
-        XCTAssertEqual(dismissCount, 0)
-        XCTAssertTrue(coordinator.activeSession === newSession)
-
-        // Controller recovery step (kept for host-ordering drift): identical
-        // re-begin is a no-op returning nothing to cancel.
-        XCTAssertNil(coordinator.sessionDidBegin(newSession))
-        XCTAssertTrue(coordinator.activeSession === newSession)
-
-        // The expectation was consumed exactly once: a later genuine didEnd
-        // must dismiss normally instead of being swallowed.
-        coordinator.sessionDidEnd { dismissCount += 1 }
-        XCTAssertEqual(dismissCount, 1)
-        XCTAssertNil(coordinator.activeSession)
-
-        // And a fresh session still closes through cancel, never
-        // directDismiss (which would leak the host-side session).
-        let thirdSession = NSObject()
-        XCTAssertNil(coordinator.sessionDidBegin(thirdSession))
-        var cancelledSessions: [NSObject] = []
-        coordinator.requestClose(
-            cancel: { cancelledSessions.append($0) },
-            directDismiss: {
-                XCTFail("an active session must close via cancel; directDismiss would leak it host-side")
-            }
-        )
-        XCTAssertEqual(cancelledSessions.count, 1)
-        XCTAssertTrue(cancelledSessions.first === thirdSession)
-    }
-
-    // MARK: - Appearance-change refresh dedup
-
-    func testAppearanceRefreshSkipsWhenNameUnchanged() {
-        // Theme notification and KVO fallback both fire for one switch; the
-        // second delivery sees the already-applied name and must not rebuild
-        // the icon image again.
-        XCTAssertFalse(
-            MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-                currentAppearanceName: .darkAqua,
-                lastAppliedAppearanceName: .darkAqua
-            )
-        )
-        XCTAssertFalse(
-            MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-                currentAppearanceName: nil,
-                lastAppliedAppearanceName: nil
-            )
-        )
-    }
-
-    func testAppearanceRefreshRunsWhenNameChangesOrWasNeverApplied() {
-        XCTAssertTrue(
-            MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-                currentAppearanceName: .aqua,
-                lastAppliedAppearanceName: .darkAqua
-            )
-        )
-        XCTAssertTrue(
-            MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-                currentAppearanceName: .darkAqua,
-                lastAppliedAppearanceName: nil
-            )
-        )
-        XCTAssertTrue(
-            MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-                currentAppearanceName: nil,
-                lastAppliedAppearanceName: .darkAqua
-            )
-        )
-    }
 }

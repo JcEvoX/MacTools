@@ -3,43 +3,22 @@ import Combine
 import SwiftUI
 import MacToolsPluginKit
 
-enum MenuBarStatusItemInvocation: Hashable {
+enum MenuBarStatusItemInvocation: Equatable {
     case featurePanel
     case componentPanel
 
     static func invocation(
         for event: NSEvent?,
-        swapped: Bool = false,
-        liveModifierFlags: NSEvent.ModifierFlags = [],
-        isMacOS27OrLater: Bool = false
+        swapped: Bool = false
     ) -> MenuBarStatusItemInvocation {
-        // Option+left-click is always a secondary click. On macOS ≤26 the
-        // historical right-click / Control-click routes stay secondary too.
-        // macOS 27's rehosted single-window menu bar does not route right mouse
-        // events to third-party status items, so Option+left-click is the
-        // supported secondary pointer path there.
-        //
-        // The macOS 27 host also synthesizes the action's leftMouseUp with its
-        // modifiers stripped (observed live on 26A5353q: modifiers always 0
-        // even for physical Option-clicks), so the caller-sampled live keyboard
-        // state (`NSEvent.modifierFlags` class property) carries the Option
-        // intent there. On macOS ≤26 the live channel is deliberately NOT
-        // consulted, preserving the pre-27 path.
+        // Option+left-click always triggers the right-click action.
         let isSecondary: Bool = {
             guard let event else { return false }
             let isLeftClick = event.type == .leftMouseDown || event.type == .leftMouseUp
             if isLeftClick, event.modifierFlags.contains(.option) {
                 return true
             }
-            if isMacOS27OrLater {
-                return isLeftClick && liveModifierFlags.contains(.option)
-            }
-            if event.type == .rightMouseDown
-                || event.type == .rightMouseUp
-                || event.modifierFlags.contains(.control) {
-                return true
-            }
-            return false
+            return event.type == .rightMouseDown || event.type == .rightMouseUp
         }()
 
         let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
@@ -47,12 +26,8 @@ enum MenuBarStatusItemInvocation: Hashable {
         return isSecondary ? secondary : primary
     }
 
-    /// macOS 27 expanded-interface entry. The didBegin delegate callback
-    /// carries no NSEvent, so left vs. right click cannot be distinguished
-    /// there at all; the caller-sampled live keyboard state
-    /// (`NSEvent.modifierFlags` class property) is the only modifier channel.
-    /// Option held at session begin selects the secondary panel, mirroring the
-    /// macOS 27 event-based rule above.
+    /// Expanded-interface session callbacks carry no NSEvent; Option held at
+    /// session begin selects the right-click action.
     static func invocationForExpandedSession(
         swapped: Bool,
         liveModifierFlags: NSEvent.ModifierFlags
@@ -61,19 +36,6 @@ enum MenuBarStatusItemInvocation: Hashable {
         let primary: MenuBarStatusItemInvocation = swapped ? .featurePanel : .componentPanel
         let secondary: MenuBarStatusItemInvocation = swapped ? .componentPanel : .featurePanel
         return isSecondary ? secondary : primary
-    }
-}
-
-enum MenuBarStatusIconAppearanceRefreshPolicy {
-    /// The icon payload depends only on the button's effective appearance, so
-    /// when the doubled change channels (undocumented theme notification +
-    /// effectiveAppearance KVO fallback) both deliver for one theme switch,
-    /// the callback that sees an unchanged name skips the image rebuild.
-    static func shouldRefresh(
-        currentAppearanceName: NSAppearance.Name?,
-        lastAppliedAppearanceName: NSAppearance.Name?
-    ) -> Bool {
-        currentAppearanceName != lastAppliedAppearanceName
     }
 }
 
@@ -91,9 +53,6 @@ final class MenuBarStatusItemController: NSObject {
     private var appearanceObserver: NSObjectProtocol?
     private var appTerminationObserver: NSObjectProtocol?
     private var statusItemWindowMoveObserver: NSObjectProtocol?
-    private var appearanceKVOObservation: NSKeyValueObservation?
-    private var lastAppliedAppearanceName: NSAppearance.Name?
-    private var toggleSuppressor = MenuBarStatusItemToggleSuppressor()
     // The status item holds its expanded-interface delegate weakly; the
     // controller must own the adapter strongly or callbacks silently stop.
     private let expandedInterfaceAdapter = MenuBarStatusItemExpandedInterfaceAdapter()
@@ -116,12 +75,8 @@ final class MenuBarStatusItemController: NSObject {
         self.pluginHost = pluginHost
         self.windowRouter = windowRouter
         self.iconSettings = iconSettings
-        // Adopt upstream's position-preserving preflight (no longer force-resets the
-        // saved icon position on every relaunch — bdd26bb). Keep the beta-27 hit-region
-        // fix: create with variableLength (not 0) so the rehosted menu bar host never
-        // registers a zero-width hit region; the icon is set right after configuration.
         MenuBarControlItemDefaults.prepareVisibleControlItem()
-        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        self.statusItem = NSStatusBar.system.statusItem(withLength: 0)
         self.statusItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         super.init()
         panelPresenter = MenuBarPanelPresenter(
@@ -153,43 +108,18 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
-        MenuBarStatusItemDiagnostics.trace(
-            "launch \(MenuBarStatusItemDiagnostics.describeButtonWindow(statusItem.button))"
-        )
     }
 
     private func statusItemButtonScreenRect() -> NSRect? {
-        guard let button = statusItem.button, let window = button.window else {
-            MenuBarStatusItemDiagnostics.trace(
-                "buttonScreenRect DEGRADED→nil \(MenuBarStatusItemDiagnostics.describeButtonWindow(statusItem.button))"
-            )
-            return nil
-        }
+        guard let button = statusItem.button, let window = button.window else { return nil }
         let frameInWindow = button.convert(button.bounds, to: nil)
-        let screenRect = window.convertToScreen(frameInWindow)
-        // macOS 27 beta: the stub backing window still yields a non-nil but
-        // degenerate screen rect that drops plugin windows off-screen. Collapse
-        // to nil here so DropZoneAnchorProviding consumers reach their
-        // centered / default fallback. On macOS 14…26 this never trips (real
-        // window, positive-height frame), so the genuine rect is returned.
-        if MenuBarStatusItemHostCompatibility.anchorRectDegeneratesToNil(
-            screenRectHeight: screenRect.height,
-            windowIsStub: MenuBarStatusItemHostCompatibility.isStubBackingWindow(window)
-        ) {
-            MenuBarStatusItemDiagnostics.trace(
-                "buttonScreenRect DEGENERATE→nil rect=\(NSStringFromRect(screenRect)) "
-                    + MenuBarStatusItemDiagnostics.describeButtonWindow(button)
-            )
-            return nil
-        }
-        return screenRect
+        return window.convertToScreen(frameInWindow)
     }
 
     deinit {
         MainActor.assumeIsolated {
             animationTimer?.cancel()
             animationLoadSampleTimer?.invalidate()
-            appearanceKVOObservation?.invalidate()
             if let appearanceObserver {
                 DistributedNotificationCenter.default().removeObserver(appearanceObserver)
             }
@@ -208,12 +138,9 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     /// Single close gate for user-driven dismissals. While an expanded
-    /// interface session is active the panels must close THROUGH the session:
-    /// the macOS 27 host never ends a session on its own (outside clicks do
-    /// not produce didEnd), `cancel()` is the only termination, and it fires
-    /// didEnd synchronously, which then performs the actual dismissal. With
-    /// no active session this is a plain `dismissPanels()`, identical to the
-    /// macOS ≤26 behavior.
+    /// interface session is active, close through `cancel()` so AppKit owns
+    /// the session lifecycle. With no active session this is a plain
+    /// `dismissPanels()`.
     private func requestPanelClose() {
         expandedSessionCoordinator.requestClose(
             cancel: { session in
@@ -225,25 +152,18 @@ final class MenuBarStatusItemController: NSObject {
         )
     }
 
-    /// Expanded-interface session begin (macOS 27 host). No NSEvent exists on
-    /// this path; the target panel comes from the click-behavior preference
-    /// plus the live keyboard state. Presentation reuses the existing toggle
-    /// paths so `installDismissMonitorsIfNeeded` keeps owning the close side.
+    /// Expanded-interface session begin. No NSEvent exists on this path, so
+    /// the target panel comes from the click-behavior preference plus the live
+    /// keyboard state.
     private func handleExpandedSessionBegin(_ session: NSObject) {
-        if let replacedSession = expandedSessionCoordinator.sessionDidBegin(session) {
-            // A superseded session must not stay alive host-side; cancelling
-            // fires its didEnd synchronously on this same delegate. didEnd
-            // carries no session argument, so that re-entry clears the just
-            // stored NEW session from the coordinator — re-begin it once the
-            // cancel returns (a re-begin of the identical object is a no-op
-            // returning nil, so nothing further gets cancelled).
-            MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: replacedSession)
-            _ = expandedSessionCoordinator.sessionDidBegin(session)
+        if let activeSession = expandedSessionCoordinator.activeSession, activeSession !== session {
+            MenuBarStatusItemExpandedInterfaceAdapter.cancel(session: activeSession)
         }
+        expandedSessionCoordinator.sessionDidBegin(session)
 
         if panelPresenter.isAnyPanelShown {
-            // Desync guard: a fresh session means the host considers nothing
-            // presented, so settle our stale panels before reopening.
+            // A fresh session means the host considers nothing presented, so
+            // settle stale panels before reopening.
             panelPresenter.dismissPanels()
         }
 
@@ -252,11 +172,6 @@ final class MenuBarStatusItemController: NSObject {
             swapped: swapped,
             liveModifierFlags: NSEvent.modifierFlags
         )
-        MenuBarStatusItemDiagnostics.trace(
-            "expanded session begin invocation=\(String(describing: invocation)) "
-                + MenuBarStatusItemDiagnostics.describeButtonWindow(statusItem.button)
-        )
-
         guard let button = statusItem.button else {
             // Nothing to anchor to. Leaving the session open would make the
             // item permanently inert (no further didBegin until it ends), so
@@ -303,30 +218,14 @@ final class MenuBarStatusItemController: NSObject {
 
         button.target = self
         button.action = #selector(handleStatusItemAction(_:))
-        // OS-gated mask: the macOS 27 beta menu bar host only delivers
-        // leftMouseUp (down never arrives → a down-only mask is completely
-        // dead there); on older systems the down-mask must stay byte-for-byte
-        // identical, because registering down+up would double-trigger.
-        let buttonWindowIsStub = MenuBarStatusItemHostCompatibility.isStubBackingWindow(button.window)
-        button.sendAction(
-            on: MenuBarStatusItemHostCompatibility.sendActionMask(
-                buttonWindowIsStub: buttonWindowIsStub,
-                isMacOS27OrLater: MenuBarStatusItemHostCompatibility.isMacOS27OrLater
-            )
-        )
+        button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = AppMetadata.appName
 
-        // macOS 27+ expanded-interface route. Once the delegate is attached
-        // the host never invokes the button target/action again (the
-        // delegate REPLACES the action channel, it does not augment it), so
-        // the action wiring above only serves macOS ≤26 and the
-        // attach-failure fallback. The route is gated to macOS 27+ explicitly
-        // (not only by the absent ≤26 selector): on shipping macOS ≤26 the
-        // legacy action route must stay byte-for-byte unchanged, so we never
-        // even probe for the delegate there. Closures are installed before
-        // attaching so no early didBegin can slip through unhandled.
-        if MenuBarStatusItemHostCompatibility.isMacOS27OrLater,
-           MenuBarStatusItemExpandedInterfaceAdapter.isSupported(by: statusItem) {
+        // Expanded-interface route. The API is discovered at runtime so the
+        // app can still build and run on older systems. When
+        // attached, the session route replaces the button action channel;
+        // failed attach falls back to the action route above.
+        if MenuBarStatusItemExpandedInterfaceAdapter.isSupported(by: statusItem) {
             expandedInterfaceAdapter.onSessionBegin = { [weak self] session in
                 self?.handleExpandedSessionBegin(session)
             }
@@ -334,10 +233,6 @@ final class MenuBarStatusItemController: NSObject {
                 self?.handleExpandedSessionEnd(animated: animated)
             }
             let attached = expandedInterfaceAdapter.attach(to: statusItem)
-            MenuBarStatusItemDiagnostics.trace(
-                "expandedInterface attach=\(attached) "
-                    + MenuBarStatusItemDiagnostics.describeButtonWindow(statusItem.button)
-            )
             if !attached {
                 AppLog.pluginHost.warning(
                     "Expanded-interface delegate attach failed; status item falls back to the action route"
@@ -358,12 +253,8 @@ final class MenuBarStatusItemController: NSObject {
             .dropFirst()
             .sink { [weak self] _ in
                 self?.windowRouter.showSettings()
-                // Must route through the session gate: this fires while a
-                // panel is open (panel gear buttons → presentPluginConfiguration),
-                // and a direct dismiss would leave an expanded-interface
-                // session active — the host keeps the item inert until that
-                // session is cancelled. Without a session this is exactly
-                // `dismissPanels()`.
+                // Route through the session gate: settings can be opened from
+                // a panel while an expanded-interface session is still active.
                 self?.requestPanelClose()
             }
             .store(in: &cancellables)
@@ -383,40 +274,13 @@ final class MenuBarStatusItemController: NSObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshStatusIconForAppearanceChange()
+                self?.updateStatusIcon()
             }
         }
-
-        // Supported-API fallback for the undocumented notification above:
-        // should an OS rename or throttle it, the app-level appearance KVO
-        // still reports theme flips. It stays silent when the user pinned the
-        // app appearance (effectiveAppearance then never changes), in which
-        // case the notification path keeps working as before. Both channels
-        // funnel into the same deduplicated refresh.
-        appearanceKVOObservation = NSApplication.shared.observe(
-            \.effectiveAppearance
-        ) { @Sendable [weak self] _, _ in
-            Task { @MainActor in
-                self?.refreshStatusIconForAppearanceChange()
-            }
-        }
-    }
-
-    private func refreshStatusIconForAppearanceChange() {
-        guard MenuBarStatusIconAppearanceRefreshPolicy.shouldRefresh(
-            currentAppearanceName: statusItem.button?.effectiveAppearance.name,
-            lastAppliedAppearanceName: lastAppliedAppearanceName
-        ) else {
-            return
-        }
-
-        updateStatusIcon()
     }
 
     private func updateStatusIcon() {
-        let appearance = statusItem.button?.effectiveAppearance
-        lastAppliedAppearanceName = appearance?.name
-        let payload = iconSettings.imagePayload(for: appearance)
+        let payload = iconSettings.imagePayload(for: statusItem.button?.effectiveAppearance)
         payload.image.isTemplate = payload.isTemplate
 
         statusItem.length = NSStatusItem.variableLength
@@ -463,12 +327,8 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func resetStatusItemPosition() {
-        // Through the session gate: an active expanded-interface session must
-        // be cancelled while its owning item is still alive — cancel's didEnd
-        // is synchronous, so the session is fully settled before
-        // removeStatusItem below. Without a session this is `dismissPanels()`.
-        // (Position reset below uses upstream's resetVisibleControlItemPosition;
-        // the old recover-both helper was removed in bdd26bb.)
+        // Cancel any active expanded-interface session while its owning item
+        // is still alive.
         requestPanelClose()
 
         let oldItem = statusItem
@@ -476,9 +336,7 @@ final class MenuBarStatusItemController: NSObject {
         MenuBarControlItemDefaults.resetVisibleControlItemPosition()
         MenuBarControlItemDefaults.snapshotVisibleControlItemPreferredPosition()
 
-        // Same as init: variableLength at creation so the registered hit
-        // region is never zero width (macOS 27 single-window host).
-        let newItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let newItem = NSStatusBar.system.statusItem(withLength: 0)
         newItem.autosaveName = MenuBarControlItemDefaults.visibleAutosaveName
         statusItem = newItem
 
@@ -581,60 +439,7 @@ final class MenuBarStatusItemController: NSObject {
         // Read the preference live on each click so a settings change takes
         // effect immediately without re-observing.
         let swapped = MenuBarClickBehaviorPreference.current().isSwapped
-
-        // macOS ≤26: run the exact pre-27 action path. The live keyboard-state
-        // read, the bounce suppressor and the diagnostics trace are all macOS 27
-        // stub-host workarounds; on a healthy host they are inert, but gating
-        // them keeps the shipping (≤26) click path byte-for-byte identical to
-        // upstream so no extra work runs on the click that could read as lag.
-        guard MenuBarStatusItemHostCompatibility.isMacOS27OrLater else {
-            switch MenuBarStatusItemInvocation.invocation(for: currentEvent, swapped: swapped) {
-            case .featurePanel:
-                toggleFeaturePanel(relativeTo: sender)
-            case .componentPanel:
-                toggleComponentPanel(relativeTo: sender)
-            }
-            return
-        }
-
-        MenuBarStatusItemDiagnostics.trace(
-            "action event=\(currentEvent.map { String(describing: $0.type) } ?? "nil") "
-                + "modifiers=\(currentEvent?.modifierFlags.rawValue ?? 0) "
-                + MenuBarStatusItemDiagnostics.describeButtonWindow(sender)
-        )
-        let invocation = MenuBarStatusItemInvocation.invocation(
-            for: currentEvent,
-            swapped: swapped,
-            liveModifierFlags: NSEvent.modifierFlags,
-            isMacOS27OrLater: true
-        )
-
-        // Stub host only: the outside-click monitor may have just dismissed
-        // the panels for this same physical click — without button geometry
-        // an icon click is indistinguishable from an outside click there.
-        // Toggling again would reopen them, making the icon unable to close
-        // the panel, so treat this click's toggle-off as already done.
-        // Suppression is scoped to the panels that were actually dismissed:
-        // a click targeting the other panel is a switch and proceeds. The
-        // suppressor is armed exclusively on the geometry-less path, so
-        // healthy hosts never match.
-        if let currentEvent,
-           toggleSuppressor.shouldSuppressToggle(
-               for: Self.clickIdentity(of: currentEvent, at: Self.screenLocation(of: currentEvent)),
-               target: invocation
-           ) {
-            MenuBarStatusItemDiagnostics.trace(
-                "action suppressed: same click already dismissed its target panel "
-                    + "eventNumber=\(currentEvent.eventNumber)"
-            )
-            return
-        }
-
-        // TODO(macOS 27 beta): when the button's backing window is the stub
-        // (windowNumber 2^32, zero-height frame), NSPopover anchoring via
-        // `show(relativeTo:of:)` may misplace or fail — deliberately NOT
-        // reworked yet. Revisit on device once the real popover behavior is
-        // observable.
+        let invocation = MenuBarStatusItemInvocation.invocation(for: currentEvent, swapped: swapped)
         switch invocation {
         case .featurePanel:
             toggleFeaturePanel(relativeTo: sender)
@@ -644,24 +449,12 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func toggleFeaturePanel(relativeTo button: NSStatusBarButton) {
-        MenuBarStatusItemDiagnostics.trace(
-            "toggleFeaturePanel pre: feature=\(panelPresenter.isFeaturePanelShown) component=\(panelPresenter.isComponentPanelShown)"
-        )
         panelPresenter.toggleFeaturePanel(relativeTo: button)
-        MenuBarStatusItemDiagnostics.trace(
-            "toggleFeaturePanel post: feature=\(panelPresenter.isFeaturePanelShown) component=\(panelPresenter.isComponentPanelShown)"
-        )
         handlePresentationResult()
     }
 
     private func toggleComponentPanel(relativeTo button: NSStatusBarButton) {
-        MenuBarStatusItemDiagnostics.trace(
-            "toggleComponentPanel pre: feature=\(panelPresenter.isFeaturePanelShown) component=\(panelPresenter.isComponentPanelShown)"
-        )
         panelPresenter.toggleComponentPanel(relativeTo: button)
-        MenuBarStatusItemDiagnostics.trace(
-            "toggleComponentPanel post: feature=\(panelPresenter.isFeaturePanelShown) component=\(panelPresenter.isComponentPanelShown)"
-        )
         handlePresentationResult()
     }
 
@@ -687,14 +480,9 @@ final class MenuBarStatusItemController: NSObject {
         }
 
         if globalEventMonitor == nil {
-            globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] event in
-                // Global-monitor events carry no window, so locationInWindow
-                // is already in screen coordinates. Reduce the event to
-                // Sendable values here; NSEvent must not hop actors.
-                let screenLocation = event.locationInWindow
-                let click = Self.clickIdentity(of: event, at: screenLocation)
+            globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] _ in
                 Task { @MainActor in
-                    self?.dismissPanelsForOutsideClick(click, screenLocation: screenLocation)
+                    self?.requestPanelClose()
                 }
             }
         }
@@ -710,7 +498,6 @@ final class MenuBarStatusItemController: NSObject {
                 }
 
                 Task { @MainActor in
-                    self?.armSuppressionForActivationDismissal()
                     self?.requestPanelClose()
                 }
             }
@@ -744,98 +531,8 @@ final class MenuBarStatusItemController: NSObject {
             return event
         }
 
-        let screenLocation = Self.screenLocation(of: event)
-        armToggleSuppressionIfNeeded(
-            for: Self.clickIdentity(of: event, at: screenLocation),
-            screenLocation: screenLocation
-        )
         requestPanelClose()
         return event
-    }
-
-    /// Stub host: clicking our own icon can activate the rehosted menu bar's
-    /// owning process, so the panels die through this workspace observer
-    /// without our event monitors ever seeing the click (observed live on
-    /// 26A5353q: silent close, then the forwarded action reopened the panel —
-    /// the bounce through a side door). No NSEvent is available here; the
-    /// cursor position stands in for the click location — it is still at the
-    /// click point when the activation lands, and the suppressor's location
-    /// match then decides exactly like the monitored path. Activations not
-    /// caused by a menu-bar-band click (Cmd-Tab, desktop click) fail the band
-    /// guard or never produce a matching action, so nothing is eaten.
-    private func armSuppressionForActivationDismissal() {
-        let identity = MenuBarStatusItemClickIdentity(
-            eventNumber: 0,
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            screenLocation: NSEvent.mouseLocation
-        )
-        armToggleSuppressionIfNeeded(for: identity, screenLocation: identity.screenLocation)
-    }
-
-    private func dismissPanelsForOutsideClick(
-        _ click: MenuBarStatusItemClickIdentity,
-        screenLocation: NSPoint
-    ) {
-        // A click on our own icon is NOT an outside click — the status item
-        // action route owns it. The global monitor can see the physical up of
-        // the same click that opened the panel; without this guard it lands
-        // here and closes the panel a moment after it opened. The
-        // button's backing-window frame is live and valid even on the macOS 27
-        // stub (only its windowNumber is fake), unlike statusItemButtonScreenRect()
-        // which is deliberately nil there, so the geometry test works here.
-        // Event location for a windowless global-monitor event is already in
-        // AppKit screen coordinates, matching the window frame.
-        if let frame = statusItem.button?.window?.frame,
-           !frame.isEmpty, frame.contains(screenLocation) {
-            return
-        }
-        armToggleSuppressionIfNeeded(for: click, screenLocation: screenLocation)
-        requestPanelClose()
-    }
-
-    /// Stub host only: with no button geometry an icon click is judged an
-    /// outside click and dismisses the panels, so the matching action that
-    /// follows must not toggle them back open. With a healthy rect the
-    /// geometry test already tells icon clicks apart, nothing is armed, and
-    /// healthy-host dismissal behavior is untouched.
-    private func armToggleSuppressionIfNeeded(
-        for click: MenuBarStatusItemClickIdentity,
-        screenLocation: NSPoint
-    ) {
-        guard statusItemButtonScreenRect() == nil else { return }
-        guard isScreenLocationInMenuBarBand(screenLocation) else { return }
-
-        // Capture which panels this dismissal is about to close (the caller
-        // dismisses right after arming) so the matching action can tell a
-        // toggle-off from a switch to the other panel.
-        var dismissedPanels = Set<MenuBarStatusItemInvocation>()
-        if panelPresenter.isFeaturePanelShown {
-            dismissedPanels.insert(.featurePanel)
-        }
-        if panelPresenter.isComponentPanelShown {
-            dismissedPanels.insert(.componentPanel)
-        }
-        guard !dismissedPanels.isEmpty else { return }
-
-        toggleSuppressor.recordOutsideDismissal(click, dismissedPanels: dismissedPanels)
-        MenuBarStatusItemDiagnostics.trace(
-            "outside dismissal armed toggle suppression eventNumber=\(click.eventNumber) "
-                + "panels=\(dismissedPanels.count)"
-        )
-    }
-
-    private func isScreenLocationInMenuBarBand(_ screenLocation: NSPoint) -> Bool {
-        NSScreen.screens.contains { screen in
-            MenuBarStatusItemClickGeometry.isLocationInMenuBarBand(
-                screenLocation,
-                screenFrame: screen.frame,
-                bandHeight: MenuBarStatusItemClickGeometry.menuBarBandHeight(
-                    screenFrameMaxY: screen.frame.maxY,
-                    visibleFrameMaxY: screen.visibleFrame.maxY,
-                    statusBarThickness: NSStatusBar.system.thickness
-                )
-            )
-        }
     }
 
     private func isEventInsidePresentedPanel(_ event: NSEvent) -> Bool {
@@ -847,23 +544,6 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func isEventInsideStatusButton(_ event: NSEvent) -> Bool {
-        // macOS 27: geometry first — the screen-rect containment works
-        // regardless of which window the event was routed through. On the stub
-        // host both signals are gone (rect collapses to nil, identity chain
-        // untrustworthy), so this returns false there and the toggle suppressor
-        // absorbs the resulting icon-click bounce. On macOS ≤26 the
-        // window-identity + bounds path is byte-identical to the shipping
-        // pre-27 releases, so it stays the exclusive path there (the
-        // geometry-first containment has ≤1px edge semantics that differ from
-        // `CGRect.contains`, which must not leak onto shipping systems).
-        if MenuBarStatusItemHostCompatibility.isMacOS27OrLater,
-           let geometricallyInside = MenuBarStatusItemClickGeometry.isLocationInsideButton(
-               Self.screenLocation(of: event),
-               buttonScreenRect: statusItemButtonScreenRect()
-           ) {
-            return geometricallyInside
-        }
-
         guard
             let button = statusItem.button,
             event.window === button.window
@@ -873,29 +553,6 @@ final class MenuBarStatusItemController: NSObject {
 
         let pointInButton = button.convert(event.locationInWindow, from: nil)
         return button.bounds.contains(pointInButton)
-    }
-
-    nonisolated private static func clickIdentity(
-        of event: NSEvent,
-        at screenLocation: NSPoint
-    ) -> MenuBarStatusItemClickIdentity {
-        MenuBarStatusItemClickIdentity(
-            eventNumber: event.eventNumber,
-            timestamp: event.timestamp,
-            screenLocation: screenLocation
-        )
-    }
-
-    /// `NSEvent.mouseLocation` reads the cursor position at call time, which
-    /// may have drifted since the event was generated; deriving the location
-    /// from the event itself keeps the judgment tied to the click being
-    /// processed. Windowless events (global monitors, some synthesized
-    /// events) already carry screen coordinates in `locationInWindow`.
-    private static func screenLocation(of event: NSEvent) -> NSPoint {
-        guard let window = event.window else {
-            return event.locationInWindow
-        }
-        return window.convertPoint(toScreen: event.locationInWindow)
     }
 
     nonisolated private static func isCurrentApplicationActivationNotification(_ notification: Notification) -> Bool {

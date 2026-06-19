@@ -3,29 +3,15 @@ import OSLog
 
 // MARK: - MenuBarStatusItemExpandedInterface
 //
-// Runtime-only bridge to the macOS 27 `NSStatusItem.expandedInterfaceDelegate`
-// channel. The app builds against the 26.5 SDK with a macOS 14.0 target, so no
-// macOS 27 symbol may be referenced directly: every touchpoint goes through
-// selector-based dispatch with the exact selector strings probed on 26A5353q.
-// Behavior contract verified on device:
-// - The status item holds the delegate WEAKLY; whoever attaches must keep a
-//   strong reference to the adapter or callbacks silently stop.
-// - Attaching the delegate REPLACES the button target/action channel (the
-//   action never fires again while attached); it does not augment it.
-// - The host never ends a session on its own (outside clicks produce no
-//   didEnd); the only termination is `cancel`, which fires didEnd
-//   synchronously on the same call stack with the session property already
-//   cleared to nil.
-// - On macOS <= 26 the delegate setter selector does not exist, so
-//   `isSupported(by:)` is false and the legacy action route stays unchanged.
+// Runtime-only bridge to the `NSStatusItem.expandedInterfaceDelegate` channel.
+// The app builds with older SDKs and a macOS 14.0 target, so every touchpoint
+// goes through selector-based dispatch. When the API is absent, the status item
+// stays on the normal button action route.
 
 @MainActor
 final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
-    // Exact ObjC selector strings probed on 26A5353q. One wrong character
-    // means the host silently never calls back; tests pin every literal.
     static let delegateSetterSelectorName = "setExpandedInterfaceDelegate:"
     static let delegateGetterKey = "expandedInterfaceDelegate"
-    static let sessionGetterSelectorName = "expandedInterfaceSession"
     static let sessionDidBeginSelectorName = "statusItem:didBeginExpandedInterfaceSession:"
     static let sessionDidEndSelectorName = "statusItemDidEndExpandedInterfaceSession:animated:"
     static let sessionCancelSelectorName = "cancel"
@@ -33,9 +19,6 @@ final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
     var onSessionBegin: ((_ session: NSObject) -> Void)?
     var onSessionEnd: ((_ animated: Bool) -> Void)?
 
-    /// The host does not check protocol conformance (the protocol is not even
-    /// registered with the ObjC runtime on 26A5353q); responding to the
-    /// delegate setter is the entire support gate.
     static func isSupported(by item: NSStatusItem) -> Bool {
         item.responds(to: NSSelectorFromString(delegateSetterSelectorName))
     }
@@ -77,13 +60,6 @@ final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
         _ = item.perform(NSSelectorFromString(Self.delegateSetterSelectorName), with: nil)
     }
 
-    /// Clears the item's expanded-interface delegate. A no-op (not a failure)
-    /// where the API does not exist.
-    func detach(from item: NSStatusItem) {
-        guard Self.isSupported(by: item) else { return }
-        _ = item.perform(NSSelectorFromString(Self.delegateSetterSelectorName), with: nil)
-    }
-
     /// Cancels an expanded-interface session. `cancel` triggers the didEnd
     /// callback synchronously on this same call stack; callers must have
     /// their state ready for that re-entry BEFORE calling this.
@@ -105,15 +81,11 @@ final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
 
     @objc(statusItem:didBeginExpandedInterfaceSession:)
     func statusItemDidBeginExpandedInterfaceSession(_ statusItem: NSStatusItem, session: NSObject) {
-        MenuBarStatusItemDiagnostics.trace(
-            "expandedInterface didBegin session=\(Unmanaged.passUnretained(session).toOpaque())"
-        )
         onSessionBegin?(session)
     }
 
     @objc(statusItemDidEndExpandedInterfaceSession:animated:)
     func statusItemDidEndExpandedInterfaceSession(_ statusItem: NSStatusItem, animated: Bool) {
-        MenuBarStatusItemDiagnostics.trace("expandedInterface didEnd animated=\(animated)")
         onSessionEnd?(animated)
     }
 }
@@ -121,46 +93,22 @@ final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
 // MARK: - MenuBarExpandedSessionCoordinator
 
 /// Pure expanded-session bookkeeping, free of AppKit so it is testable
-/// headless. Invariants it encodes:
-/// - `cancel` fires didEnd synchronously on the same call stack, so any state
-///   that must not be observed by that re-entry is cleared BEFORE cancelling.
-/// - The host never auto-ends a session; a stored session stays active until
-///   the app cancels it.
+/// headless. The close path clears state before calling `cancel` because AppKit
+/// may synchronously call the did-end delegate callback.
 @MainActor
 final class MenuBarExpandedSessionCoordinator {
     private(set) var activeSession: NSObject?
     private(set) var isHandlingSessionEnd = false
-    /// One-shot takeover marker. Set when `sessionDidBegin` returns a
-    /// replaced session: the caller cancels that session, and the cancel
-    /// fires didEnd synchronously on the same stack. That didEnd belongs to
-    /// the SUPERSEDED session — without this marker it would wipe the
-    /// just-stored new session and dismiss, leaving the live host session
-    /// uncancellable (the item stays inert until the app restarts).
-    private var expectsReplacedSessionEnd = false
 
-    /// Stores the new session and returns the replaced previous one; the
-    /// caller is responsible for cancelling the returned session (its
-    /// synchronous didEnd is absorbed by `sessionDidEnd`). Returns nil when
-    /// nothing was replaced, including a re-begin of the identical session
-    /// object (cancelling it would tear down the session just stored).
-    func sessionDidBegin(_ session: NSObject) -> NSObject? {
-        let previous = activeSession
+    func sessionDidBegin(_ session: NSObject) {
         activeSession = session
-        guard let previous, previous !== session else { return nil }
-        expectsReplacedSessionEnd = true
-        return previous
     }
 
     /// Single close gate. With an active session the close must go through
     /// `cancel(session)`: `activeSession` is cleared first because cancel
-    /// synchronously re-enters via didEnd. Without a session the request
-    /// falls through to `directDismiss()` (the macOS <= 26 path).
+    /// may synchronously re-enter via didEnd. Without a session the request
+    /// falls through to `directDismiss()`.
     func requestClose(cancel: (NSObject) -> Void, directDismiss: () -> Void) {
-        // Any takeover expectation is stale by close time (the takeover
-        // caller cancels the replaced session synchronously right after
-        // sessionDidBegin returns); it must not swallow the didEnd produced
-        // by this close.
-        expectsReplacedSessionEnd = false
         guard let session = activeSession else {
             directDismiss()
             return
@@ -169,17 +117,9 @@ final class MenuBarExpandedSessionCoordinator {
         cancel(session)
     }
 
-    /// didEnd handler. The first guard absorbs the synchronous didEnd of a
-    /// session superseded during takeover: `activeSession` already holds the
-    /// live replacement, so neither it nor the panel may be torn down here
-    /// (the begin caller settles any stale panels itself). The second guard
-    /// absorbs re-entry: a `dismiss` implementation that itself routes back
-    /// into a close path must not recurse.
+    /// didEnd handler. The re-entry guard prevents a dismiss implementation
+    /// from recursively routing back into this path.
     func sessionDidEnd(dismiss: () -> Void) {
-        if expectsReplacedSessionEnd {
-            expectsReplacedSessionEnd = false
-            return
-        }
         if isHandlingSessionEnd { return }
         isHandlingSessionEnd = true
         defer { isHandlingSessionEnd = false }
