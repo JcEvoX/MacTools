@@ -48,9 +48,9 @@ struct SystemStatusDashboardView: View {
         LazyVGrid(columns: metricColumns, spacing: SystemStatusHUDLayout.metricSpacing) {
             cpuTile
             gpuTile
-            memoryTile
             networkTile
             diskTile
+            memoryTile
             batteryTile
         }
         .frame(height: SystemStatusComponentLayout.dashboardMetricGridHeight, alignment: .top)

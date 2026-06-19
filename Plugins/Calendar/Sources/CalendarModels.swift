@@ -242,9 +242,9 @@ struct CalendarMonthModelBuilder {
 
     private func monthTitle(for date: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month], from: date)
-        return localization.format(
-            "month.title",
-            defaultValue: "%04d年%02d月",
+        return String(
+            format: localization.string("month.title", defaultValue: "%04d年%02d月"),
+            locale: Locale(identifier: "en_US_POSIX"),
             components.year ?? 0,
             components.month ?? 0
         )

@@ -45,13 +45,13 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(SystemStatusComponentLayout.dashboardContentHeight, 411)
         XCTAssertEqual(
             SystemStatusComponentLayout.orderedMetricKinds,
-            [.cpu, .gpu, .memory, .network, .disk, .battery]
+            [.cpu, .gpu, .network, .disk, .memory, .battery]
         )
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .cpu), SystemStatusGridPosition(row: 0, column: 0))
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .gpu), SystemStatusGridPosition(row: 0, column: 1))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .memory), SystemStatusGridPosition(row: 1, column: 0))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .network), SystemStatusGridPosition(row: 1, column: 1))
-        XCTAssertEqual(SystemStatusComponentLayout.position(for: .disk), SystemStatusGridPosition(row: 2, column: 0))
+        XCTAssertEqual(SystemStatusComponentLayout.position(for: .network), SystemStatusGridPosition(row: 1, column: 0))
+        XCTAssertEqual(SystemStatusComponentLayout.position(for: .disk), SystemStatusGridPosition(row: 1, column: 1))
+        XCTAssertEqual(SystemStatusComponentLayout.position(for: .memory), SystemStatusGridPosition(row: 2, column: 0))
         XCTAssertEqual(SystemStatusComponentLayout.position(for: .battery), SystemStatusGridPosition(row: 2, column: 1))
         XCTAssertNil(SystemStatusComponentLayout.position(for: .topProcesses))
     }

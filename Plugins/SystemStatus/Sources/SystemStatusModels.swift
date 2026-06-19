@@ -73,9 +73,9 @@ enum SystemStatusComponentLayout {
     static let orderedMetricKinds: [SystemStatusMetricKind] = [
         .cpu,
         .gpu,
-        .memory,
         .network,
         .disk,
+        .memory,
         .battery
     ]
 
