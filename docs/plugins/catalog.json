@@ -1,6 +1,6 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-17T10:59:52Z",
+  "generatedAt": "2026-06-19T07:04:52Z",
   "minimumHostVersion": "1.0.20",
   "pluginKitVersion": 2,
   "plugins": [
@@ -25,16 +25,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "659180e110ef4d9c83594c10a38bd1e5ff4fa37e1a5baa985bc148f56e40fbc5",
-        "size": 763433,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/activity-bar.mactoolsplugin.zip"
+        "sha256": "ff6dccecdec16b2300e521c6ce39d59f7cf1f9d37091ca61500fab70e53bb668",
+        "size": 750954,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -217,9 +217,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "74fc4455661ba497210eba182d3d9d4aed25c2d30774fa18ea96fdca14d4b7b6",
-        "size": 312300,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/calendar.mactoolsplugin.zip"
+        "sha256": "19e3802e998374f043a3c51a49bde9ae077cc8532b89a1a0a519bcd2e8de1487",
+        "size": 312585,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/calendar.mactoolsplugin.zip"
       },
       "permissions": [
         "calendarFullAccess",
@@ -227,9 +227,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
       "summary": "查看日期、节假日和系统日程",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1059,16 +1059,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "41f9ddc9267aa1c2e84cb53814e7b887440e2a64b0178375040a1405c3fb6d70",
-        "size": 358100,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/system-status.mactoolsplugin.zip"
+        "sha256": "27bea7c177868ab7f159b1e531ba395d57925e7795a1ea04c0e63f86237e19cb",
+        "size": 496388,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
       "summary": "实时查看系统状态",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "pgq37o89AK2M0ybl0hfXovEj84vzEiRf3fl5UCxh2cvIYhzHw7HMWZ0cLuLIKj69qcPBoRH0wS5l5Uzpa+0AAg=="
+    "value": "Eq9tFSinhCnuCmgEqxoQF3vDygNFR26w95eBvgYDqdzleoVtX1V+2JcEAMpUEoQe2yne5s3UqY12m1W9BGaACQ=="
   }
 }
