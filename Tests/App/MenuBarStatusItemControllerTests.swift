@@ -71,20 +71,15 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
     }
 
-    func testControlClickOpensFeaturePanel() {
-        let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: .zero,
-            modifierFlags: [.control],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
+    func testModifierLeftClicksRouteOnlyOptionToRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.control])),
+            .componentPanel
         )
-
-        XCTAssertEqual(MenuBarStatusItemInvocation.invocation(for: event), .featurePanel)
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.option])),
+            .featurePanel
+        )
     }
 
     // MARK: - Swapped click behavior
@@ -117,17 +112,27 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         )
     }
 
-    func testSwappedControlClickFollowsSecondaryAndOpensComponentPanel() {
-        XCTAssertEqual(
-            MenuBarStatusItemInvocation.invocation(for: mouseEvent(.leftMouseUp, modifiers: [.control]), swapped: true),
-            .componentPanel
-        )
-    }
-
     func testSwappedNilEventOpensFeaturePanel() {
         XCTAssertEqual(
             MenuBarStatusItemInvocation.invocation(for: nil, swapped: true),
             .featurePanel
+        )
+    }
+
+    func testSwappedModifierLeftClicksRouteOnlyOptionToRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(
+                for: mouseEvent(.leftMouseUp, modifiers: [.control]),
+                swapped: true
+            ),
+            .featurePanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocation(
+                for: mouseEvent(.leftMouseUp, modifiers: [.option]),
+                swapped: true
+            ),
+            .componentPanel
         )
     }
 
@@ -143,4 +148,36 @@ final class MenuBarStatusItemControllerTests: XCTestCase {
         XCTAssertEqual(MenuBarClickBehaviorPreference.current(defaults), .swapped)
         XCTAssertTrue(MenuBarClickBehaviorPreference.current(defaults).isSwapped)
     }
+
+    func testExpandedSessionUsesOptionAsRightClickAction() {
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: []
+            ),
+            .componentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: [.control]
+            ),
+            .componentPanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: false,
+                liveModifierFlags: [.option]
+            ),
+            .featurePanel
+        )
+        XCTAssertEqual(
+            MenuBarStatusItemInvocation.invocationForExpandedSession(
+                swapped: true,
+                liveModifierFlags: [.option]
+            ),
+            .componentPanel
+        )
+    }
+
 }

@@ -855,19 +855,36 @@
         }
       }
     },
+    "menuBarClick.rightClickShortcutNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can use Option + left-click to trigger the right-click action."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以使用 Option + 左键触发右键功能。"
+          }
+        }
+      }
+    },
     "menuBarClick.description": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When off, left-click opens the dashboard and right-click opens the feature panel. When on, the click behaviors are swapped."
+            "value": "When off, left-click opens the dashboard and the right-click action opens the feature panel. When on, the actions are swapped."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关闭时左键打开仪表盘、右键打开功能面板；开启后左右键行为互换。"
+            "value": "关闭时左键打开仪表盘、右键功能打开功能面板；开启后互换。"
           }
         }
       }
@@ -878,13 +895,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When enabled, left-click opens the feature panel and right-click opens the dashboard"
+            "value": "When enabled, left-click opens the feature panel and the right-click action opens the dashboard"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开启后左键打开功能面板，右键打开仪表盘"
+            "value": "开启后左键打开功能面板，右键功能打开仪表盘"
           }
         }
       }
@@ -895,13 +912,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Swap Left and Right Click"
+            "value": "Swap Left Click and Right-Click Action"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "交换左右键点击行为"
+            "value": "交换左键与右键功能"
           }
         }
       }
@@ -912,13 +929,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Swap left and right click behavior"
+            "value": "Swap left-click and right-click actions"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "交换左右键点击行为"
+            "value": "交换左键与右键功能"
           }
         }
       }

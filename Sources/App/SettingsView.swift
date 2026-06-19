@@ -199,18 +199,26 @@ private struct MenuBarClickBehaviorSettingsRow: View {
             .frame(width: GeneralSettingsCardLayout.iconSize, height: GeneralSettingsCardLayout.iconSize)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(AppL10n.settings("menuBarClick.title", defaultValue: "交换左右键点击行为"))
+                Text(AppL10n.settings("menuBarClick.title", defaultValue: "交换左键与右键功能"))
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
 
-                Text(AppL10n.settings("menuBarClick.description", defaultValue: "关闭时左键打开仪表盘、右键打开功能面板；开启后左右键行为互换。"))
+                Text(AppL10n.settings("menuBarClick.description", defaultValue: "关闭时左键打开仪表盘、右键功能打开功能面板；开启后互换。"))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Text(AppL10n.settings(
+                    "menuBarClick.rightClickShortcutNotice",
+                    defaultValue: "可以使用 Option + 左键触发右键功能。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Toggle(AppL10n.settings("menuBarClick.toggle", defaultValue: "交换左右键点击行为"), isOn: isSwapped)
+            Toggle(AppL10n.settings("menuBarClick.toggle", defaultValue: "交换左键与右键功能"), isOn: isSwapped)
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .id(toggleID)
@@ -218,7 +226,7 @@ private struct MenuBarClickBehaviorSettingsRow: View {
         .frame(maxWidth: .infinity, minHeight: GeneralSettingsCardLayout.minRowHeight, alignment: .leading)
         .padding(.horizontal, GeneralSettingsCardLayout.horizontalPadding)
         .padding(.vertical, GeneralSettingsCardLayout.verticalPadding)
-        .help(AppL10n.settings("menuBarClick.help", defaultValue: "开启后左键打开功能面板，右键打开仪表盘"))
+        .help(AppL10n.settings("menuBarClick.help", defaultValue: "开启后左键打开功能面板，右键功能打开仪表盘"))
         .onAppear {
             DispatchQueue.main.async {
                 toggleID = UUID()
