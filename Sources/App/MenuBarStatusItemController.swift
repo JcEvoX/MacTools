@@ -99,9 +99,9 @@ final class MenuBarStatusItemController: NSObject {
         )
         observeStatusItemPositionPersistence()
         configureStatusItem()
-        updateStatusIcon()
         observePluginHost()
         observeIconSettings()
+        updateStatusIcon()
         pluginHost.resetStatusItemPosition = { [weak self] in
             self?.resetStatusItemPosition()
         }
@@ -205,7 +205,7 @@ final class MenuBarStatusItemController: NSObject {
     /// Expanded-interface session end. Reached synchronously from `cancel()`
     /// inside `requestPanelClose()` (coordinator re-entry guard absorbs the
     /// loop) or directly should the host ever end a session itself.
-    private func handleExpandedSessionEnd(animated: Bool) {
+    private func handleExpandedSessionEnd() {
         expandedSessionCoordinator.sessionDidEnd { [weak self] in
             self?.dismissPanels()
         }
@@ -229,8 +229,8 @@ final class MenuBarStatusItemController: NSObject {
             expandedInterfaceAdapter.onSessionBegin = { [weak self] session in
                 self?.handleExpandedSessionBegin(session)
             }
-            expandedInterfaceAdapter.onSessionEnd = { [weak self] animated in
-                self?.handleExpandedSessionEnd(animated: animated)
+            expandedInterfaceAdapter.onSessionEnd = { [weak self] _ in
+                self?.handleExpandedSessionEnd()
             }
             let attached = expandedInterfaceAdapter.attach(to: statusItem)
             if !attached {
@@ -435,12 +435,10 @@ final class MenuBarStatusItemController: NSObject {
 
     @objc
     private func handleStatusItemAction(_ sender: NSStatusBarButton) {
-        let currentEvent = NSApp.currentEvent
         // Read the preference live on each click so a settings change takes
         // effect immediately without re-observing.
         let swapped = MenuBarClickBehaviorPreference.current().isSwapped
-        let invocation = MenuBarStatusItemInvocation.invocation(for: currentEvent, swapped: swapped)
-        switch invocation {
+        switch MenuBarStatusItemInvocation.invocation(for: NSApp.currentEvent, swapped: swapped) {
         case .featurePanel:
             toggleFeaturePanel(relativeTo: sender)
         case .componentPanel:

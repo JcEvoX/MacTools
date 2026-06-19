@@ -327,28 +327,6 @@ final class DDCBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable 
 }
 
 final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendable {
-    /// Injection seams over the CoreGraphics gamma-table calls so the
-    /// original-table load and the cleanup restore chain are testable without
-    /// a live display. Signatures mirror the imported C functions exactly, so
-    /// the defaults are the real functions and production behavior is
-    /// unchanged.
-    typealias GammaTableCapacityFunction = (CGDirectDisplayID) -> UInt32
-    typealias GammaTableReadFunction = (
-        CGDirectDisplayID,
-        UInt32,
-        UnsafeMutablePointer<CGGammaValue>?,
-        UnsafeMutablePointer<CGGammaValue>?,
-        UnsafeMutablePointer<CGGammaValue>?,
-        UnsafeMutablePointer<UInt32>?
-    ) -> CGError
-    typealias GammaTableWriteFunction = (
-        CGDirectDisplayID,
-        UInt32,
-        UnsafePointer<CGGammaValue>?,
-        UnsafePointer<CGGammaValue>?,
-        UnsafePointer<CGGammaValue>?
-    ) -> CGError
-
     private struct TransferTable {
         let red: [CGGammaValue]
         let green: [CGGammaValue]
@@ -358,29 +336,15 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
     let kind: DisplayBrightnessBackendKind = .gamma
     var display: DisplayInfo
 
-    private let tableCapacity: GammaTableCapacityFunction
-    private let readTransferTable: GammaTableReadFunction
-    private let writeTransferTable: GammaTableWriteFunction
     private var originalTransferTable: TransferTable?
     private var currentBrightness = 1.0
 
-    init?(
-        display: DisplayInfo,
-        tableCapacity: @escaping GammaTableCapacityFunction = CGDisplayGammaTableCapacity,
-        readTransferTable: @escaping GammaTableReadFunction = CGGetDisplayTransferByTable,
-        writeTransferTable: @escaping GammaTableWriteFunction = CGSetDisplayTransferByTable
-    ) {
-        // See loadOriginalTransferTableIfNeeded for why the capacity check
-        // must use CGDisplayGammaTableCapacity rather than the historical
-        // size-query idiom.
-        guard Self.gammaTableCapacityIsControllable(tableCapacity(display.id)) else {
+    init?(display: DisplayInfo) {
+        guard Self.canControl(displayID: display.id) else {
             return nil
         }
 
         self.display = display
-        self.tableCapacity = tableCapacity
-        self.readTransferTable = readTransferTable
-        self.writeTransferTable = writeTransferTable
     }
 
     func readBrightness() throws -> Double {
@@ -390,10 +354,16 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
     func writeBrightness(_ value: Double) throws {
         let clampedValue = max(0, min(value, 1))
         let transferTable = try loadOriginalTransferTableIfNeeded()
-        let result = applyTransferTable(
-            red: transferTable.red.map { $0 * Float(clampedValue) },
-            green: transferTable.green.map { $0 * Float(clampedValue) },
-            blue: transferTable.blue.map { $0 * Float(clampedValue) }
+        let red = transferTable.red.map { $0 * Float(clampedValue) }
+        let green = transferTable.green.map { $0 * Float(clampedValue) }
+        let blue = transferTable.blue.map { $0 * Float(clampedValue) }
+
+        let result = CGSetDisplayTransferByTable(
+            display.id,
+            UInt32(red.count),
+            red,
+            green,
+            blue
         )
 
         guard result == .success else {
@@ -408,41 +378,14 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
             return
         }
 
-        // Restore failure cannot be retried here (the backend is being torn
-        // down), but it must not pass silently — a display left dimmed by an
-        // unrestored gamma table is exactly the side effect the safety
-        // boundary requires us to surface.
-        let result = applyTransferTable(
-            red: originalTransferTable.red,
-            green: originalTransferTable.green,
-            blue: originalTransferTable.blue
+        _ = CGSetDisplayTransferByTable(
+            display.id,
+            UInt32(originalTransferTable.red.count),
+            originalTransferTable.red,
+            originalTransferTable.green,
+            originalTransferTable.blue
         )
-        if result != .success {
-            DisplayBrightnessLog.backend.error(
-                "Gamma restore failed on cleanup for display \(self.display.id, privacy: .public): CGError \(result.rawValue, privacy: .public)"
-            )
-        }
         currentBrightness = 1
-    }
-
-    private func applyTransferTable(
-        red: [CGGammaValue],
-        green: [CGGammaValue],
-        blue: [CGGammaValue]
-    ) -> CGError {
-        red.withUnsafeBufferPointer { redBuffer in
-            green.withUnsafeBufferPointer { greenBuffer in
-                blue.withUnsafeBufferPointer { blueBuffer in
-                    writeTransferTable(
-                        display.id,
-                        UInt32(redBuffer.count),
-                        redBuffer.baseAddress,
-                        greenBuffer.baseAddress,
-                        blueBuffer.baseAddress
-                    )
-                }
-            }
-        }
     }
 
     private func loadOriginalTransferTableIfNeeded() throws -> TransferTable {
@@ -450,64 +393,48 @@ final class GammaBrightnessBackend: DisplayBrightnessBackend, @unchecked Sendabl
             return originalTransferTable
         }
 
-        // macOS 27 beta: the historical "capacity = 0, nil buffers" size-query
-        // idiom regressed (CGGetDisplayTransferByTable returns 1001 instead of
-        // .success on 26A5353q), collapsing the whole gamma fallback. Query the
-        // table capacity with the public CGDisplayGammaTableCapacity instead —
-        // it returns a valid capacity on every shipping macOS (verified 1024 on
-        // beta; valid on 14…26 too), so this needs no OS gate.
-        let capacity = tableCapacity(display.id)
-        guard Self.gammaTableCapacityIsControllable(capacity) else {
+        var sampleCount: UInt32 = 0
+        let countResult = CGGetDisplayTransferByTable(display.id, 0, nil, nil, nil, &sampleCount)
+
+        guard countResult == .success, sampleCount > 0 else {
             throw DisplayBrightnessControllerError.brightnessUnavailable(displayName: display.name)
         }
-        var sampleCount = capacity
 
-        let red = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(capacity))
-        let green = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(capacity))
-        let blue = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(capacity))
+        let red = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(sampleCount))
+        let green = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(sampleCount))
+        let blue = UnsafeMutablePointer<CGGammaValue>.allocate(capacity: Int(sampleCount))
         defer {
             red.deallocate()
             green.deallocate()
             blue.deallocate()
         }
 
-        let readResult = withUnsafeMutablePointer(to: &sampleCount) { sampleCountPointer in
-            readTransferTable(
-                display.id,
-                capacity,
-                red,
-                green,
-                blue,
-                sampleCountPointer
-            )
-        }
+        let readResult = CGGetDisplayTransferByTable(
+            display.id,
+            sampleCount,
+            red,
+            green,
+            blue,
+            &sampleCount
+        )
 
         guard readResult == .success else {
             throw DisplayBrightnessControllerError.brightnessUnavailable(displayName: display.name)
         }
 
-        // The reported sample count must never exceed the buffers we
-        // allocated; clamp before building the cached table. A zero count on
-        // a .success read would cache an empty table and turn every later
-        // write and the restore into a 0-sample no-op — treat it as the read
-        // failure it effectively is instead of caching it.
-        let resolvedCount = Int(min(sampleCount, capacity))
-        guard resolvedCount > 0 else {
-            throw DisplayBrightnessControllerError.brightnessUnavailable(displayName: display.name)
-        }
         let transferTable = TransferTable(
-            red: Array(UnsafeBufferPointer(start: red, count: resolvedCount)),
-            green: Array(UnsafeBufferPointer(start: green, count: resolvedCount)),
-            blue: Array(UnsafeBufferPointer(start: blue, count: resolvedCount))
+            red: Array(UnsafeBufferPointer(start: red, count: Int(sampleCount))),
+            green: Array(UnsafeBufferPointer(start: green, count: Int(sampleCount))),
+            blue: Array(UnsafeBufferPointer(start: blue, count: Int(sampleCount)))
         )
         originalTransferTable = transferTable
         return transferTable
     }
 
-    /// Pure capacity gate, extracted so the gamma-capacity fix path is testable
-    /// without a live display.
-    static func gammaTableCapacityIsControllable(_ capacity: UInt32) -> Bool {
-        capacity > 0
+    private static func canControl(displayID: CGDirectDisplayID) -> Bool {
+        var sampleCount: UInt32 = 0
+        return CGGetDisplayTransferByTable(displayID, 0, nil, nil, nil, &sampleCount) == .success
+            && sampleCount > 0
     }
 }
 

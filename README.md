@@ -60,7 +60,7 @@
 | Menu Bar Icon Customization | Use local images or lightweight GIF/MP4 animations as the menu bar icon, download animated icons from the online gallery, remove backgrounds, adjust playback speed, and restore the default icon. |
 | Localization | Follow the system language by default, or choose a fixed app language in Settings > General > Appearance. |
 
-> **Right-click action:** Option-click the MacTools icon to trigger the right-click action on every supported macOS version.
+> **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 
 ## Install
 

@@ -98,7 +98,7 @@ final class MenuBarStatusItemExpandedInterfaceAdapter: NSObject {
 @MainActor
 final class MenuBarExpandedSessionCoordinator {
     private(set) var activeSession: NSObject?
-    private(set) var isHandlingSessionEnd = false
+    private var isHandlingSessionEnd = false
 
     func sessionDidBegin(_ session: NSObject) {
         activeSession = session

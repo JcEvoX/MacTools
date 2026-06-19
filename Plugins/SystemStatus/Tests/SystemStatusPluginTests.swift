@@ -69,32 +69,6 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(schedule.foregroundHistoryInterval, 60)
     }
 
-    func testViewModelKeepsLastSnapshotAfterStop() async throws {
-        let sampler = StubSystemStatusSampler()
-        let historyStore = StubSystemStatusHistoryStore()
-        let viewModel = SystemStatusViewModel(
-            sampler: sampler,
-            historyStore: historyStore,
-            schedule: .test
-        )
-
-        await viewModel.refreshSnapshotNow(referenceDate: Date(timeIntervalSince1970: 1_000))
-        viewModel.stop()
-
-        let cachedSnapshot = viewModel.snapshot
-        XCTAssertNotEqual(cachedSnapshot, .empty)
-
-        try await Task.sleep(for: .milliseconds(80))
-
-        XCTAssertEqual(viewModel.snapshot, cachedSnapshot)
-        let counts = await sampler.callCounts
-        XCTAssertGreaterThan(counts.fast, 0)
-        XCTAssertGreaterThan(counts.slow, 0)
-        XCTAssertGreaterThan(counts.processes, 0)
-        let historyCount = await historyStore.appendedCount
-        XCTAssertGreaterThan(historyCount, 0)
-    }
-
     func testViewModelMergesDiskCapacityAndActivitySamples() async throws {
         let viewModel = SystemStatusViewModel(
             sampler: StubSystemStatusSampler(),
@@ -110,45 +84,6 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot.disk.writeBytesPerSecond, 1_024)
         XCTAssertEqual(viewModel.snapshot.history.last?.diskReadBytesPerSecond, 2_048)
         XCTAssertEqual(viewModel.snapshot.history.last?.diskWriteBytesPerSecond, 1_024)
-    }
-
-    func testViewModelKeepsLiveMetricsFreshWhileThrottlingPublishedChartHistory() async throws {
-        let sampler = StubSystemStatusSampler()
-        let viewModel = SystemStatusViewModel(
-            sampler: sampler,
-            historyStore: StubSystemStatusHistoryStore(),
-            schedule: .foregroundRestart
-        )
-
-        viewModel.startForeground()
-        let initialCounts = try await waitForFastSampleCount(atLeast: 2, sampler: sampler)
-        let publishedHistoryCount = viewModel.snapshot.history.count
-        let cpuUsage = viewModel.snapshot.cpu.usage
-
-        _ = try await waitForFastSampleCount(atLeast: initialCounts.fast + 2, sampler: sampler)
-        viewModel.stop()
-
-        XCTAssertEqual(viewModel.snapshot.history.count, publishedHistoryCount)
-        XCTAssertNotEqual(viewModel.snapshot.cpu.usage, cpuUsage)
-        XCTAssertGreaterThan(publishedHistoryCount, 0)
-    }
-
-    func testViewModelRestartsSleepingBackgroundLoopWhenPanelAppears() async throws {
-        let sampler = StubSystemStatusSampler()
-        let viewModel = SystemStatusViewModel(
-            sampler: sampler,
-            historyStore: StubSystemStatusHistoryStore(),
-            schedule: .foregroundRestart
-        )
-
-        viewModel.startBackground()
-        let backgroundCounts = try await waitForFastSampleCount(atLeast: 1, sampler: sampler)
-
-        viewModel.startForeground()
-        let foregroundCounts = try await waitForFastSampleCount(atLeast: backgroundCounts.fast + 1, sampler: sampler)
-        viewModel.stop()
-
-        XCTAssertGreaterThanOrEqual(foregroundCounts.fast, backgroundCounts.fast + 1)
     }
 
     func testPluginReusesViewModelAcrossComponentViews() {
@@ -174,22 +109,6 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertFalse(String(describing: second).isEmpty)
     }
 
-    private func waitForFastSampleCount(
-        atLeast expectedCount: Int,
-        sampler: StubSystemStatusSampler,
-        timeout: Duration = .seconds(2)
-    ) async throws -> (fast: Int, slow: Int, processes: Int, publicIP: Int) {
-        let start = ContinuousClock.now
-        while start.duration(to: .now) < timeout {
-            let counts = await sampler.callCounts
-            if counts.fast >= expectedCount {
-                return counts
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-
-        return await sampler.callCounts
-    }
 }
 
 private actor StubSystemStatusSampler: SystemStatusSampling {

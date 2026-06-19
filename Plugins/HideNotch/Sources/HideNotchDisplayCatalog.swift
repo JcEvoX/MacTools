@@ -128,45 +128,6 @@ struct SystemHideNotchDisplayCatalog: HideNotchDisplayCatalogProviding {
         }
     }
 
-    /// Resolves the notch-mask height.
-    ///
-    /// macOS ≤26: `max(auxiliary area, menu bar)` — the original formula. On
-    /// notched Macs the menu bar band is at least as tall as the notch, so this
-    /// covers the full band exactly as the shipping releases did; gating keeps
-    /// the ≤26 mask geometry byte-identical.
-    ///
-    /// macOS 27: the menu bar can be TALLER than the physical notch (observed on
-    /// 26A5353q with an external main display), so taking the max would overflow
-    /// the mask below the camera housing. Pin strictly to the auxiliary-area
-    /// (physical notch) height. Menu bar height is only an estimate used when no
-    /// auxiliary-area data exists; in that case `hasUnobscuredTopArea` is false,
-    /// so `isSupported` stays false and the fallback only affects the recorded
-    /// context value, never masking.
-    nonisolated static func notchHeight(
-        auxLeftHeight: CGFloat,
-        auxRightHeight: CGFloat,
-        menuBarHeight: CGFloat,
-        isMacOS27OrLater: Bool
-    ) -> CGFloat {
-        // Sanitize each side before max(): Swift's max() propagates a NaN
-        // first argument, which would discard a valid height on the other
-        // side instead of falling back to it.
-        let leftHeight = auxLeftHeight.isFinite ? max(auxLeftHeight, 0) : 0
-        let rightHeight = auxRightHeight.isFinite ? max(auxRightHeight, 0) : 0
-        let auxHeight = max(leftHeight, rightHeight)
-        let sanitizedMenuBarHeight = (menuBarHeight.isFinite && menuBarHeight > 0) ? menuBarHeight : 0
-
-        guard isMacOS27OrLater else {
-            return max(auxHeight, sanitizedMenuBarHeight)
-        }
-
-        if auxHeight > 0 {
-            return auxHeight
-        }
-
-        return sanitizedMenuBarHeight
-    }
-
     private static func displayContext(for screen: NSScreen) -> HideNotchDisplayContext? {
         guard
             let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
@@ -184,18 +145,9 @@ struct SystemHideNotchDisplayCatalog: HideNotchDisplayCatalogProviding {
         let topRightArea = screen.auxiliaryTopRightArea ?? .zero
         let isBuiltin = CGDisplayIsBuiltin(displayID) != 0
         let hasUnobscuredTopArea = !topLeftArea.isEmpty || !topRightArea.isEmpty
-        let isMacOS27OrLater: Bool
-        if #available(macOS 27.0, *) {
-            isMacOS27OrLater = true
-        } else {
-            isMacOS27OrLater = false
-        }
-        let notchHeight = Self.notchHeight(
-            auxLeftHeight: topLeftArea.height,
-            auxRightHeight: topRightArea.height,
-            menuBarHeight: NSApplication.shared.mainMenu?.menuBarHeight ?? 0,
-            isMacOS27OrLater: isMacOS27OrLater
-        )
+        let fallbackHeight = max(topLeftArea.height, topRightArea.height)
+        let menuBarHeight = NSApplication.shared.mainMenu?.menuBarHeight ?? 0
+        let notchHeight = max(menuBarHeight, fallbackHeight)
         let isSupported = isBuiltin && hasUnobscuredTopArea && notchHeight > 0
 
         return HideNotchDisplayContext(
