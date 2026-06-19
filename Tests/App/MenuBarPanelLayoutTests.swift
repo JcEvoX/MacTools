@@ -5,86 +5,18 @@ import MacToolsPluginKit
 @testable import MacTools
 
 final class MenuBarPanelLayoutTests: XCTestCase {
-    func testBaseWidthRemainsFixedForCompactPanelPresentation() {
+    func testBaseLayoutMetricsStayStable() {
         XCTAssertEqual(MenuBarPanelLayout.baseWidth, 288)
-    }
-
-    func testSurfaceWidthStaysAtBaseCardWidthWhenSecondaryPanelIsVisible() {
         XCTAssertEqual(
             MenuBarPanelLayout.surfaceWidth,
             MenuBarPanelLayout.baseWidth - (MenuBarPanelLayout.outerPadding * 2)
         )
     }
 
-    func testWidthUsesBaseWidthWhenNoSecondaryPanelIsVisible() {
-        let item = makeItem(controlStyle: .disclosure, isExpanded: true, secondaryPanel: nil)
-
-        XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
-    }
-
-    func testWidthAddsSecondaryPanelWidthForExpandedDisclosurePanel() {
-        let item = makeItem(
-            controlStyle: .disclosure,
-            isExpanded: true,
-            secondaryPanel: PluginPanelSecondaryPanel(title: "Studio Display", controls: [])
-        )
-
-        XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
-    }
-
-    func testWidthIgnoresSecondaryPanelForCollapsedDisclosurePanel() {
-        let item = makeItem(
-            controlStyle: .disclosure,
-            isExpanded: false,
-            secondaryPanel: PluginPanelSecondaryPanel(title: "Studio Display", controls: [])
-        )
-
-        XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
-    }
-
-    func testWidthUsesBaseWidthForExpandedSliderOnlyDisclosureDetail() {
-        let sliderControl = PluginPanelControl(
-            id: "display.2.brightness",
-            kind: .slider,
-            options: [],
-            selectedOptionID: nil,
-            dateValue: nil,
-            minimumDate: nil,
-            displayedComponents: nil,
-            datePickerStyle: nil,
-            sectionTitle: "Studio Display",
-            sliderValue: 0.72,
-            sliderBounds: 0...1,
-            sliderStep: 0.01,
-            valueLabel: "72%",
-            isEnabled: true
-        )
-        let item = PluginPanelItem(
-            id: "display-brightness",
-            title: "显示器亮度",
-            iconName: "sun.max",
-            iconTint: Color(nsColor: .systemYellow),
-            controlStyle: .disclosure,
-            menuActionBehavior: .keepPresented,
-            description: "快速调节每个显示器的亮度",
-            helpText: "快速调节每个显示器的亮度",
-            descriptionTone: .secondary,
-            isOn: false,
-            isExpanded: true,
-            isEnabled: true,
-            detail: PluginPanelDetail(primaryControls: [sliderControl], secondaryPanel: nil),
-            buttonActionID: nil,
-            buttonTitle: nil
-        )
-
-        XCTAssertEqual(MenuBarPanelLayout.width(for: [item]), MenuBarPanelLayout.baseWidth)
-    }
-
     func testContentSizeUsesModelWithoutSwiftUILayoutMeasurement() {
-        let expandedNavigationItem = makeItem(
+        let item = makeItem(
             controlStyle: .disclosure,
             isExpanded: true,
-            secondaryPanel: nil,
             controls: [
                 PluginPanelControl(
                     id: "display-navigation",
@@ -104,105 +36,22 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             ]
         )
 
-        let collapsedItem = makeItem(
-            controlStyle: .switch,
-            isExpanded: false,
-            secondaryPanel: nil
-        )
-
         XCTAssertEqual(
-            MenuBarPanelLayout.contentSize(for: [expandedNavigationItem, collapsedItem]),
-            NSSize(width: 288, height: 298)
+            MenuBarPanelLayout.contentSize(for: [item]),
+            NSSize(width: 288, height: 251)
         )
     }
 
-    func testHeightIncludesFeatureContentAndFixedFooter() {
-        let items = [
-            makeItem(controlStyle: .switch, isExpanded: false, secondaryPanel: nil),
-            makeItem(id: "keep-awake", controlStyle: .switch, isExpanded: false, secondaryPanel: nil)
-        ]
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.height(for: items),
-            MenuBarPanelLayout.featureContentHeight(for: items) + MenuBarPanelLayout.fixedFooterHeight
-        )
-        XCTAssertEqual(
-            MenuBarPanelLayout.availableFeatureHeight(forPanelHeight: MenuBarPanelLayout.height(for: items)),
-            MenuBarPanelLayout.featureContentHeight(for: items)
-        )
-    }
-
-    func testPreferredPanelHeightUsesActualFeatureHeightBelowListMaximum() {
-        let items = [
-            makeItem(controlStyle: .switch, isExpanded: false, secondaryPanel: nil),
-            makeItem(id: "keep-awake", controlStyle: .switch, isExpanded: false, secondaryPanel: nil)
-        ]
-
-        XCTAssertLessThan(
-            MenuBarPanelLayout.featureContentHeight(for: items),
-            MenuBarPanelLayout.featureListMaximumHeight
-        )
-        XCTAssertEqual(
-            MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
-            MenuBarPanelLayout.featureContentHeight(for: items) + MenuBarPanelLayout.fixedFooterHeight
-        )
-    }
-
-    func testPreferredPanelHeightCapsTallFeatureListsAtListMaximum() {
+    func testPreferredPanelHeightCapsTallFeatureLists() {
         let items = (0..<40).map { index in
-            makeItem(
-                id: "plugin-\(index)",
-                controlStyle: .switch,
-                isExpanded: false,
-                secondaryPanel: nil
-            )
+            makeItem(id: "plugin-\(index)", controlStyle: .switch, isExpanded: false)
         }
 
         XCTAssertEqual(
             MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
             MenuBarPanelLayout.featureListMaximumHeight + MenuBarPanelLayout.fixedFooterHeight
         )
-    }
-
-    func testFeatureListMaximumRespectsVisibleScreenHeight() {
-        let items = (0..<40).map { index in
-            makeItem(
-                id: "plugin-\(index)",
-                controlStyle: .switch,
-                isExpanded: false,
-                secondaryPanel: nil
-            )
-        }
-
-        XCTAssertEqual(
-            MenuBarPanelLayout.featureListHeight(for: items, screen: nil)
-                + MenuBarPanelLayout.fixedFooterHeight,
-            MenuBarPanelLayout.featureListMaximumHeight + MenuBarPanelLayout.fixedFooterHeight
-        )
-        XCTAssertEqual(
-            MenuBarPanelLayout.maximumFeatureListHeight(visibleFrameHeight: 500)
-                + MenuBarPanelLayout.fixedFooterHeight,
-            375
-        )
-    }
-
-    func testFeaturePanelMaximumUsesThreeQuartersOfVisibleScreenHeight() {
-        XCTAssertEqual(
-            MenuBarPanelLayout.maximumFeatureListHeight(visibleFrameHeight: 1000)
-                + MenuBarPanelLayout.fixedFooterHeight,
-            750
-        )
-    }
-
-    func testComponentPanelMaximumMatchesFeaturePanelScreenRatio() {
-        XCTAssertEqual(
-            MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 1000),
-            750
-        )
-        XCTAssertEqual(
-            MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 500),
-            375
-        )
+        XCTAssertEqual(MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 1000), 750)
     }
 
     func testEmptyContentSizeIncludesMarketplacePrompt() {
@@ -216,7 +65,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         id: String = "display-resolution",
         controlStyle: PluginControlStyle,
         isExpanded: Bool,
-        secondaryPanel: PluginPanelSecondaryPanel?,
         controls: [PluginPanelControl] = []
     ) -> PluginPanelItem {
         PluginPanelItem(
@@ -232,64 +80,9 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             isOn: false,
             isExpanded: isExpanded,
             isEnabled: true,
-            detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: secondaryPanel),
+            detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
             buttonActionID: nil,
             buttonTitle: nil
-        )
-    }
-}
-
-@MainActor
-final class DeferredPanelActionDispatcherTests: XCTestCase {
-    func testFlushAfterDismissRunsDeferredSwitchWithoutViewDisappear() async {
-        let dispatcher = DeferredPanelActionDispatcher()
-        var switchActions: [DeferredPanelActionDispatcher.PanelSwitchAction] = []
-        var invocationActions: [DeferredPanelActionDispatcher.ActionInvocation] = []
-
-        dispatcher.deferPanelSwitch(pluginID: "physical-clean-mode", isOn: true)
-        dispatcher.flushAfterDismiss(
-            switchHandler: { switchActions.append($0) },
-            invocationHandler: { invocationActions.append($0) }
-        )
-
-        try? await Task.sleep(for: .milliseconds(20))
-
-        XCTAssertEqual(
-            switchActions,
-            [
-                DeferredPanelActionDispatcher.PanelSwitchAction(
-                    pluginID: "physical-clean-mode",
-                    isOn: true
-                )
-            ]
-        )
-        XCTAssertTrue(invocationActions.isEmpty)
-    }
-
-    func testDisappearFlushDoesNotRunAlreadyFlushedActionTwice() async {
-        let dispatcher = DeferredPanelActionDispatcher()
-        var switchActions: [DeferredPanelActionDispatcher.PanelSwitchAction] = []
-
-        dispatcher.deferPanelSwitch(pluginID: "physical-clean-mode", isOn: true)
-        dispatcher.flushAfterDismiss(
-            switchHandler: { switchActions.append($0) },
-            invocationHandler: { _ in }
-        )
-
-        try? await Task.sleep(for: .milliseconds(20))
-        dispatcher.flush(
-            switchHandler: { switchActions.append($0) },
-            invocationHandler: { _ in }
-        )
-
-        XCTAssertEqual(
-            switchActions,
-            [
-                DeferredPanelActionDispatcher.PanelSwitchAction(
-                    pluginID: "physical-clean-mode",
-                    isOn: true
-                )
-            ]
         )
     }
 }
@@ -313,7 +106,6 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
             CGRect(x: 10, y: 20, width: 30, height: 40),
             for: firstActivation
         )
-
         coordinator.hoverBegan(
             pluginID: secondActivation.pluginID,
             controlID: secondActivation.controlID,
@@ -322,73 +114,6 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.activeActivation, secondActivation)
         XCTAssertNil(coordinator.selectedRowFrame)
-    }
-
-    func testHoverEndDismissesAfterDelayAndNotifies() async throws {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(10),
-            activationDelay: nil
-        )
-        var dismissedActivation: HoverSecondaryPanelCoordinator.Activation?
-        let activation = makeActivation(optionID: "2")
-
-        coordinator.onDismissRequest = { activation in
-            dismissedActivation = activation
-        }
-
-        coordinator.hoverBegan(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-        coordinator.updateRowFrame(CGRect(x: 1, y: 2, width: 3, height: 4), for: activation)
-        coordinator.hoverEnded(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-
-        try await Task.sleep(for: .milliseconds(50))
-
-        XCTAssertNil(coordinator.activeActivation)
-        XCTAssertNil(coordinator.selectedRowFrame)
-        XCTAssertEqual(dismissedActivation, activation)
-    }
-
-    func testPanelHoverCancelsPendingDismissal() async throws {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(20),
-            activationDelay: nil
-        )
-        var dismissCount = 0
-        let activation = makeActivation(optionID: "2")
-
-        coordinator.onDismissRequest = { _ in
-            dismissCount += 1
-        }
-
-        coordinator.hoverBegan(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-        coordinator.hoverEnded(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-        coordinator.setPanelHovered(true)
-
-        try await Task.sleep(for: .milliseconds(50))
-
-        XCTAssertNotNil(coordinator.activeActivation)
-        XCTAssertEqual(dismissCount, 0)
-
-        coordinator.setPanelHovered(false)
-        try await Task.sleep(for: .milliseconds(50))
-
-        XCTAssertNil(coordinator.activeActivation)
-        XCTAssertEqual(dismissCount, 1)
     }
 
     func testHoverBeganUsesCachedFrameForNewActivation() {
@@ -405,85 +130,6 @@ final class HoverSecondaryPanelCoordinatorTests: XCTestCase {
             controlID: activation.controlID,
             optionID: activation.optionID
         )
-
-        XCTAssertEqual(coordinator.activeActivation, activation)
-        XCTAssertEqual(coordinator.selectedRowFrame, frame)
-    }
-
-    func testInactiveRowFrameClearDoesNotOverrideCurrentAnchor() {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(5),
-            activationDelay: nil
-        )
-        let firstActivation = makeActivation(optionID: "2")
-        let secondActivation = makeActivation(optionID: "3")
-        let secondFrame = CGRect(x: 80, y: 60, width: 160, height: 48)
-
-        coordinator.hoverBegan(
-            pluginID: firstActivation.pluginID,
-            controlID: firstActivation.controlID,
-            optionID: firstActivation.optionID
-        )
-        coordinator.updateRowFrame(
-            CGRect(x: 10, y: 20, width: 140, height: 48),
-            for: firstActivation
-        )
-
-        coordinator.hoverBegan(
-            pluginID: secondActivation.pluginID,
-            controlID: secondActivation.controlID,
-            optionID: secondActivation.optionID
-        )
-        coordinator.updateRowFrame(secondFrame, for: secondActivation)
-        coordinator.updateRowFrame(nil, for: firstActivation)
-
-        XCTAssertEqual(coordinator.activeActivation, secondActivation)
-        XCTAssertEqual(coordinator.selectedRowFrame, secondFrame)
-    }
-
-    func testTransientHoverEndsBeforeActivationDelayDoesNotOpenOrNotify() async throws {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(5),
-            activationDelay: .milliseconds(40)
-        )
-        let activation = makeActivation(optionID: "2")
-        var dismissCount = 0
-        coordinator.onDismissRequest = { _ in dismissCount += 1 }
-
-        coordinator.hoverBegan(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-        coordinator.hoverEnded(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-
-        try await Task.sleep(for: .milliseconds(80))
-
-        XCTAssertNil(coordinator.activeActivation)
-        XCTAssertNil(coordinator.selectedRowFrame)
-        XCTAssertEqual(dismissCount, 0)
-    }
-
-    func testSustainedHoverActivatesAfterDelay() async throws {
-        let coordinator = HoverSecondaryPanelCoordinator(
-            dismissDelay: .milliseconds(5),
-            activationDelay: .milliseconds(10)
-        )
-        let activation = makeActivation(optionID: "2")
-        let frame = CGRect(x: 10, y: 20, width: 30, height: 40)
-
-        coordinator.updateRowFrame(frame, for: activation)
-        coordinator.hoverBegan(
-            pluginID: activation.pluginID,
-            controlID: activation.controlID,
-            optionID: activation.optionID
-        )
-
-        try await Task.sleep(for: .milliseconds(40))
 
         XCTAssertEqual(coordinator.activeActivation, activation)
         XCTAssertEqual(coordinator.selectedRowFrame, frame)

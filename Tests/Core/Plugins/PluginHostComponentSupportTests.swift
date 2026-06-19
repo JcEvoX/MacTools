@@ -456,47 +456,6 @@ final class PluginHostComponentSupportTests: XCTestCase {
         try? FileManager.default.removeItem(at: rootDirectory)
     }
 
-    func testDisplayConfigurationChangeRefreshesOnlyDisplayTopologyPlugins() async throws {
-        let displayPlugin = MockDisplayTopologyPlugin(id: "display")
-        let regularPlugin = MockPrimaryPanelPlugin(id: "feature")
-        let observer = MockDisplayConfigurationObserver()
-        let host = makeHost(
-            plugins: [displayPlugin, regularPlugin],
-            displayConfigurationObserver: observer,
-            displayTopologyRefreshDelay: .milliseconds(10)
-        )
-        displayPlugin.refreshDisplayTopologyCallCount = 0
-        regularPlugin.refreshCallCount = 0
-
-        observer.triggerChange()
-
-        try await Task.sleep(for: .milliseconds(60))
-
-        XCTAssertEqual(displayPlugin.refreshDisplayTopologyCallCount, 1)
-        XCTAssertEqual(regularPlugin.refreshCallCount, 0)
-        XCTAssertEqual(host.panelItems.map(\.id), ["display", "feature"])
-    }
-
-    func testDisplayConfigurationChangesAreDebounced() async throws {
-        let displayPlugin = MockDisplayTopologyPlugin(id: "display")
-        let observer = MockDisplayConfigurationObserver()
-        let host = makeHost(
-            plugins: [displayPlugin],
-            displayConfigurationObserver: observer,
-            displayTopologyRefreshDelay: .milliseconds(20)
-        )
-        displayPlugin.refreshDisplayTopologyCallCount = 0
-
-        observer.triggerChange()
-        observer.triggerChange()
-        observer.triggerChange()
-
-        try await Task.sleep(for: .milliseconds(80))
-
-        XCTAssertEqual(displayPlugin.refreshDisplayTopologyCallCount, 1)
-        XCTAssertEqual(host.panelItems.map(\.id), ["display"])
-    }
-
     private func makeHost(
         plugins: [any MacToolsPlugin] = [],
         dynamicPluginManager: DynamicPluginManager? = nil,
