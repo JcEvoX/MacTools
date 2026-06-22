@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-19T07:04:52Z",
-  "minimumHostVersion": "1.0.20",
+  "generatedAt": "2026-06-22T13:48:46Z",
+  "minimumHostVersion": "1.0.21",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -25,16 +25,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "ff6dccecdec16b2300e521c6ce39d59f7cf1f9d37091ca61500fab70e53bb668",
-        "size": 750954,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/activity-bar.mactoolsplugin.zip"
+        "sha256": "1e075afe268a79db53f5b4c9b32cfe8ded745ea3489a6b53a6d13e02fdccc7f1",
+        "size": 757514,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.23/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.23",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -1059,16 +1059,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "27bea7c177868ab7f159b1e531ba395d57925e7795a1ea04c0e63f86237e19cb",
-        "size": 496388,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/system-status.mactoolsplugin.zip"
+        "sha256": "0e3082d8d9a0dfc0c4fcd4e740ba28ef43ad30fc327e9a49d873ee1eac2a9d78",
+        "size": 503936,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.23/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.23",
       "summary": "实时查看系统状态",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "Eq9tFSinhCnuCmgEqxoQF3vDygNFR26w95eBvgYDqdzleoVtX1V+2JcEAMpUEoQe2yne5s3UqY12m1W9BGaACQ=="
+    "value": "aC22vo8F6k5XUz0ahPe6r2hdclvkSA+ZorV8J7V/FgcU6+nnbFvePbcQUbPGPKeUiqbCaI7jQl03bVfZWZT0Dw=="
   }
 }
