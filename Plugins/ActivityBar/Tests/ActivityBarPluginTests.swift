@@ -9,8 +9,34 @@ final class ActivityBarPluginTests: XCTestCase {
 
         XCTAssertEqual(harness.plugin.metadata.id, "activity-bar")
         XCTAssertEqual(harness.plugin.metadata.title, "活动统计")
-        XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .switch)
+        XCTAssertEqual(harness.plugin.primaryPanelDescriptor.controlStyle, .disclosure)
         XCTAssertEqual(harness.plugin.descriptor.span, PluginComponentSpan(width: 4, height: 127)!)
+    }
+
+    func testPrimaryPanelStartsCollapsed() {
+        let harness = makeHarness()
+
+        XCTAssertFalse(harness.plugin.primaryPanelState.isExpanded)
+        XCTAssertNil(harness.plugin.primaryPanelState.detail)
+    }
+
+    func testPrimaryPanelExpandsWithTrackingSwitchAndActions() throws {
+        let harness = makeHarness()
+
+        harness.plugin.handleAction(.setDisclosureExpanded(true))
+
+        let state = harness.plugin.primaryPanelState
+        let controls = try XCTUnwrap(state.detail?.primaryControls)
+
+        XCTAssertTrue(state.isExpanded)
+        XCTAssertEqual(controls.map(\.id), [
+            "tracking-enabled",
+            "open-input-monitoring",
+            "install-hooks",
+            "reset-today"
+        ])
+        XCTAssertEqual(controls.first?.kind, .switchRow)
+        XCTAssertEqual(controls.first?.switchValue, false)
     }
 
     func testSwitchStartsAndStopsRuntime() {
@@ -28,6 +54,18 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertFalse(harness.controller.isTrackingEnabled)
         XCTAssertEqual(harness.inputMonitor.stopCallCount, 1)
         XCTAssertEqual(harness.socketServer.stopCallCount, 1)
+    }
+
+    func testExpandedTrackingSwitchReflectsEnabledState() throws {
+        let harness = makeHarness()
+
+        harness.plugin.handleAction(.setDisclosureExpanded(true))
+        harness.plugin.handleAction(.setSwitch(true))
+
+        let controls = try XCTUnwrap(harness.plugin.primaryPanelState.detail?.primaryControls)
+
+        XCTAssertEqual(controls.first?.kind, .switchRow)
+        XCTAssertEqual(controls.first?.switchValue, true)
     }
 
     func testMonitorEventsUpdateComponentSubtitle() {

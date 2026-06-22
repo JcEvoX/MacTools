@@ -783,6 +783,23 @@
         }
       }
     },
+    "panel.action.trackingEnabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity Tracking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活动统计"
+          }
+        }
+      }
+    },
     "panel.action.installHooks": {
       "extractionState": "manual",
       "localizations": {

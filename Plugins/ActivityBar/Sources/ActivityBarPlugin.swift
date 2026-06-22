@@ -25,6 +25,7 @@ private struct ActivityBarPluginProvider: PluginProvider {
 @MainActor
 final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
     private enum ControlID {
+        static let trackingEnabled = "tracking-enabled"
         static let installHooks = "install-hooks"
         static let resetToday = "reset-today"
         static let openInputMonitoring = "open-input-monitoring"
@@ -33,7 +34,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .switch,
+        controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
     )
 
@@ -46,6 +47,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
 
     private let localization: PluginLocalization
     private let controller: ActivityBarController
+    private var isExpanded = false
 
     var onStateChange: (() -> Void)? {
         didSet {
@@ -79,10 +81,10 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         PluginPanelState(
             subtitle: controller.panelSubtitle,
             isOn: controller.isTrackingEnabled,
-            isExpanded: false,
+            isExpanded: isExpanded,
             isEnabled: true,
             isVisible: true,
-            detail: panelDetail,
+            detail: isExpanded ? panelDetail : nil,
             errorMessage: controller.lastErrorMessage
         )
     }
@@ -142,9 +144,12 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         switch action {
         case let .setSwitch(isEnabled):
             controller.setTrackingEnabled(isEnabled)
+        case let .setDisclosureExpanded(value):
+            isExpanded = value
+            onStateChange?()
         case let .invokeAction(controlID):
             handleAction(controlID: controlID)
-        case .setDisclosureExpanded, .setSelection, .setNavigationSelection,
+        case .setSelection, .setNavigationSelection,
              .clearNavigationSelection, .setDate, .setSlider:
             return
         }
@@ -173,6 +178,22 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
     func handleShortcutAction(id: String) {}
 
     private var panelDetail: PluginPanelDetail {
+        let trackingControl = PluginPanelControl(
+            id: ControlID.trackingEnabled,
+            kind: .switchRow,
+            options: [],
+            selectedOptionID: nil,
+            dateValue: nil,
+            minimumDate: nil,
+            displayedComponents: nil,
+            datePickerStyle: nil,
+            sectionTitle: nil,
+            switchValue: controller.isTrackingEnabled,
+            actionTitle: localization.string("panel.action.trackingEnabled", defaultValue: "活动统计"),
+            actionIconSystemName: "chart.bar.xaxis",
+            isEnabled: true
+        )
+
         let openSettingsControl = PluginPanelControl(
             id: ControlID.openInputMonitoring,
             kind: .actionRow,
@@ -220,7 +241,7 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
         )
 
         return PluginPanelDetail(
-            primaryControls: [openSettingsControl, installHooksControl, resetControl],
+            primaryControls: [trackingControl, openSettingsControl, installHooksControl, resetControl],
             secondaryPanel: nil
         )
     }

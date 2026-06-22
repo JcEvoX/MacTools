@@ -552,6 +552,7 @@ public enum PluginPanelControlKind {
     case selectList
     case navigationList
     case slider
+    case switchRow
     case actionRow
 }
 
@@ -586,6 +587,7 @@ public struct PluginPanelControl: Identifiable {
     public let sliderBounds: ClosedRange<Double>?
     public let sliderStep: Double?
     public let valueLabel: String?
+    public let switchValue: Bool?
     public let actionTitle: String?
     public let actionIconSystemName: String?
     public let actionBehavior: PluginMenuActionBehavior
@@ -606,6 +608,7 @@ public struct PluginPanelControl: Identifiable {
         sliderBounds: ClosedRange<Double>? = nil,
         sliderStep: Double? = nil,
         valueLabel: String? = nil,
+        switchValue: Bool? = nil,
         actionTitle: String? = nil,
         actionIconSystemName: String? = nil,
         actionBehavior: PluginMenuActionBehavior = .keepPresented,
@@ -625,6 +628,7 @@ public struct PluginPanelControl: Identifiable {
         self.sliderBounds = sliderBounds
         self.sliderStep = sliderStep
         self.valueLabel = valueLabel
+        self.switchValue = switchValue
         self.actionTitle = actionTitle
         self.actionIconSystemName = actionIconSystemName
         self.actionBehavior = actionBehavior

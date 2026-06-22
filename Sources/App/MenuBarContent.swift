@@ -160,6 +160,8 @@ enum MenuBarPanelLayout {
             let titleHeight = control.sectionTitle == nil && control.valueLabel == nil ? CGFloat(0) : CGFloat(15)
             let titleSpacing = titleHeight > 0 ? CGFloat(6) : CGFloat(0)
             return titleHeight + titleSpacing + 18 + sliderVerticalPadding * 2
+        case .switchRow:
+            return 20 + actionRowVerticalPadding * 2
         case .actionRow:
             return 16 + actionRowVerticalPadding * 2
         }
@@ -787,6 +789,9 @@ struct MenuBarContent: View {
                         onDateChange: { controlID, date in
                             pluginHost.setPanelDateValue(date, controlID: controlID, for: item.id)
                         },
+                        onSwitchChange: { newValue in
+                            handlePanelSwitchChange(newValue, for: item)
+                        },
                         onSliderChange: { controlID, value, phase in
                             pluginHost.setPanelSliderValue(
                                 value,
@@ -914,10 +919,11 @@ struct FeatureRowView: View {
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
-    @State private var isHovered = false
-    @State private var didPushDisabledCursor = false
+    let onSwitchChange: (Bool) -> Void
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
+    @State private var isHovered = false
+    @State private var didPushDisabledCursor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: detailToDisplay == nil ? 0 : MenuBarPanelLayout.detailSpacing) {
@@ -989,6 +995,7 @@ struct FeatureRowView: View {
                     onNavigationHoverChange: onNavigationHoverChange,
                     onNavigationRowFrameChange: onNavigationRowFrameChange,
                     onDateChange: onDateChange,
+                    onSwitchChange: onSwitchChange,
                     onSliderChange: onSliderChange,
                     onActionInvoke: onActionInvoke
                 )
@@ -1105,6 +1112,7 @@ private struct PluginPanelDetailView: View {
     let onNavigationHoverChange: (String, String, Bool) -> Void
     let onNavigationRowFrameChange: (String, String, CGRect?) -> Void
     let onDateChange: (String, Date) -> Void
+    let onSwitchChange: (Bool) -> Void
     let onSliderChange: (String, Double, PluginPanelAction.SliderPhase) -> Void
     let onActionInvoke: (String, PluginMenuActionBehavior) -> Void
 
@@ -1199,6 +1207,11 @@ private struct PluginPanelDetailView: View {
                     onSliderChange(control.id, value, phase)
                 }
             )
+        case .switchRow:
+            SwitchRowControl(
+                control: control,
+                onChange: onSwitchChange
+            )
         case .actionRow:
             ActionRowControl(
                 control: control,
@@ -1207,6 +1220,53 @@ private struct PluginPanelDetailView: View {
                 }
             )
         }
+    }
+}
+
+private struct SwitchRowControl: View {
+    let control: PluginPanelControl
+    let onChange: (Bool) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let iconName = control.actionIconSystemName {
+                Image(systemName: iconName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, height: 14)
+            }
+
+            Text(control.actionTitle ?? control.sectionTitle ?? "")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Toggle(String(), isOn: Binding(
+                get: { control.switchValue ?? false },
+                set: { newValue in
+                    guard control.isEnabled else { return }
+                    onChange(newValue)
+                }
+            ))
+            .labelsHidden()
+            .controlSize(.small)
+            .toggleStyle(.switch)
+            .disabled(!control.isEnabled)
+        }
+        .padding(.horizontal, FeatureRowLayout.detailControlHorizontalPadding)
+        .padding(.vertical, MenuBarPanelLayout.actionRowVerticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .background(alignment: .center) {
+            RoundedRectangle(cornerRadius: MenuBarHoverStyle.navigationCornerRadius, style: .continuous)
+                .inset(by: MenuBarHoverStyle.inset)
+                .fill(control.isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
+        }
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -1568,6 +1628,7 @@ private struct SecondarySlidingPanel: View {
                 onNavigationHoverChange: { _, _, _ in },
                 onNavigationRowFrameChange: { _, _, _ in },
                 onDateChange: onDateChange,
+                onSwitchChange: { _ in },
                 onSliderChange: onSliderChange,
                 onActionInvoke: { _, _ in }
             )

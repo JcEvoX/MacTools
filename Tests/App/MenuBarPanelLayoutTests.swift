@@ -42,6 +42,35 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         )
     }
 
+    func testDisclosureDetailHeightIncludesSwitchRows() {
+        let item = makeItem(
+            controlStyle: .disclosure,
+            isExpanded: true,
+            controls: [
+                PluginPanelControl(
+                    id: "tracking-enabled",
+                    kind: .switchRow,
+                    options: [],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: nil,
+                    switchValue: true,
+                    actionTitle: "活动统计",
+                    actionIconSystemName: "chart.bar.xaxis",
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.contentSize(for: [item]),
+            NSSize(width: 288, height: 183)
+        )
+    }
+
     func testPreferredPanelHeightCapsTallFeatureLists() {
         let items = (0..<40).map { index in
             makeItem(id: "plugin-\(index)", controlStyle: .switch, isExpanded: false)
