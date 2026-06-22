@@ -79,6 +79,29 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.plugin.componentPanelState.subtitle, "2 次输入")
     }
 
+    func testMonitorEventsBatchPluginStateNotifications() {
+        let harness = makeHarness(inputEventNotificationDelay: .seconds(60))
+        var notificationCount = 0
+        harness.plugin.onStateChange = {
+            notificationCount += 1
+        }
+
+        harness.plugin.handleAction(.setSwitch(true))
+        notificationCount = 0
+
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        harness.inputMonitor.emit(.pointerClick(app: "Terminal"))
+        harness.inputMonitor.emit(.scroll(app: "Terminal"))
+
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 3)
+        XCTAssertEqual(notificationCount, 0)
+
+        harness.plugin.handleAction(.setSwitch(false))
+
+        XCTAssertEqual(notificationCount, 1)
+        XCTAssertEqual(harness.storage.setCallCount(forKey: "activity-bar.input.days.v1"), 1)
+    }
+
     func testResetActionClearsToday() {
         let harness = makeHarness()
 
@@ -90,7 +113,9 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 0)
     }
 
-    private func makeHarness() -> Harness {
+    private func makeHarness(
+        inputEventNotificationDelay: Duration = .milliseconds(750)
+    ) -> Harness {
         let storage = ActivityBarMemoryStorage()
         let inputMonitor = ActivityBarFakeInputMonitor()
         let socketServer = ActivityBarFakeSocketServer()
@@ -103,13 +128,15 @@ final class ActivityBarPluginTests: XCTestCase {
         let controller = ActivityBarController(
             context: context,
             inputMonitor: inputMonitor,
-            socketServer: socketServer
+            socketServer: socketServer,
+            inputEventNotificationDelay: inputEventNotificationDelay
         )
         let plugin = ActivityBarPlugin(context: context, controller: controller)
 
         return Harness(
             plugin: plugin,
             controller: controller,
+            storage: storage,
             inputMonitor: inputMonitor,
             socketServer: socketServer
         )
@@ -118,6 +145,7 @@ final class ActivityBarPluginTests: XCTestCase {
     private struct Harness {
         let plugin: ActivityBarPlugin
         let controller: ActivityBarController
+        let storage: ActivityBarMemoryStorage
         let inputMonitor: ActivityBarFakeInputMonitor
         let socketServer: ActivityBarFakeSocketServer
     }

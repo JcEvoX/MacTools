@@ -86,11 +86,22 @@ struct FeatureManagementTableView: NSViewRepresentable {
             return
         }
 
-        tableView.reloadData()
-        tableView.noteNumberOfRowsChanged()
-
         let contentHeight = Self.preferredHeight(for: items.count)
         let contentWidth = max(scrollView.contentSize.width, 1)
+        let signature = FeatureManagementTableSignature(
+            items: items,
+            isReorderEnabled: isReorderEnabled,
+            contentWidth: contentWidth
+        )
+
+        guard coordinator.lastSignature != signature else {
+            return
+        }
+
+        coordinator.lastSignature = signature
+
+        tableView.reloadData()
+        tableView.noteNumberOfRowsChanged()
 
         tableView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: contentHeight)
         scrollView.contentView.scroll(to: .zero)
@@ -101,6 +112,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         var parent: FeatureManagementTableView
         weak var tableView: NSTableView?
+        fileprivate var lastSignature: FeatureManagementTableSignature?
 
         init(parent: FeatureManagementTableView) {
             self.parent = parent
@@ -165,6 +177,7 @@ struct FeatureManagementTableView: NSViewRepresentable {
             operation: NSDragOperation
         ) {
             isDragging = false
+            lastSignature = nil
             tableView.reloadData()
         }
 
@@ -237,6 +250,69 @@ struct FeatureManagementTableView: NSViewRepresentable {
         }
     }
 }
+
+fileprivate struct FeatureManagementTableSignature: Equatable {
+    struct Row: Equatable {
+        let id: String
+        let title: String
+        let description: String
+        let iconName: String
+        let isVisible: Bool
+        let isActive: Bool
+        let presentation: PluginFeaturePresentation
+        let category: String?
+        let releaseChannel: String?
+    }
+
+    let rows: [Row]
+    let isReorderEnabled: Bool
+    let contentWidth: CGFloat
+
+    init(
+        items: [PluginFeatureManagementItem],
+        isReorderEnabled: Bool,
+        contentWidth: CGFloat
+    ) {
+        self.rows = items.map {
+            Row(
+                id: $0.id,
+                title: $0.title,
+                description: $0.description,
+                iconName: $0.iconName,
+                isVisible: $0.isVisible,
+                isActive: $0.isActive,
+                presentation: $0.presentation,
+                category: $0.category,
+                releaseChannel: $0.releaseChannel
+            )
+        }
+        self.isReorderEnabled = isReorderEnabled
+        self.contentWidth = contentWidth.rounded(.toNearestOrAwayFromZero)
+    }
+}
+
+#if DEBUG
+enum FeatureManagementTableUpdatePolicy {
+    static func needsUpdate(
+        previousItems: [PluginFeatureManagementItem],
+        currentItems: [PluginFeatureManagementItem],
+        previousIsReorderEnabled: Bool,
+        currentIsReorderEnabled: Bool,
+        previousContentWidth: CGFloat,
+        currentContentWidth: CGFloat
+    ) -> Bool {
+        FeatureManagementTableSignature(
+            items: previousItems,
+            isReorderEnabled: previousIsReorderEnabled,
+            contentWidth: previousContentWidth
+        ) != FeatureManagementTableSignature(
+            items: currentItems,
+            isReorderEnabled: currentIsReorderEnabled,
+            contentWidth: currentContentWidth
+        )
+    }
+}
+#endif
 
 private final class NonScrollingTableScrollView: NSScrollView {
     override func scrollWheel(with event: NSEvent) {

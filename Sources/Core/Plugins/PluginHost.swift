@@ -136,6 +136,7 @@ final class PluginHost: ObservableObject {
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let displayTopologyRefreshDelay: Duration
+    private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
 
@@ -150,6 +151,8 @@ final class PluginHost: ObservableObject {
     private var isHandlingPluginAction = false
     private var didLoadDynamicPlugins = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
+    private var pluginStateChangeRebuildTask: Task<Void, Never>?
+    private var isRunningScheduledPluginStateRebuild = false
 
     @Published private(set) var panelItems: [PluginPanelItem] = []
     @Published private(set) var componentItems: [PluginComponentItem] = []
@@ -204,6 +207,7 @@ final class PluginHost: ObservableObject {
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
         loadDynamicPluginsOnInit: Bool = true
     ) {
         self.builtInPlugins = plugins.sorted {
@@ -219,6 +223,7 @@ final class PluginHost: ObservableObject {
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.displayTopologyRefreshDelay = displayTopologyRefreshDelay
+        self.pluginStateChangeRebuildDelay = pluginStateChangeRebuildDelay
         self.dynamicPluginManager = dynamicPluginManager
         self.pluginCatalogManager = pluginCatalogManager
 
@@ -264,6 +269,18 @@ final class PluginHost: ObservableObject {
 
     deinit {
         displayTopologyRefreshTask?.cancel()
+        pluginStateChangeRebuildTask?.cancel()
+    }
+
+    func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
+        pluginStateChangeRebuildTask?.cancel()
+        pluginStateChangeRebuildTask = nil
+
+        for plugin in activePlugins {
+            guardPluginCall(plugin, operation: "deactivate plugin") {
+                plugin.deactivate(reason: reason)
+            }
+        }
     }
 
     func refreshAll() {
@@ -401,10 +418,15 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        handlePluginAction {
+        let isolatedPluginCountAtStart = isolatedPluginFailures.count
+        handlePluginAction(rebuildAfterAction: phase == .ended) {
             guardPluginCall(plugin, operation: "set slider") {
                 primaryPanel.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
             }
+        }
+
+        if phase == .changed, isolatedPluginFailures.count > isolatedPluginCountAtStart {
+            rebuildDerivedState()
         }
     }
 
@@ -979,6 +1001,11 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedState() {
+        if !isRunningScheduledPluginStateRebuild {
+            pluginStateChangeRebuildTask?.cancel()
+            pluginStateChangeRebuildTask = nil
+        }
+
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = orderedPluginDescriptors()
         let panelStatesByID = Dictionary(
@@ -1230,8 +1257,6 @@ final class PluginHost: ObservableObject {
             permissionCards: permissionCards,
             shortcutItems: shortcutItems
         )
-        // 清空所有配置视图缓存，确保状态改变时视图能刷新
-        configurationViewCache.removeAll()
         trimConfigurationViewCache(keeping: Set(pluginConfigurationItems.map(\.id)))
         syncSelectedFeatureSettingsPane()
 
@@ -1264,7 +1289,34 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        rebuildDerivedState()
+        schedulePluginStateChangeRebuild()
+    }
+
+    private func schedulePluginStateChangeRebuild() {
+        guard pluginStateChangeRebuildTask == nil else {
+            return
+        }
+
+        pluginStateChangeRebuildTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await Task.sleep(for: pluginStateChangeRebuildDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            pluginStateChangeRebuildTask = nil
+            isRunningScheduledPluginStateRebuild = true
+            rebuildDerivedState()
+            isRunningScheduledPluginStateRebuild = false
+        }
     }
 
     private func guardedValue<T>(

@@ -317,6 +317,42 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(configurationCounter.callCount, 1)
     }
 
+    func testPluginStateChangesAreCoalescedAndKeepConfigurationViewCache() async {
+        let configurationCounter = ConfigurationRenderCounter()
+        let componentPanelPlugin = MutableComponentPanelPlugin(
+            id: "component",
+            configuration: PluginConfiguration(description: "自定义配置") { context in
+                configurationCounter.makeView(context: context)
+            }
+        )
+        let host = makeHost(
+            plugins: [componentPanelPlugin],
+            pluginStateChangeRebuildDelay: .milliseconds(20)
+        )
+
+        _ = host.pluginConfigurationViewItem(for: "component")
+        XCTAssertEqual(configurationCounter.callCount, 1)
+        XCTAssertEqual(componentPanelPlugin.componentStateReadCount, 1)
+
+        componentPanelPlugin.isActive = true
+        componentPanelPlugin.triggerStateChange()
+        componentPanelPlugin.triggerStateChange()
+        componentPanelPlugin.triggerStateChange()
+
+        XCTAssertEqual(componentPanelPlugin.componentStateReadCount, 1)
+
+        for _ in 0..<20 where componentPanelPlugin.componentStateReadCount < 2 {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertEqual(componentPanelPlugin.componentStateReadCount, 2)
+        XCTAssertEqual(host.featureManagementItems.first?.isActive, true)
+
+        _ = host.pluginConfigurationViewItem(for: "component")
+
+        XCTAssertEqual(configurationCounter.callCount, 1)
+    }
+
     func testComponentActiveStateContributesToHasActivePlugin() {
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component", isActive: true)
         let host = makeHost(plugins: [componentPanelPlugin])
@@ -460,7 +496,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
         plugins: [any MacToolsPlugin] = [],
         dynamicPluginManager: DynamicPluginManager? = nil,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
-        displayTopologyRefreshDelay: Duration = .milliseconds(180)
+        displayTopologyRefreshDelay: Duration = .milliseconds(180),
+        pluginStateChangeRebuildDelay: Duration = .milliseconds(80)
     ) -> PluginHost {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -472,7 +509,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
             pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: displayConfigurationObserver,
-            displayTopologyRefreshDelay: displayTopologyRefreshDelay
+            displayTopologyRefreshDelay: displayTopologyRefreshDelay,
+            pluginStateChangeRebuildDelay: pluginStateChangeRebuildDelay
         )
     }
 
@@ -600,6 +638,51 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     func handlePermissionAction(id: String) {}
     func handleSettingsAction(id: String) {}
     func handleShortcutAction(id: String) {}
+}
+
+@MainActor
+private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel {
+    let metadata: PluginMetadata
+    let descriptor = PluginComponentDescriptor(span: .oneByOne)
+    let configuration: PluginConfiguration?
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var isActive = false
+    var onComponentStateRead: (() -> Void)?
+    private(set) var componentStateReadCount = 0
+
+    init(id: String, configuration: PluginConfiguration? = nil) {
+        self.metadata = PluginMetadata(
+            id: id,
+            title: id,
+            iconName: "sparkles",
+            iconTint: Color(nsColor: .systemPurple),
+            order: 1,
+            defaultDescription: "Component \(id)"
+        )
+        self.configuration = configuration
+    }
+
+    var componentPanelState: PluginComponentState {
+        componentStateReadCount += 1
+        onComponentStateRead?()
+        return PluginComponentState(
+            subtitle: "Component subtitle",
+            isActive: isActive,
+            isEnabled: true,
+            isVisible: true,
+            errorMessage: nil
+        )
+    }
+
+    func makeView(context: PluginComponentContext) -> AnyView {
+        AnyView(Text(context.pluginID))
+    }
+
+    func triggerStateChange() {
+        onStateChange?()
+    }
 }
 
 @MainActor

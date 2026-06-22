@@ -31,7 +31,9 @@ final class ActivityBarController: ObservableObject {
     private let storage: PluginStorage
     private let inputMonitor: any ActivityBarInputMonitoring
     private let socketServer: any ActivityBarSocketServing
+    private let inputEventNotificationDelay: Duration
     private var hookInstallerPaths: ActivityBarHookInstallerPaths
+    private var inputEventNotificationTask: Task<Void, Never>?
 
     init(
         context: PluginRuntimeContext,
@@ -40,7 +42,8 @@ final class ActivityBarController: ObservableObject {
         inputStats: ActivityBarStatsStore? = nil,
         codingStats: ActivityBarCodingSessionStore? = nil,
         hookInstallerPaths: ActivityBarHookInstallerPaths? = nil,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        inputEventNotificationDelay: Duration = .milliseconds(750)
     ) {
         let resolvedInputStats = inputStats ?? ActivityBarStatsStore(storage: context.storage)
         let resolvedCodingStats = codingStats ?? ActivityBarCodingSessionStore(storage: context.storage)
@@ -61,6 +64,7 @@ final class ActivityBarController: ObservableObject {
         self.inputMonitor = resolvedInputMonitor
         self.hookInstallerPaths = resolvedHookInstallerPaths
         self.socketServer = resolvedSocketServer
+        self.inputEventNotificationDelay = inputEventNotificationDelay
         isTrackingEnabled = context.storage.bool(forKey: StorageKey.isTrackingEnabled)
 
         self.inputMonitor.onEvent = { [weak self] event in
@@ -68,7 +72,7 @@ final class ActivityBarController: ObservableObject {
                 return
             }
             self.inputStats.record(event)
-            self.notifyChange()
+            self.scheduleInputEventNotification()
         }
 
         if let installedAt = context.storage.string(forKey: StorageKey.hooksInstalledAt) {
@@ -162,6 +166,9 @@ final class ActivityBarController: ObservableObject {
         }
 
         stopRuntime()
+        inputEventNotificationTask?.cancel()
+        inputEventNotificationTask = nil
+        inputStats.flushPendingChanges()
     }
 
     func refresh() {
@@ -237,6 +244,7 @@ final class ActivityBarController: ObservableObject {
     private func stopRuntime() {
         inputMonitor.stop()
         socketServer.stop()
+        inputStats.flushPendingChanges()
         codingStats.flushActiveDurations()
     }
 
@@ -249,8 +257,36 @@ final class ActivityBarController: ObservableObject {
     }
 
     private func notifyChange() {
+        inputEventNotificationTask?.cancel()
+        inputEventNotificationTask = nil
         objectWillChange.send()
         onStateChange?()
+    }
+
+    private func scheduleInputEventNotification() {
+        guard inputEventNotificationTask == nil else {
+            return
+        }
+
+        inputEventNotificationTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await Task.sleep(for: inputEventNotificationDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            inputEventNotificationTask = nil
+            objectWillChange.send()
+            onStateChange?()
+        }
     }
 
     private func localizedDescription(for error: Error) -> String {
