@@ -116,7 +116,7 @@ struct SystemStatusSamplingSchedule: Sendable {
 
     static let production = SystemStatusSamplingSchedule(
         backgroundFastInterval: .seconds(10),
-        foregroundFastInterval: .seconds(1),
+        foregroundFastInterval: .seconds(2),
         backgroundSlowInterval: 30,
         foregroundSlowInterval: 5,
         backgroundProcessInterval: 60,
@@ -393,11 +393,19 @@ final class SystemStatusViewModel: ObservableObject {
         if let lastIndex = displayHistory.indices.last,
            displayHistory[lastIndex].timestamp == point.timestamp {
             displayHistory[lastIndex] = point
-        } else {
-            displayHistory.append(point)
+            displayHistory = Self.prunedSortedDisplayHistory(displayHistory, referenceDate: referenceDate)
+            return
         }
 
-        displayHistory = Self.prunedDisplayHistory(displayHistory, referenceDate: referenceDate)
+        if let lastTimestamp = displayHistory.last?.timestamp,
+           point.timestamp < lastTimestamp {
+            displayHistory.append(point)
+            displayHistory = Self.prunedDisplayHistory(displayHistory, referenceDate: referenceDate)
+            return
+        }
+
+        displayHistory.append(point)
+        displayHistory = Self.prunedSortedDisplayHistory(displayHistory, referenceDate: referenceDate)
     }
 
     private func shouldPublishDisplayHistory(referenceDate: Date, mode: SamplingMode) -> Bool {
@@ -431,7 +439,46 @@ final class SystemStatusViewModel: ObservableObject {
         snapshot = updatedSnapshot
     }
 
-    private static func prunedDisplayHistory(
+    static func prunedSortedDisplayHistory(
+        _ points: [SystemStatusHistoryPoint],
+        referenceDate: Date
+    ) -> [SystemStatusHistoryPoint] {
+        guard !points.isEmpty else {
+            return []
+        }
+
+        let cutoff = referenceDate.timeIntervalSince1970 - displayHistoryRetention
+        let upperBound = referenceDate.timeIntervalSince1970 + 60
+        var startIndex = points.startIndex
+
+        while startIndex < points.endIndex, points[startIndex].timestamp < cutoff {
+            startIndex = points.index(after: startIndex)
+        }
+
+        var endIndex = points.endIndex
+        var currentIndex = startIndex
+        while currentIndex < points.endIndex {
+            if points[currentIndex].timestamp > upperBound {
+                endIndex = currentIndex
+                break
+            }
+
+            currentIndex = points.index(after: currentIndex)
+        }
+
+        let retainedCount = points.distance(from: startIndex, to: endIndex)
+        if retainedCount > maximumDisplayHistoryCount {
+            startIndex = points.index(endIndex, offsetBy: -maximumDisplayHistoryCount)
+        }
+
+        guard startIndex < endIndex else {
+            return []
+        }
+
+        return Array(points[startIndex..<endIndex])
+    }
+
+    static func prunedDisplayHistory(
         _ points: [SystemStatusHistoryPoint],
         referenceDate: Date
     ) -> [SystemStatusHistoryPoint] {
@@ -616,13 +663,8 @@ struct SystemStatusComponentView: View {
             return localization.string("battery.state.charged", defaultValue: "已充满")
         }
 
-        if let adapterWatts = battery.adapterWatts, battery.state == .charging || battery.state == .acPower {
-            return localization.format(
-                "battery.stateWithWattsFormat",
-                defaultValue: "%@ %dW",
-                battery.state.title(localization: localization),
-                adapterWatts
-            )
+        if battery.state == .charging || battery.state == .acPower {
+            return battery.state.title(localization: localization)
         }
 
         return SystemStatusFormatter.timeRemaining(minutes: battery.timeRemainingMinutes, localization: localization)

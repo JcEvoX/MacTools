@@ -166,7 +166,6 @@ struct SystemStatusMemorySnapshot: Equatable, Sendable {
     let totalBytes: UInt64?
     let swapUsedBytes: UInt64?
     let swapTotalBytes: UInt64?
-    let pressure: SystemStatusMemoryPressure
 
     var usage: Double? {
         guard let usedBytes, let totalBytes, totalBytes > 0 else {
@@ -180,29 +179,8 @@ struct SystemStatusMemorySnapshot: Equatable, Sendable {
         usedBytes: nil,
         totalBytes: nil,
         swapUsedBytes: nil,
-        swapTotalBytes: nil,
-        pressure: .unknown
+        swapTotalBytes: nil
     )
-}
-
-enum SystemStatusMemoryPressure: String, Equatable, Sendable {
-    case normal
-    case warning
-    case critical
-    case unknown
-
-    func label(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String? {
-        switch self {
-        case .normal:
-            return localization.string("memory.pressure.normal", defaultValue: "正常")
-        case .warning:
-            return localization.string("memory.pressure.warning", defaultValue: "偏高")
-        case .critical:
-            return localization.string("memory.pressure.critical", defaultValue: "紧张")
-        case .unknown:
-            return nil
-        }
-    }
 }
 
 struct SystemStatusDiskSnapshot: Equatable, Sendable {
@@ -277,6 +255,7 @@ struct SystemStatusBatterySnapshot: Equatable, Sendable {
     let state: SystemStatusBatteryState
     let timeRemainingMinutes: Int?
     let adapterWatts: Int?
+    let batteryPowerWatts: Double?
     let temperatureCelsius: Double?
     let healthPercent: Int?
     let cycleCount: Int?
@@ -287,6 +266,7 @@ struct SystemStatusBatterySnapshot: Equatable, Sendable {
         state: .unknown,
         timeRemainingMinutes: nil,
         adapterWatts: nil,
+        batteryPowerWatts: nil,
         temperatureCelsius: nil,
         healthPercent: nil,
         cycleCount: nil
@@ -457,15 +437,6 @@ enum SystemStatusCPUUsageCalculator {
 }
 
 enum SystemStatusPowerNormalizer {
-    static func telemetryWatts(fromMilliwatts milliwatts: Double) -> Double? {
-        let absoluteMilliwatts = abs(milliwatts)
-        guard absoluteMilliwatts > 0, absoluteMilliwatts < 1_000_000 else {
-            return nil
-        }
-
-        return absoluteMilliwatts / 1_000
-    }
-
     static func energyJoules(from value: Double, unit: String) -> Double? {
         switch unit {
         case "mJ":
@@ -477,6 +448,90 @@ enum SystemStatusPowerNormalizer {
         default:
             return nil
         }
+    }
+}
+
+enum SystemStatusBatteryPowerNormalizer {
+    static func telemetryWatts(fromRawMilliwatts rawValue: Any?) -> Double? {
+        telemetryWatts(fromMilliwatts: signedNumberValue(rawValue))
+    }
+
+    static func telemetryWatts(fromMilliwatts milliwatts: Double?) -> Double? {
+        guard let milliwatts, milliwatts.isFinite else {
+            return nil
+        }
+
+        let signedMilliwatts = twosComplementSignedValueIfNeeded(milliwatts)
+        return validBatteryWatts(signedMilliwatts / 1_000)
+    }
+
+    static func derivedWatts(voltageMillivolts: Double?, amperageMilliamps: Double?) -> Double? {
+        guard
+            let voltageMillivolts,
+            let amperageMilliamps,
+            voltageMillivolts > 0,
+            amperageMilliamps != 0
+        else {
+            return nil
+        }
+
+        return validBatteryWatts(-(voltageMillivolts * amperageMilliamps) / 1_000_000)
+    }
+
+    private static func signedNumberValue(_ rawValue: Any?) -> Double? {
+        if let intValue = rawValue as? Int {
+            return Double(intValue)
+        }
+        if let int64Value = rawValue as? Int64 {
+            return Double(int64Value)
+        }
+        if let uint64Value = rawValue as? UInt64 {
+            return signedDoubleValue(fromUnsigned: uint64Value)
+        }
+        if let doubleValue = rawValue as? Double {
+            return doubleValue
+        }
+        if let numberValue = rawValue as? NSNumber {
+            if numberValue.doubleValue > Double(Int64.max) {
+                return signedDoubleValue(fromUnsigned: numberValue.uint64Value)
+            }
+            return numberValue.doubleValue
+        }
+        if let stringValue = rawValue as? String {
+            if let int64Value = Int64(stringValue) {
+                return Double(int64Value)
+            }
+            if let uint64Value = UInt64(stringValue) {
+                return signedDoubleValue(fromUnsigned: uint64Value)
+            }
+            return Double(stringValue)
+        }
+        return nil
+    }
+
+    private static func signedDoubleValue(fromUnsigned value: UInt64) -> Double {
+        guard value > UInt64(Int64.max) else {
+            return Double(value)
+        }
+
+        let magnitude = ~value &+ 1
+        return -Double(magnitude)
+    }
+
+    private static func twosComplementSignedValueIfNeeded(_ value: Double) -> Double {
+        guard value > Double(Int64.max) else {
+            return value
+        }
+
+        return value - pow(2, 64)
+    }
+
+    private static func validBatteryWatts(_ watts: Double) -> Double? {
+        guard watts.isFinite, watts > -200, watts < 200 else {
+            return nil
+        }
+
+        return watts
     }
 }
 

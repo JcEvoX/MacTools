@@ -45,13 +45,14 @@ struct SystemStatusDashboardView: View {
     }
 
     private var metricGrid: some View {
-        LazyVGrid(columns: metricColumns, spacing: SystemStatusHUDLayout.metricSpacing) {
-            cpuTile
-            gpuTile
-            networkTile
-            diskTile
-            memoryTile
-            batteryTile
+        let visibleHistory = chartHistory
+        return LazyVGrid(columns: metricColumns, spacing: SystemStatusHUDLayout.metricSpacing) {
+            cpuTile(history: visibleHistory)
+            gpuTile(history: visibleHistory)
+            networkTile(history: visibleHistory)
+            diskTile(history: visibleHistory)
+            memoryTile(history: visibleHistory)
+            batteryTile(history: visibleHistory)
         }
         .frame(height: SystemStatusComponentLayout.dashboardMetricGridHeight, alignment: .top)
     }
@@ -62,7 +63,7 @@ struct SystemStatusDashboardView: View {
         }
     }
 
-    private var cpuTile: some View {
+    private func cpuTile(history: [SystemStatusHistoryPoint]) -> some View {
         let value = percentParts(snapshot.cpu.usage)
         return SystemStatusHUDValueTile(
             eyebrow: "CPU",
@@ -72,13 +73,13 @@ struct SystemStatusDashboardView: View {
             value: value.value,
             unit: value.unit,
             chip: temperatureChip(snapshot.cpu.temperatureCelsius),
-            values: percentHistory(\.cpuUsage, fallback: snapshot.cpu.usage),
+            values: percentHistory(\.cpuUsage, fallback: snapshot.cpu.usage, history: history),
             chartStyle: .bars,
             footnote: cpuFootnote
         )
     }
 
-    private var gpuTile: some View {
+    private func gpuTile(history: [SystemStatusHistoryPoint]) -> some View {
         let value = snapshot.gpu.isAvailable
             ? percentParts(snapshot.gpu.usage)
             : (value: "—", unit: "")
@@ -90,13 +91,13 @@ struct SystemStatusDashboardView: View {
             value: value.value,
             unit: value.unit,
             chip: temperatureChip(snapshot.gpu.temperatureCelsius),
-            values: percentHistory(\.gpuUsage, fallback: snapshot.gpu.usage),
+            values: percentHistory(\.gpuUsage, fallback: snapshot.gpu.usage, history: history),
             chartStyle: .bars,
             footnote: gpuFootnote
         )
     }
 
-    private var memoryTile: some View {
+    private func memoryTile(history: [SystemStatusHistoryPoint]) -> some View {
         let value = percentParts(snapshot.memory.usage)
         return SystemStatusHUDValueTile(
             eyebrow: SystemStatusMetricKind.memory.title(localization: localization),
@@ -106,13 +107,13 @@ struct SystemStatusDashboardView: View {
             value: value.value,
             unit: value.unit,
             chip: memoryChip,
-            values: percentHistory(\.memoryUsage, fallback: snapshot.memory.usage),
+            values: percentHistory(\.memoryUsage, fallback: snapshot.memory.usage, history: history),
             chartStyle: .area,
             footnote: memoryFootnote
         )
     }
 
-    private var diskTile: some View {
+    private func diskTile(history: [SystemStatusHistoryPoint]) -> some View {
         let rate = rateParts(totalDiskBytesPerSecond)
         let free = bytesParts(diskFreeBytes)
         return SystemStatusHUDDiskTile(
@@ -122,8 +123,8 @@ struct SystemStatusDashboardView: View {
             totalText: SystemStatusFormatter.bytes(snapshot.disk.totalBytes),
             readText: SystemStatusFormatter.speed(snapshot.disk.readBytesPerSecond),
             writeText: SystemStatusFormatter.speed(snapshot.disk.writeBytesPerSecond),
-            readValues: diskReadHistory(),
-            writeValues: diskWriteHistory(),
+            readValues: diskReadHistory(history),
+            writeValues: diskWriteHistory(history),
             readColor: SystemStatusHUDPalette.diskRead,
             writeColor: SystemStatusHUDPalette.diskWrite
         )
@@ -139,7 +140,7 @@ struct SystemStatusDashboardView: View {
         )
     }
 
-    private var networkTile: some View {
+    private func networkTile(history: [SystemStatusHistoryPoint]) -> some View {
         let rate = rateParts(totalNetworkBytesPerSecond)
         return SystemStatusHUDMetricTile(
             title: SystemStatusMetricKind.network.title(localization: localization),
@@ -161,8 +162,8 @@ struct SystemStatusDashboardView: View {
             }
         ) {
             SystemStatusHUDRateChart(
-                firstValues: networkDownloadHistory(),
-                secondValues: networkUploadHistory(),
+                firstValues: networkDownloadHistory(history),
+                secondValues: networkUploadHistory(history),
                 firstColor: SystemStatusHUDPalette.networkDownload,
                 secondColor: SystemStatusHUDPalette.networkUpload
             )
@@ -179,7 +180,7 @@ struct SystemStatusDashboardView: View {
         )
     }
 
-    private var batteryTile: some View {
+    private func batteryTile(history: [SystemStatusHistoryPoint]) -> some View {
         let color = batteryColor
         let value = snapshot.battery.isAvailable
             ? percentParts(snapshot.battery.level)
@@ -192,8 +193,8 @@ struct SystemStatusDashboardView: View {
             chartColor: color,
             value: value.value,
             unit: value.unit,
-            chip: batteryHealthChip,
-            values: percentHistory(\.batteryLevel, fallback: snapshot.battery.level),
+            chip: temperatureChip(snapshot.battery.temperatureCelsius),
+            values: percentHistory(\.batteryLevel, fallback: snapshot.battery.level, history: history),
             chartStyle: .area,
             footnote: batteryFootnote
         )
@@ -270,7 +271,7 @@ struct SystemStatusDashboardView: View {
     }
 
     private var memoryChip: (text: String, color: Color)? {
-        snapshot.memory.pressure.label(localization: localization).map { ($0, SystemStatusHUDPalette.badgeText) }
+        (SystemStatusFormatter.bytes(snapshot.memory.totalBytes), SystemStatusHUDPalette.badgeText)
     }
 
     private var networkChip: (text: String, color: Color)? {
@@ -315,10 +316,9 @@ struct SystemStatusDashboardView: View {
 
     private var memoryFootnote: String {
         localization.format(
-            "memory.footnote.swapFormat",
-            defaultValue: "%@/%@ · 交换 %@",
+            "memory.footnote.usedSwapFormat",
+            defaultValue: "已用 %@ · 交换 %@",
             SystemStatusFormatter.bytes(snapshot.memory.usedBytes),
-            SystemStatusFormatter.bytes(snapshot.memory.totalBytes),
             SystemStatusFormatter.bytes(snapshot.memory.swapUsedBytes)
         )
     }
@@ -338,13 +338,12 @@ struct SystemStatusDashboardView: View {
 
         var parts: [String] = []
 
-        if let adapterWatts = snapshot.battery.adapterWatts,
-           snapshot.battery.state == .charging || snapshot.battery.state == .acPower || snapshot.battery.state == .charged {
-            parts.append("\(adapterWatts)W")
+        if let batteryPowerText = batteryPowerText {
+            parts.append(batteryPowerText)
         }
 
-        if let temperature = snapshot.battery.temperatureCelsius {
-            parts.append(SystemStatusFormatter.temperature(temperature))
+        if let batteryHealthText {
+            parts.append(batteryHealthText)
         }
 
         if let cycleCount = snapshot.battery.cycleCount {
@@ -360,15 +359,37 @@ struct SystemStatusDashboardView: View {
         return parts.isEmpty ? snapshot.battery.state.title(localization: localization) : parts.joined(separator: " · ")
     }
 
-    private var batteryHealthChip: (text: String, color: Color)? {
+    private var batteryPowerText: String? {
+        guard let batteryPowerWatts = snapshot.battery.batteryPowerWatts else {
+            return nil
+        }
+
+        let absoluteWatts = abs(batteryPowerWatts)
+        guard absoluteWatts >= 0.1 else {
+            return nil
+        }
+
+        if batteryPowerWatts < 0 {
+            return localization.format(
+                "battery.chargePowerFormat",
+                defaultValue: "充电 %@",
+                SystemStatusFormatter.power(absoluteWatts)
+            )
+        }
+
+        return localization.format(
+            "battery.dischargePowerFormat",
+            defaultValue: "放电 %@",
+            SystemStatusFormatter.power(absoluteWatts)
+        )
+    }
+
+    private var batteryHealthText: String? {
         guard let healthPercent = snapshot.battery.healthPercent else {
             return nil
         }
 
-        return (
-            localization.format("battery.healthBadgeFormat", defaultValue: "%d%% 健康", healthPercent),
-            SystemStatusHUDPalette.badgeText
-        )
+        return localization.format("battery.healthFormat", defaultValue: "健康度 %d%%", healthPercent)
     }
 
     private func diskAvailableUnit(_ unit: String) -> String {
@@ -454,9 +475,10 @@ struct SystemStatusDashboardView: View {
 
     private func percentHistory(
         _ keyPath: KeyPath<SystemStatusHistoryPoint, Double?>,
-        fallback: Double?
+        fallback: Double?,
+        history: [SystemStatusHistoryPoint]
     ) -> [Double] {
-        let values = downsample(chartHistory.compactMap { point in
+        let values = downsample(history.compactMap { point in
             point[keyPath: keyPath].map { min(max($0 * 100, 0), 100) }
         })
 
@@ -468,47 +490,36 @@ struct SystemStatusDashboardView: View {
         return [value, value]
     }
 
-    private func networkDownloadHistory() -> [Double] {
+    private func networkDownloadHistory(_ history: [SystemStatusHistoryPoint]) -> [Double] {
         SystemStatusHUDDualLineChart.downsamplePeaks(
-            networkChartHistory.map { Double($0.networkDownloadBytesPerSecond ?? 0) },
+            history.map { Double($0.networkDownloadBytesPerSecond ?? 0) },
             limit: SystemStatusHUDLayout.chartSampleLimit
         )
     }
 
-    private func networkUploadHistory() -> [Double] {
+    private func networkUploadHistory(_ history: [SystemStatusHistoryPoint]) -> [Double] {
         SystemStatusHUDDualLineChart.downsamplePeaks(
-            networkChartHistory.map { Double($0.networkUploadBytesPerSecond ?? 0) },
+            history.map { Double($0.networkUploadBytesPerSecond ?? 0) },
             limit: SystemStatusHUDLayout.chartSampleLimit
         )
     }
 
-    private func diskReadHistory() -> [Double] {
+    private func diskReadHistory(_ history: [SystemStatusHistoryPoint]) -> [Double] {
         SystemStatusHUDDualLineChart.downsamplePeaks(
-            chartHistory.map { Double($0.diskReadBytesPerSecond ?? 0) },
+            history.map { Double($0.diskReadBytesPerSecond ?? 0) },
             limit: SystemStatusHUDLayout.chartSampleLimit
         )
     }
 
-    private func diskWriteHistory() -> [Double] {
+    private func diskWriteHistory(_ history: [SystemStatusHistoryPoint]) -> [Double] {
         SystemStatusHUDDualLineChart.downsamplePeaks(
-            chartHistory.map { Double($0.diskWriteBytesPerSecond ?? 0) },
+            history.map { Double($0.diskWriteBytesPerSecond ?? 0) },
             limit: SystemStatusHUDLayout.chartSampleLimit
         )
-    }
-
-    private var networkChartHistory: [SystemStatusHistoryPoint] {
-        guard let latestTimestamp = snapshot.history.map(\.timestamp).max() else {
-            return []
-        }
-
-        let cutoff = latestTimestamp - SystemStatusHUDLayout.chartDisplayInterval
-        return snapshot.history.filter { point in
-            point.timestamp >= cutoff && point.timestamp <= latestTimestamp
-        }
     }
 
     private var chartHistory: [SystemStatusHistoryPoint] {
-        guard let latestTimestamp = snapshot.history.map(\.timestamp).max() else {
+        guard let latestTimestamp = snapshot.history.last?.timestamp else {
             return []
         }
 

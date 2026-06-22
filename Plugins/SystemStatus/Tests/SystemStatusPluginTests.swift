@@ -60,7 +60,7 @@ final class SystemStatusPluginTests: XCTestCase {
         let schedule = SystemStatusSamplingSchedule.production
 
         XCTAssertEqual(schedule.backgroundFastInterval, .seconds(10))
-        XCTAssertEqual(schedule.foregroundFastInterval, .seconds(1))
+        XCTAssertEqual(schedule.foregroundFastInterval, .seconds(2))
         XCTAssertEqual(schedule.backgroundSlowInterval, 30)
         XCTAssertEqual(schedule.foregroundSlowInterval, 5)
         XCTAssertEqual(schedule.backgroundProcessInterval, 60)
@@ -84,6 +84,41 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot.disk.writeBytesPerSecond, 1_024)
         XCTAssertEqual(viewModel.snapshot.history.last?.diskReadBytesPerSecond, 2_048)
         XCTAssertEqual(viewModel.snapshot.history.last?.diskWriteBytesPerSecond, 1_024)
+    }
+
+    func testDisplayHistoryFastPruneKeepsRecentSortedSamples() {
+        let points = (0..<1_905).map { index in
+            SystemStatusHistoryPoint(
+                timestamp: TimeInterval(index),
+                cpuUsage: Double(index) / 2_000
+            )
+        }
+
+        let pruned = SystemStatusViewModel.prunedSortedDisplayHistory(
+            points,
+            referenceDate: Date(timeIntervalSince1970: 1_904)
+        )
+
+        XCTAssertEqual(pruned.count, 1_800)
+        XCTAssertEqual(pruned.first?.timestamp, 105)
+        XCTAssertEqual(pruned.last?.timestamp, 1_904)
+    }
+
+    func testDisplayHistoryFallbackPruneSortsOutOfOrderSamples() {
+        let points = [
+            SystemStatusHistoryPoint(timestamp: 12),
+            SystemStatusHistoryPoint(timestamp: 10),
+            SystemStatusHistoryPoint(timestamp: 11),
+            SystemStatusHistoryPoint(timestamp: -2_000),
+            SystemStatusHistoryPoint(timestamp: 80)
+        ]
+
+        let pruned = SystemStatusViewModel.prunedDisplayHistory(
+            points,
+            referenceDate: Date(timeIntervalSince1970: 20)
+        )
+
+        XCTAssertEqual(pruned.map(\.timestamp), [10, 11, 12, 80])
     }
 
     func testPluginReusesViewModelAcrossComponentViews() {
@@ -135,8 +170,7 @@ private actor StubSystemStatusSampler: SystemStatusSampling {
                 usedBytes: 4_000,
                 totalBytes: 8_000,
                 swapUsedBytes: 512,
-                swapTotalBytes: 2_048,
-                pressure: .normal
+                swapTotalBytes: 2_048
             ),
             network: SystemStatusNetworkSnapshot(
                 interfaceName: "en0",
@@ -171,6 +205,7 @@ private actor StubSystemStatusSampler: SystemStatusSampling {
                 state: .acPower,
                 timeRemainingMinutes: nil,
                 adapterWatts: 70,
+                batteryPowerWatts: -18.5,
                 temperatureCelsius: 31,
                 healthPercent: 96,
                 cycleCount: 120

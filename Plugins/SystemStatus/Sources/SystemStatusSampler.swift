@@ -27,6 +27,17 @@ actor SystemStatusSampler: SystemStatusSampling {
     private var previousNetworkDate: Date?
     private var previousDiskIOCounter: SystemStatusDiskIOCounter?
     private var previousDiskIODate: Date?
+    private var cachedSystemPowerHealthPercent: Int?
+    private var lastSystemPowerHealthDate: Date?
+    private var didCacheSystemPowerHealth = false
+    private var cachedNetworkMetadata: [String: NetworkInterfaceMetadata]?
+    private var lastNetworkMetadataDate: Date?
+    private var cachedPrimaryInterfaceName: String?
+    private var lastPrimaryInterfaceDate: Date?
+    private var didCachePrimaryInterfaceName = false
+
+    private static let systemPowerHealthCacheInterval: TimeInterval = 30
+    private static let networkMetadataCacheInterval: TimeInterval = 10
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
         self.localization = localization
@@ -53,7 +64,7 @@ actor SystemStatusSampler: SystemStatusSampling {
     func collectSlow() async -> SystemStatusSlowSample {
         SystemStatusSlowSample(
             disk: Self.collectDiskCapacity(),
-            battery: Self.collectBattery(),
+            battery: collectBattery(),
             gpu: collectGPU(),
             hardware: collectHardware()
         )
@@ -115,7 +126,7 @@ actor SystemStatusSampler: SystemStatusSampling {
             }
         }
 
-        return cpuPowerWatts ?? Self.collectBatteryTelemetryPowerWatts()
+        return cpuPowerWatts
     }
 
     private func collectCPUTemperature(referenceDate: Date) -> Double? {
@@ -157,7 +168,7 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     private func collectNetwork(referenceDate: Date) -> SystemStatusNetworkSnapshot {
-        guard let currentCounter = currentNetworkCounter() else {
+        guard let currentCounter = currentNetworkCounter(referenceDate: referenceDate) else {
             previousNetworkCounter = nil
             previousNetworkDate = referenceDate
             return SystemStatusNetworkSnapshot(
@@ -239,36 +250,6 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         return load
-    }
-
-    private static func collectBatteryTelemetryPowerWatts() -> Double? {
-        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
-        guard service != 0 else {
-            return nil
-        }
-        defer { IOObjectRelease(service) }
-
-        if let telemetry = registryDictionaryValue(service: service, key: "PowerTelemetryData") {
-            for key in ["SystemPowerIn", "SystemLoad", "BatteryPower"] {
-                if
-                    let milliwatts = dictionaryNumberValue(telemetry, key: key),
-                    let watts = SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: milliwatts)
-                {
-                    return watts
-                }
-            }
-        }
-
-        for key in ["SystemPowerIn", "SystemLoad", "BatteryPower"] {
-            if
-                let milliwatts = registryNumberValue(service: service, key: key),
-                let watts = SystemStatusPowerNormalizer.telemetryWatts(fromMilliwatts: milliwatts)
-            {
-                return watts
-            }
-        }
-
-        return nil
     }
 
     private static func collectCPUTemperature(smcReader: SystemStatusSMCReader?) -> Double? {
@@ -470,14 +451,7 @@ actor SystemStatusSampler: SystemStatusSampling {
             usedBytes: used,
             totalBytes: total,
             swapUsedBytes: swapUsage.used,
-            swapTotalBytes: swapUsage.total,
-            pressure: memoryPressure(
-                freeBytes: Double(stats.free_count) * pageSize,
-                speculativeBytes: speculative,
-                compressedBytes: compressed,
-                swapUsedBytes: swapUsage.used,
-                totalBytes: total
-            )
+            swapTotalBytes: swapUsage.total
         )
     }
 
@@ -670,33 +644,6 @@ actor SystemStatusSampler: SystemStatusSampling {
         return (used, total)
     }
 
-    nonisolated static func memoryPressure(
-        freeBytes: Double,
-        speculativeBytes: Double,
-        compressedBytes: Double,
-        swapUsedBytes: UInt64?,
-        totalBytes: UInt64
-    ) -> SystemStatusMemoryPressure {
-        guard totalBytes > 0 else {
-            return .unknown
-        }
-
-        let total = Double(totalBytes)
-        let readilyAvailableRatio = max((freeBytes + speculativeBytes) / total, 0)
-        let compressedRatio = max(compressedBytes / total, 0)
-        let swapUsedRatio = Double(swapUsedBytes ?? 0) / total
-
-        if readilyAvailableRatio < 0.03 || compressedRatio > 0.25 || swapUsedRatio > 0.50 {
-            return .critical
-        }
-
-        if readilyAvailableRatio < 0.08 || compressedRatio > 0.12 || swapUsedRatio > 0.10 {
-            return .warning
-        }
-
-        return .normal
-    }
-
     private static func collectDiskCapacity() -> SystemStatusDiskSnapshot {
         let homeURL = FileManager.default.homeDirectoryForCurrentUser
         var totalBytes: UInt64?
@@ -826,7 +773,7 @@ actor SystemStatusSampler: SystemStatusSampling {
         return SystemStatusDiskIOCounter(readBytes: readBytes, writeBytes: writeBytes)
     }
 
-    private static func collectBattery() -> SystemStatusBatterySnapshot {
+    private func collectBattery() -> SystemStatusBatterySnapshot {
         guard
             let powerSourcesInfo = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
             let powerSources = IOPSCopyPowerSourcesList(powerSourcesInfo)?.takeRetainedValue() as? [CFTypeRef],
@@ -837,7 +784,8 @@ actor SystemStatusSampler: SystemStatusSampling {
                 level: nil,
                 state: .unavailable,
                 timeRemainingMinutes: nil,
-                adapterWatts: adapterWatts(),
+                adapterWatts: Self.adapterWatts(),
+                batteryPowerWatts: nil,
                 temperatureCelsius: nil,
                 healthPercent: nil,
                 cycleCount: nil
@@ -865,7 +813,8 @@ actor SystemStatusSampler: SystemStatusSampling {
                 level: nil,
                 state: .unavailable,
                 timeRemainingMinutes: nil,
-                adapterWatts: adapterWatts(),
+                adapterWatts: Self.adapterWatts(),
+                batteryPowerWatts: nil,
                 temperatureCelsius: nil,
                 healthPercent: nil,
                 cycleCount: nil
@@ -878,25 +827,50 @@ actor SystemStatusSampler: SystemStatusSampling {
         let isCharging = description[kIOPSIsChargingKey] as? Bool ?? false
         let isCharged = description[kIOPSIsChargedKey] as? Bool ?? false
         let powerSource = description[kIOPSPowerSourceStateKey] as? String ?? ""
-        let state = batteryState(
+        let state = Self.batteryState(
             level: level,
             isCharging: isCharging,
             isCharged: isCharged,
             powerSource: powerSource
         )
         let timeKey = isCharging ? kIOPSTimeToFullChargeKey : kIOPSTimeToEmptyKey
-        let registryInfo = collectBatteryRegistryInfo()
+        let registryInfo = Self.collectBatteryRegistryInfo()
 
         return SystemStatusBatterySnapshot(
             isAvailable: true,
             level: level,
             state: state,
-            timeRemainingMinutes: validBatteryMinutes(description[timeKey]),
-            adapterWatts: adapterWatts(),
+            timeRemainingMinutes: Self.validBatteryMinutes(description[timeKey]),
+            adapterWatts: Self.adapterWatts(),
+            batteryPowerWatts: registryInfo.batteryPowerWatts,
             temperatureCelsius: registryInfo.temperatureCelsius,
-            healthPercent: registryInfo.healthPercent,
+            healthPercent: systemPowerHealthPercent(referenceDate: Date()) ?? registryInfo.healthPercent,
             cycleCount: registryInfo.cycleCount
         )
+    }
+
+    private func systemPowerHealthPercent(referenceDate: Date) -> Int? {
+        if didCacheSystemPowerHealth,
+           let lastSystemPowerHealthDate,
+           referenceDate.timeIntervalSince(lastSystemPowerHealthDate) < Self.systemPowerHealthCacheInterval {
+            return cachedSystemPowerHealthPercent
+        }
+
+        let healthPercent: Int?
+        if let output = Self.runCommand(
+            path: "/usr/sbin/system_profiler",
+            arguments: ["SPPowerDataType", "-json"],
+            timeout: 3
+        ) {
+            healthPercent = Self.systemPowerBatteryHealthPercent(fromSystemProfilerJSON: output)
+        } else {
+            healthPercent = nil
+        }
+
+        cachedSystemPowerHealthPercent = healthPercent
+        lastSystemPowerHealthDate = referenceDate
+        didCacheSystemPowerHealth = true
+        return healthPercent
     }
 
     private static func batteryState(
@@ -940,50 +914,146 @@ actor SystemStatusSampler: SystemStatusSampling {
         return watts
     }
 
-    private static func collectBatteryRegistryInfo() -> (temperatureCelsius: Double?, healthPercent: Int?, cycleCount: Int?) {
+    private static func collectBatteryRegistryInfo() -> (
+        temperatureCelsius: Double?,
+        healthPercent: Int?,
+        cycleCount: Int?,
+        batteryPowerWatts: Double?
+    ) {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != 0 else {
-            return (nil, nil, nil)
+            return (nil, nil, nil, nil)
         }
         defer { IOObjectRelease(service) }
 
         let temperature = registryIntValue(service: service, key: "Temperature")
             .map { Double($0) / 100 }
 
-        let maxCapacity = registryIntValue(service: service, key: isAppleSilicon ? "AppleRawMaxCapacity" : "MaxCapacity")
-            ?? registryIntValue(service: service, key: "MaxCapacity")
-        let designCapacity = registryIntValue(service: service, key: "DesignCapacity")
-        let healthPercent: Int?
-        if let maxCapacity, let designCapacity, designCapacity > 0 {
-            healthPercent = Int((Double(maxCapacity) * 100 / Double(designCapacity)).rounded())
-        } else {
-            healthPercent = nil
-        }
+        let healthPercent = optionalBatteryHealthPercent(
+            designCapacity: registryIntValue(service: service, key: "DesignCapacity"),
+            nominalChargeCapacity: registryIntValue(service: service, key: "NominalChargeCapacity"),
+            appleRawMaxCapacity: registryIntValue(service: service, key: "AppleRawMaxCapacity")
+        )
 
         return (
             temperature,
             healthPercent,
-            registryIntValue(service: service, key: "CycleCount")
+            registryIntValue(service: service, key: "CycleCount"),
+            batteryPowerWatts(service: service)
         )
     }
 
-    private static var isAppleSilicon: Bool {
-        var size = 0
-        guard sysctlbyname("hw.optional.arm64", nil, &size, nil, 0) == 0 else {
-            return false
+    private static func batteryPowerWatts(service: io_registry_entry_t) -> Double? {
+        if
+            let telemetry = registryDictionaryValue(service: service, key: "PowerTelemetryData"),
+            let watts = SystemStatusBatteryPowerNormalizer.telemetryWatts(
+                fromRawMilliwatts: telemetry["BatteryPower"]
+            )
+        {
+            return watts
         }
 
-        var value: Int32 = 0
-        size = MemoryLayout<Int32>.stride
-        guard sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 else {
-            return false
+        if
+            let watts = SystemStatusBatteryPowerNormalizer.telemetryWatts(
+                fromRawMilliwatts: registryRawValue(service: service, key: "BatteryPower")
+            )
+        {
+            return watts
         }
 
-        return value == 1
+        let voltageMillivolts = registryNumberValue(service: service, key: "AppleRawBatteryVoltage")
+            ?? registryNumberValue(service: service, key: "Voltage")
+        let amperageMilliamps = nonzeroNumberValue(service: service, key: "InstantAmperage")
+            ?? nonzeroNumberValue(service: service, key: "Amperage")
+
+        return SystemStatusBatteryPowerNormalizer.derivedWatts(
+            voltageMillivolts: voltageMillivolts,
+            amperageMilliamps: amperageMilliamps
+        )
+    }
+
+    nonisolated static func batteryHealthPercent(
+        designCapacity: Int?,
+        nominalChargeCapacity: Int?,
+        appleRawMaxCapacity: Int?
+    ) -> Int {
+        // ioreg fallback matching Mole status: prefer NominalChargeCapacity, then AppleRawMaxCapacity.
+        optionalBatteryHealthPercent(
+            designCapacity: designCapacity,
+            nominalChargeCapacity: nominalChargeCapacity,
+            appleRawMaxCapacity: appleRawMaxCapacity
+        ) ?? 0
+    }
+
+    nonisolated static func systemPowerBatteryHealthPercent(fromSystemProfilerJSON output: String) -> Int? {
+        guard
+            let data = output.data(using: .utf8),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let sections = json["SPPowerDataType"] as? [[String: Any]]
+        else {
+            return nil
+        }
+
+        for section in sections {
+            guard
+                let info = section["sppower_battery_health_info"] as? [String: Any],
+                let rawCapacity = info["sppower_battery_health_maximum_capacity"] as? String,
+                let percent = batteryHealthPercent(fromSystemProfilerValue: rawCapacity)
+            else {
+                continue
+            }
+
+            return percent
+        }
+
+        return nil
+    }
+
+    nonisolated static func batteryHealthPercent(fromSystemProfilerValue rawValue: String) -> Int? {
+        let normalized = rawValue
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "%", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Int(normalized), value > 0 else {
+            return nil
+        }
+
+        return min(max(value, 0), 100)
+    }
+
+    private nonisolated static func optionalBatteryHealthPercent(
+        designCapacity: Int?,
+        nominalChargeCapacity: Int?,
+        appleRawMaxCapacity: Int?
+    ) -> Int? {
+        guard let designCapacity, designCapacity > 0 else {
+            return nil
+        }
+
+        let capacity = positiveCapacity(nominalChargeCapacity)
+            ?? positiveCapacity(appleRawMaxCapacity)
+        guard let capacity else {
+            return nil
+        }
+
+        let percent = (Double(capacity) * 100 / Double(designCapacity)).rounded()
+        guard percent > 0 else {
+            return nil
+        }
+
+        return min(max(Int(percent), 0), 100)
+    }
+
+    private nonisolated static func positiveCapacity(_ value: Int?) -> Int? {
+        guard let value, value > 0 else {
+            return nil
+        }
+
+        return value
     }
 
     private static func registryIntValue(service: io_registry_entry_t, key: String) -> Int? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
@@ -997,15 +1067,28 @@ actor SystemStatusSampler: SystemStatusSampling {
     }
 
     private static func registryNumberValue(service: io_registry_entry_t, key: String) -> Double? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
         return numberValue(rawValue)
     }
 
+    private static func nonzeroNumberValue(service: io_registry_entry_t, key: String) -> Double? {
+        guard let value = registryNumberValue(service: service, key: key), value != 0 else {
+            return nil
+        }
+
+        return value
+    }
+
+    private static func registryRawValue(service: io_registry_entry_t, key: String) -> Any? {
+        IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue()
+    }
+
     private static func registryDictionaryValue(service: io_registry_entry_t, key: String) -> NSDictionary? {
-        guard let rawValue = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() else {
+        guard let rawValue = registryRawValue(service: service, key: key) else {
             return nil
         }
 
@@ -1045,8 +1128,8 @@ actor SystemStatusSampler: SystemStatusSampling {
         return nil
     }
 
-    private func currentNetworkCounter() -> SystemStatusNetworkCounter? {
-        let interfaceMetadata = Self.networkInterfaceMetadata()
+    private func currentNetworkCounter(referenceDate: Date) -> SystemStatusNetworkCounter? {
+        let interfaceMetadata = networkInterfaceMetadata(referenceDate: referenceDate)
         let displayNames = networkInterfaceDisplayNames
         let counters = Self.readNetworkCounters(interfaceMetadata: interfaceMetadata, displayNames: displayNames)
         let aggregateCounter = Self.readAggregateNetworkCounter(
@@ -1058,7 +1141,7 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         if
-            let primaryInterface = Self.primaryInterfaceName(),
+            let primaryInterface = primaryInterfaceName(referenceDate: referenceDate),
             let primaryCounter = counters[primaryInterface]
         {
             return primaryCounter.replacingCounters(from: aggregateCounter)
@@ -1079,6 +1162,35 @@ actor SystemStatusSampler: SystemStatusSampling {
         }
 
         return aggregateNetworkCounters(candidates, displayNames: displayNames).replacingCounters(from: aggregateCounter)
+    }
+
+    private func networkInterfaceMetadata(referenceDate: Date) -> [String: NetworkInterfaceMetadata] {
+        if
+            let cachedNetworkMetadata,
+            let lastNetworkMetadataDate,
+            referenceDate.timeIntervalSince(lastNetworkMetadataDate) < Self.networkMetadataCacheInterval
+        {
+            return cachedNetworkMetadata
+        }
+
+        let metadata = Self.networkInterfaceMetadata()
+        cachedNetworkMetadata = metadata
+        lastNetworkMetadataDate = referenceDate
+        return metadata
+    }
+
+    private func primaryInterfaceName(referenceDate: Date) -> String? {
+        if didCachePrimaryInterfaceName,
+           let lastPrimaryInterfaceDate,
+           referenceDate.timeIntervalSince(lastPrimaryInterfaceDate) < Self.networkMetadataCacheInterval {
+            return cachedPrimaryInterfaceName
+        }
+
+        let name = Self.primaryInterfaceName()
+        cachedPrimaryInterfaceName = name
+        lastPrimaryInterfaceDate = referenceDate
+        didCachePrimaryInterfaceName = true
+        return name
     }
 
     private static func primaryInterfaceName() -> String? {

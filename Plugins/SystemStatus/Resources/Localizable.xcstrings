@@ -205,70 +205,19 @@
         }
       }
     },
-    "memory.pressure.normal": {
+    "memory.footnote.usedSwapFormat": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Normal"
+            "value": "Used %@ · Swap %@"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正常"
-          }
-        }
-      }
-    },
-    "memory.pressure.warning": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Elevated"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "偏高"
-          }
-        }
-      }
-    },
-    "memory.pressure.critical": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Critical"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "紧张"
-          }
-        }
-      }
-    },
-    "memory.footnote.swapFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@/%@ · Swap %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@/%@ · 交换 %@"
+            "value": "已用 %@ · 交换 %@"
           }
         }
       }
@@ -524,6 +473,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "健康度 %d%%"
+          }
+        }
+      }
+    },
+    "battery.chargePowerFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charging %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "充电 %@"
+          }
+        }
+      }
+    },
+    "battery.dischargePowerFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discharging %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放电 %@"
           }
         }
       }
