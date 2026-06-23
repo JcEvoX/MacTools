@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-22T13:48:46Z",
-  "minimumHostVersion": "1.0.21",
+  "generatedAt": "2026-06-23T03:40:30Z",
+  "minimumHostVersion": "1.0.22",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -25,16 +25,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "1e075afe268a79db53f5b4c9b32cfe8ded745ea3489a6b53a6d13e02fdccc7f1",
-        "size": 757514,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.23/activity-bar.mactoolsplugin.zip"
+        "sha256": "38167ab7793f9504238c6a0d31a3b160816f85f5113e54c16138edb1c8b282e6",
+        "size": 757480,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.24/activity-bar.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.23",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.24",
       "summary": "统计输入、前台应用使用时长和 AI 编程活动",
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     {
       "capabilities": {
@@ -1175,6 +1175,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "aC22vo8F6k5XUz0ahPe6r2hdclvkSA+ZorV8J7V/FgcU6+nnbFvePbcQUbPGPKeUiqbCaI7jQl03bVfZWZT0Dw=="
+    "value": "092T0WHmDQkzmXc9/qw6ZpIoNldTGrVOnwZ776KSznaZzggYYl7HVz6ous7tV29YxE6YPYpCiZF1DZw6iswnDw=="
   }
 }
