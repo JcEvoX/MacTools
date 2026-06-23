@@ -188,7 +188,6 @@ final class ActivityBarPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompone
             displayedComponents: nil,
             datePickerStyle: nil,
             sectionTitle: nil,
-            switchValue: controller.isTrackingEnabled,
             actionTitle: localization.string("panel.action.trackingEnabled", defaultValue: "活动统计"),
             actionIconSystemName: "chart.bar.xaxis",
             isEnabled: true

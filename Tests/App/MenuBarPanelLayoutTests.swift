@@ -57,7 +57,6 @@ final class MenuBarPanelLayoutTests: XCTestCase {
                     displayedComponents: nil,
                     datePickerStyle: nil,
                     sectionTitle: nil,
-                    switchValue: true,
                     actionTitle: "活动统计",
                     actionIconSystemName: "chart.bar.xaxis",
                     isEnabled: true

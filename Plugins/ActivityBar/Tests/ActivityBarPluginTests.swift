@@ -36,7 +36,7 @@ final class ActivityBarPluginTests: XCTestCase {
             "reset-today"
         ])
         XCTAssertEqual(controls.first?.kind, .switchRow)
-        XCTAssertEqual(controls.first?.switchValue, false)
+        XCTAssertFalse(state.isOn)
     }
 
     func testSwitchStartsAndStopsRuntime() {
@@ -65,7 +65,7 @@ final class ActivityBarPluginTests: XCTestCase {
         let controls = try XCTUnwrap(harness.plugin.primaryPanelState.detail?.primaryControls)
 
         XCTAssertEqual(controls.first?.kind, .switchRow)
-        XCTAssertEqual(controls.first?.switchValue, true)
+        XCTAssertTrue(harness.plugin.primaryPanelState.isOn)
     }
 
     func testMonitorEventsUpdateComponentSubtitle() {

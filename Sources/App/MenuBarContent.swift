@@ -989,6 +989,7 @@ struct FeatureRowView: View {
             if let detail = detailToDisplay {
                 PluginPanelDetailView(
                     detail: detail,
+                    isOn: $isOn,
                     showsSecondaryPanel: false,
                     onSelectionChange: onSelectionChange,
                     onNavigationSelectionChange: onNavigationSelectionChange,
@@ -1106,6 +1107,7 @@ struct FeatureRowView: View {
 
 private struct PluginPanelDetailView: View {
     let detail: PluginPanelDetail
+    @Binding var isOn: Bool
     let showsSecondaryPanel: Bool
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
@@ -1210,6 +1212,7 @@ private struct PluginPanelDetailView: View {
         case .switchRow:
             SwitchRowControl(
                 control: control,
+                isOn: $isOn,
                 onChange: onSwitchChange
             )
         case .actionRow:
@@ -1225,6 +1228,7 @@ private struct PluginPanelDetailView: View {
 
 private struct SwitchRowControl: View {
     let control: PluginPanelControl
+    @Binding var isOn: Bool
     let onChange: (Bool) -> Void
 
     @State private var isHovered = false
@@ -1246,7 +1250,7 @@ private struct SwitchRowControl: View {
             Spacer()
 
             Toggle(String(), isOn: Binding(
-                get: { control.switchValue ?? false },
+                get: { isOn },
                 set: { newValue in
                     guard control.isEnabled else { return }
                     onChange(newValue)
@@ -1622,6 +1626,7 @@ private struct SecondarySlidingPanel: View {
 
             PluginPanelDetailView(
                 detail: PluginPanelDetail(primaryControls: controls, secondaryPanel: nil),
+                isOn: .constant(false),
                 showsSecondaryPanel: false,
                 onSelectionChange: onSelectionChange,
                 onNavigationSelectionChange: onNavigationSelectionChange,
