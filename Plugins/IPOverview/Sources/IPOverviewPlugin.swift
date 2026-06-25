@@ -19,28 +19,23 @@ private struct IPOverviewPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigurationPresenting {
     enum ControlID {
-        static let refresh = "ip-overview-refresh"
+        static let openSettings = "execute"
         static let copyIP = "ip-overview-copy-ip"
-        static let copyReport = "ip-overview-copy-report"
-        static let openDetails = "ip-overview-open-details"
     }
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .disclosure,
-        menuActionBehavior: .keepPresented
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     private let viewModel: IPOverviewViewModel
     private let localization: PluginLocalization
-    private var isExpanded = false
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestConfigurationPresentation: (() -> Void)?
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "ip-overview"),
@@ -60,6 +55,11 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 defaultValue: "查看公网 IP、本地地址和归属地"
             )
         )
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.button.check", defaultValue: "检测")
+        )
         self.viewModel.onSnapshotChange = { [weak self] in
             self?.onStateChange?()
         }
@@ -74,17 +74,17 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func refresh() {
-        viewModel.refreshAll()
+        viewModel.refreshPublicIP()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: panelSubtitle,
-            isOn: viewModel.isRefreshingAll,
-            isExpanded: isExpanded,
+            isOn: viewModel.snapshot.isRefreshing,
+            isExpanded: false,
             isEnabled: true,
             isVisible: true,
-            detail: isExpanded ? panelDetail : nil,
+            detail: nil,
             errorMessage: viewModel.snapshot.errorMessage
         )
     }
@@ -105,12 +105,10 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     func handleAction(_ action: PluginPanelAction) {
         switch action {
-        case let .setDisclosureExpanded(value):
-            isExpanded = value
-            onStateChange?()
         case let .invokeAction(controlID):
             handleInvoke(controlID: controlID)
-        case .setSwitch,
+        case .setDisclosureExpanded,
+             .setSwitch,
              .setSelection,
              .setNavigationSelection,
              .clearNavigationSelection,
@@ -127,7 +125,7 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
 
         if let ip = snapshot.preferredPublicIP?.ip {
-            return ip
+            return viewModel.hidesSensitiveInfo ? IPOverviewSensitiveValueMask.maskedIP(ip) : ip
         }
 
         if let errorMessage = snapshot.errorMessage {
@@ -137,80 +135,12 @@ final class IPOverviewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         return metadata.defaultDescription
     }
 
-    private var panelDetail: PluginPanelDetail {
-        PluginPanelDetail(primaryControls: [
-            PluginPanelControl(
-                id: ControlID.refresh,
-                kind: .actionRow,
-                options: [],
-                selectedOptionID: nil,
-                dateValue: nil,
-                minimumDate: nil,
-                displayedComponents: nil,
-                datePickerStyle: nil,
-                sectionTitle: nil,
-                actionTitle: viewModel.isRefreshingAll
-                    ? localization.string("panel.action.refreshing", defaultValue: "刷新中...")
-                    : localization.string("panel.action.refreshAll", defaultValue: "刷新全部检测"),
-                actionIconSystemName: "arrow.clockwise",
-                isEnabled: !viewModel.isRefreshingAll
-            ),
-            PluginPanelControl(
-                id: ControlID.copyIP,
-                kind: .actionRow,
-                options: [],
-                selectedOptionID: nil,
-                dateValue: nil,
-                minimumDate: nil,
-                displayedComponents: nil,
-                datePickerStyle: nil,
-                sectionTitle: nil,
-                actionTitle: localization.string("panel.action.copyPublicIP", defaultValue: "复制公网 IP"),
-                actionIconSystemName: "doc.on.doc",
-                showsLeadingDivider: true,
-                isEnabled: viewModel.snapshot.preferredPublicIP != nil
-            ),
-            PluginPanelControl(
-                id: ControlID.copyReport,
-                kind: .actionRow,
-                options: [],
-                selectedOptionID: nil,
-                dateValue: nil,
-                minimumDate: nil,
-                displayedComponents: nil,
-                datePickerStyle: nil,
-                sectionTitle: nil,
-                actionTitle: localization.string("panel.action.copyReport", defaultValue: "复制完整结果"),
-                actionIconSystemName: "doc.on.clipboard",
-                isEnabled: viewModel.snapshot.lastUpdated != nil
-            ),
-            PluginPanelControl(
-                id: ControlID.openDetails,
-                kind: .actionRow,
-                options: [],
-                selectedOptionID: nil,
-                dateValue: nil,
-                minimumDate: nil,
-                displayedComponents: nil,
-                datePickerStyle: nil,
-                sectionTitle: nil,
-                actionTitle: localization.string("panel.action.openDetails", defaultValue: "打开详情"),
-                actionIconSystemName: "arrow.up.right.square",
-                actionBehavior: .dismissBeforeHandling,
-                showsLeadingDivider: true,
-                isEnabled: true
-            )
-        ], secondaryPanel: nil)
-    }
-
     private func handleInvoke(controlID: String) {
         switch controlID {
-        case ControlID.refresh:
-            viewModel.refreshAll()
+        case ControlID.openSettings:
+            requestConfigurationPresentation?()
         case ControlID.copyIP:
             viewModel.copy(viewModel.snapshot.preferredPublicIP?.ip)
-        case ControlID.copyReport:
-            viewModel.copy(viewModel.snapshot.reportText(localization: localization))
         default:
             break
         }

@@ -1,15 +1,15 @@
 {
   "id": "ip-overview",
   "displayName": "IP 检测",
-  "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
+  "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要",
   "localizedMetadata": {
     "zh-Hans": {
       "displayName": "IP 检测",
-      "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要"
+      "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要"
     },
     "en": {
       "displayName": "IP Check",
-      "summary": "View public IPv4, IPv6, local IP, and location summaries."
+      "summary": "View egress IP, local IP, location, and network quality summaries."
     }
   },
   "version": "1.0.9",

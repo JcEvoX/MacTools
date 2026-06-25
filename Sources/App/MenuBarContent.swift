@@ -382,7 +382,7 @@ struct MenuBarContent: View {
     static let batteryChargeLimitPluginID = "battery-charge-limit"
     static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
     static let ipOverviewPluginID = "ip-overview"
-    static let ipOverviewOpenDetailsActionID = "ip-overview-open-details"
+    static let ipOverviewCopyIPActionID = "ip-overview-copy-ip"
 
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
@@ -544,12 +544,6 @@ struct MenuBarContent: View {
             return
         }
 
-        if isIPOverviewOpenDetailsAction(pluginID: item.id, controlID: controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
-            onDismiss()
-            return
-        }
-
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -611,11 +605,6 @@ struct MenuBarContent: View {
             return
         }
 
-        if isIPOverviewOpenDetailsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginConfiguration(pluginID: Self.ipOverviewPluginID)
-            return
-        }
-
         pluginHost.invokePanelAction(
             controlID: action.controlID,
             for: action.pluginID
@@ -640,10 +629,6 @@ struct MenuBarContent: View {
 
     private func isBatteryChargeLimitManageSettingsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.batteryChargeLimitPluginID && controlID == Self.batteryChargeLimitManageSettingsActionID
-    }
-
-    private func isIPOverviewOpenDetailsAction(pluginID: String, controlID: String) -> Bool {
-        pluginID == Self.ipOverviewPluginID && controlID == Self.ipOverviewOpenDetailsActionID
     }
 
     private func presentDiskCleanDetails() {
@@ -952,18 +937,7 @@ struct FeatureRowView: View {
                     }
                     .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .lineLimit(1)
-
-                        Text(item.description)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .help(item.helpText)
-                    }
+                    rowText
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Button {
@@ -1037,18 +1011,7 @@ struct FeatureRowView: View {
             }
             .frame(width: FeatureRowLayout.iconSize, height: FeatureRowLayout.iconSize)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-
-                Text(item.description)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(item.helpText)
-            }
+            rowText
             .frame(maxWidth: .infinity, alignment: .leading)
 
             switch item.controlStyle {
@@ -1084,6 +1047,59 @@ struct FeatureRowView: View {
         }
 
         return detail
+    }
+
+    private var rowText: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+
+            HStack(spacing: 3) {
+                Text(item.description)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(item.descriptionTone == .error ? Color.red : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(item.helpText)
+
+                if showsIPOverviewCopyButton {
+                    Button {
+                        onActionInvoke(MenuBarContent.ipOverviewCopyIPActionID, .keepPresented)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 10.5, height: 10.5)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(isHovered ? 1 : 0)
+                    .help(AppL10n.plugins("plugin.panel.copyIP", defaultValue: "复制 IP"))
+                }
+            }
+        }
+    }
+
+    private var showsIPOverviewCopyButton: Bool {
+        item.id == MenuBarContent.ipOverviewPluginID
+            && !descriptionIsError
+            && Self.looksLikeIPAddress(item.description)
+    }
+
+    private var descriptionIsError: Bool {
+        switch item.descriptionTone {
+        case .error:
+            return true
+        case .secondary:
+            return false
+        }
+    }
+
+    private static func looksLikeIPAddress(_ value: String) -> Bool {
+        let allowedCharacters = CharacterSet(charactersIn: "0123456789abcdefABCDEF:.")
+        return !value.isEmpty
+            && value.rangeOfCharacter(from: allowedCharacters.inverted) == nil
+            && (value.contains(".") || value.contains(":"))
     }
 
     private func updateCursorForDisabledState(hovering: Bool) {
