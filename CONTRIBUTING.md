@@ -30,6 +30,7 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 ## Development Guidelines
 - Add new plugins under `Plugins/<PluginName>/` with at least `plugin.json`, `Sources/`, and `Bundle/`.
 - Ordinary plugins only need to define `plugin.json`, source code, and a bundle entry point. `make generate` scans `Plugins/*/plugin.json` and generates local `Configs/GeneratedPlugins.yml`; do not edit generated files manually.
+- Features that require macOS app extensions, such as Finder Sync, must add the extension target to the root `project.yml` and embed it in the main app. Use the dynamic plugin only for the MacTools panel/settings surface.
 - Command workflows for adding and updating plugins are documented in the Development Steps section of `docs/plugins/local-native-plugins.md`.
 - Keep documentation short and task-focused. User-visible behavior changes should update `README.md` or the relevant file under `docs/`; plugin package, catalog, or release flow changes should update `docs/plugins/`.
 - Plugins implement `MacToolsPlugin`; menu panel plugins implement `PluginPrimaryPanel`, and component panel plugins implement `PluginComponentPanel`.

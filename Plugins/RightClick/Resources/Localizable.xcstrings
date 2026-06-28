@@ -1,0 +1,142 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "metadata.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right Click"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右键工具"
+          }
+        }
+      }
+    },
+    "metadata.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add quick Finder context menu actions for folders and paths."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 右键菜单中快速新建文件夹和复制路径"
+          }
+        }
+      }
+    },
+    "panel.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on the MacTools switch in extension management to use it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开扩展管理里的 MacTools 开关后即可使用"
+          }
+        }
+      }
+    },
+    "settings.extension.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder Extension"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder 扩展"
+          }
+        }
+      }
+    },
+    "settings.extension.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on the MacTools switch in System Settings extension management; debug builds appear as MacTools Dev."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在系统设置的扩展管理中打开 MacTools 开关；调试版显示为 MacTools Dev。"
+          }
+        }
+      }
+    },
+    "settings.extension.status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System switch required"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要打开系统开关"
+          }
+        }
+      }
+    },
+    "settings.extension.footnote" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After enabling it, Finder shows New Folder, Copy File Name, Copy Absolute Path, and Copy Relative Path."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用后，Finder 右键菜单会显示「新建文件夹」「复制文件名」「复制绝对路径」「复制相对路径」。"
+          }
+        }
+      }
+    },
+    "settings.extension.button" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Extension Management"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开扩展管理"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

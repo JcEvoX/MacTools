@@ -48,6 +48,10 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
         bootstrapDynamicPlugins()
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        RightClickURLRouter.shared.handle(urls)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()

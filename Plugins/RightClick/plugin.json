@@ -1,0 +1,31 @@
+{
+  "id": "right-click",
+  "displayName": "右键工具",
+  "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
+  "localizedMetadata": {
+    "zh-Hans": {
+      "displayName": "右键工具",
+      "summary": "为 Finder 右键菜单添加新建文件夹和路径复制"
+    },
+    "en": {
+      "displayName": "Right Click",
+      "summary": "Add quick Finder context menu actions for folders and paths."
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.0.21",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "RightClick.bundle",
+  "factoryClass": "RightClickPlugin.RightClickPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "RightClickPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "productivity"
+}

@@ -84,6 +84,8 @@ To add a plugin, create `Plugins/<PluginName>/plugin.json`, `Sources/`, and `Bun
 make run
 ```
 
+Finder Sync, Share, Quick Look, and other macOS app extensions are host-level targets. A plugin may expose settings or status for that feature, but the extension target itself must be embedded by the main app through `project.yml`; it cannot be installed into Finder by a dynamic `.mactoolsplugin` bundle at runtime.
+
 In Debug development, `make run` builds the main `MacTools` scheme, then synchronizes the freshly built plugin bundles from `build/DerivedData/Build/Products/Debug` into `build/LocalPlugins/Packages`, generates `build/LocalPlugins/catalog.dev.json`, and updates `~/Library/Application Support/MacTools Dev/Plugins/Installed`. This keeps the local marketplace and installed plugins on the latest source code without running a separate plugin build.
 
 If the plugin needs extra frameworks, private include paths, bundle resources, helper/tool targets, or target dependencies, add only those differences in `Plugins/<PluginName>/project.yml`. If the plugin package contains an extra executable inside the bundle resources, declare it in `plugin.json.package.signPaths` so release packaging signs it before signing the bundle.

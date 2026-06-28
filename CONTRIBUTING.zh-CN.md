@@ -30,6 +30,7 @@
 ## 开发约定
 - 新增插件放在 `Plugins/<PluginName>/`，至少包含 `plugin.json`、`Sources/` 和 `Bundle/`。
 - 普通插件只需要在目录内定义 `plugin.json`、源码和 bundle 入口；`make generate` 会扫描 `Plugins/*/plugin.json` 并生成本地 `Configs/GeneratedPlugins.yml`，不要手改生成文件。
+- 需要 macOS app extension 的能力（如 Finder Sync）必须在根 `project.yml` 添加扩展 target 并嵌入主应用；动态插件只负责 MacTools 面板和设置入口。
 - 新增和更新插件的命令流程见 `docs/plugins/local-native-plugins.md` 的 Development Steps。
 - 文档保持简短、聚焦任务。用户可见行为变化应同步更新 `README.md` 或 `docs/` 下的相关文档；插件包、catalog 或发布流程变化应更新 `docs/plugins/`。
 - 插件实现 `MacToolsPlugin`；菜单栏主面板实现 `PluginPrimaryPanel`，组件面板实现 `PluginComponentPanel`。
