@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-23T03:40:30Z",
-  "minimumHostVersion": "1.0.22",
+  "generatedAt": "2026-06-28T15:47:47Z",
+  "minimumHostVersion": "1.0.23",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -627,25 +627,25 @@
       "localizedMetadata": {
         "en": {
           "displayName": "IP Check",
-          "summary": "View public IPv4, IPv6, local IP, and location summaries."
+          "summary": "View egress IP, local IP, location, and network quality summaries."
         },
         "zh-Hans": {
           "displayName": "IP 检测",
-          "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要"
+          "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要"
         }
       },
       "minimumHostVersion": "1.0.10",
       "package": {
-        "sha256": "11fe62d99d36d29b913153e7d5c13ddc84c14da415b38917a9549e6c0fbae100",
-        "size": 543925,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.16/ip-overview.mactoolsplugin.zip"
+        "sha256": "049105906347068d939cc2feac020a5df1ffa07d1c694d2c42ba0791ef8ecffe",
+        "size": 1055482,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.25/ip-overview.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.16",
-      "summary": "查看公网 IPv4、IPv6、本地 IP 与归属地摘要",
-      "version": "1.0.9"
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.25",
+      "summary": "查看出口 IP、本地 IP、归属地与网络测速摘要",
+      "version": "1.0.10"
     },
     {
       "capabilities": {
@@ -977,6 +977,38 @@
     {
       "capabilities": {
         "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "productivity",
+      "displayName": "右键工具",
+      "id": "right-click",
+      "localizedMetadata": {
+        "en": {
+          "displayName": "Right Click",
+          "summary": "Add quick Finder context menu actions for folders and paths."
+        },
+        "zh-Hans": {
+          "displayName": "右键工具",
+          "summary": "为 Finder 右键菜单添加新建文件夹和路径复制"
+        }
+      },
+      "minimumHostVersion": "1.0.21",
+      "package": {
+        "sha256": "9ae58f8916914bc6403c6a42802db5f59859dd797c3761dc461849ea9b148fad",
+        "size": 44588,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.25/right-click.mactoolsplugin.zip"
+      },
+      "permissions": [],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.25",
+      "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
         "configuration": false,
         "primaryPanel": true
       },
@@ -1175,6 +1207,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "092T0WHmDQkzmXc9/qw6ZpIoNldTGrVOnwZ776KSznaZzggYYl7HVz6ous7tV29YxE6YPYpCiZF1DZw6iswnDw=="
+    "value": "MnVQgAFFekFg39TAlHOu3SAt47d/nX/nzPJX306Ebrzuxn4JPdSfJy65B9VCkSWeGNJs+JXQiqs33Oq7uAT7DQ=="
   }
 }
