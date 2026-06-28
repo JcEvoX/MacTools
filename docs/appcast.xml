@@ -5,19 +5,19 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.23</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.23</link>
-            <sparkle:version>53</sparkle:version>
-            <sparkle:shortVersionString>1.0.23</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.23 -->
+            <title>Version 1.0.24</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.24</link>
+            <sparkle:version>54</sparkle:version>
+            <sparkle:shortVersionString>1.0.24</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.24 -->
 
 
 
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.22...v1.0.23
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.23...v1.0.24
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Tue, 23 Jun 2026 03:44:57 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.23/MacTools.dmg" length="6151736" type="application/octet-stream" sparkle:edSignature="XcDWSGH8k2p4dykXCfytQqIpK/ey0FP9Aujd31GvppxhbxtGM7XOf5GBFu2C6uvnrwgh7VNuGOPQtV5Ir059CA==" />
+            <pubDate>Sun, 28 Jun 2026 15:53:11 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.24/MacTools.dmg" length="6264862" type="application/octet-stream" sparkle:edSignature="Rz1JmNkFrdhY4D4ukhXiCZ7FKV312V0D+sbGnuMpIVDdVR6Qg1TVaVnoXvCxnTOk58q5f9V4zK1IspCITUk9Bg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
