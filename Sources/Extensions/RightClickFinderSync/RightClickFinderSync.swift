@@ -20,13 +20,13 @@ final class RightClickFinderSync: FIFinderSync {
         let actionID: String
         let directory: URL?
         let fileExtension: String?
-        let appName: String?
+        let appPath: String?
 
-        init(actionID: String, directory: URL? = nil, fileExtension: String? = nil, appName: String? = nil) {
+        init(actionID: String, directory: URL? = nil, fileExtension: String? = nil, appPath: String? = nil) {
             self.actionID = actionID
             self.directory = directory
             self.fileExtension = fileExtension
-            self.appName = appName
+            self.appPath = appPath
         }
     }
 
@@ -201,13 +201,22 @@ final class RightClickFinderSync: FIFinderSync {
 
         let parent = NSMenuItem(title: "用应用打开", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: "用应用打开")
+        var usedTitles: Set<String> = []
         for app in matching {
-            // Identified at click time by the title (the app name): FinderSync
-            // preserves the displayed title; the representedObject + title fallback
-            // below covers the case where representedObject is stripped.
+            // Stable identity is appPath (carried in representedObject). Make the
+            // displayed title unique too, so the title fallback (used when
+            // FinderSync strips representedObject) still resolves to one app.
+            var title = app.name
+            if !usedTitles.insert(title).inserted {
+                let folder = URL(fileURLWithPath: app.appPath).deletingLastPathComponent().lastPathComponent
+                title = "\(app.name) — \(folder)"
+                while !usedTitles.insert(title).inserted {
+                    title += " ·"
+                }
+            }
             let item = actionItem(
-                title: app.name,
-                context: MenuActionContext(actionID: ActionID.openWith, appName: app.name)
+                title: title,
+                context: MenuActionContext(actionID: ActionID.openWith, appPath: app.appPath)
             )
             submenu.addItem(item)
         }
@@ -263,7 +272,7 @@ final class RightClickFinderSync: FIFinderSync {
                 URLQueryItem(name: "directory", value: directory.path)
             ])
         case ActionID.openWith:
-            handleOpenWith(appName: context.appName)
+            handleOpenWith(appPath: context.appPath)
         case ActionID.copyFileName:
             copyToPasteboard(RightClickPathFormatter.joinedFileNames(currentSelectedURLs()))
         case ActionID.copyAbsolutePath:
@@ -287,17 +296,20 @@ final class RightClickFinderSync: FIFinderSync {
     /// Forward an open-with request to the host: resolve the app by its name from
     /// the current config (the menu item only carries the title), then send the
     /// app path and the target file paths.
-    private func handleOpenWith(appName: String?) {
-        guard let appName else { return }
+    private func handleOpenWith(appPath: String?) {
+        guard let appPath else { return }
         let configuration = RightClickConfigurationStore.load()
-        guard let app = configuration.openWithApps.first(where: { $0.name == appName }) else {
-            logger.error("open-with: no configured app named \(appName, privacy: .public)")
+        guard let app = configuration.openWithApps.first(where: { $0.appPath == appPath }) else {
+            logger.error("open-with: no configured app at \(appPath, privacy: .public)")
             return
         }
         let selected = currentSelectedURLs()
-        let targets = selected.isEmpty ? [currentTargetedURL()].compactMap { $0 } : selected
+        let resolved = selected.isEmpty ? [currentTargetedURL()].compactMap { $0 } : selected
+        // Only forward files this app actually applies to — a mixed selection may
+        // include types its extension filter excludes.
+        let targets = resolved.filter { app.matches(fileExtension: $0.pathExtension) }
         guard !targets.isEmpty else {
-            logger.error("open-with: no target items")
+            logger.error("open-with: no matching target items for \(appPath, privacy: .public)")
             return
         }
         var queryItems = [URLQueryItem(name: "app", value: app.appPath)]

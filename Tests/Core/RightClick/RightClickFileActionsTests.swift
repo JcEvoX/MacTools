@@ -55,10 +55,10 @@ final class RightClickPathFormatterTests: XCTestCase {
     }
 
     func testJoinedFileURLs() {
-        let urls = [URL(fileURLWithPath: "/a/x.txt")]
+        let urls = [URL(fileURLWithPath: "/a/x.txt"), URL(fileURLWithPath: "/b/y.md")]
         XCTAssertEqual(
             RightClickPathFormatter.joinedFileURLs(urls),
-            "file:///a/x.txt"
+            "file:///a/x.txt\nfile:///b/y.md"
         )
     }
 }
