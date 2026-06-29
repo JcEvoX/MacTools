@@ -8,7 +8,7 @@
 	<true/>
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>
-		<string>/Library/Application Support/MacTools/</string>
+		<string>/Library/Application Support/MacTools/right-click-menu.json</string>
 	</array>
 </dict>
 </plist>

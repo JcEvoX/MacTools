@@ -113,8 +113,10 @@ enum RightClickConfigurationStore {
         return NSHomeDirectory()
     }()
 
-    /// Directory the config file lives in, relative to the real home. Must stay in
-    /// sync with the extension's `home-relative-path` read-only entitlement.
+    /// Directory the config file lives in, relative to the real home. The
+    /// extension's read-only `home-relative-path` entitlement is scoped to this
+    /// directory's `right-click-menu.json` specifically, so keep the file name in
+    /// sync with that entitlement.
     static let configDirectoryRelativePath = "Library/Application Support/MacTools"
 
     static var configFileURL: URL {
