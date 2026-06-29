@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-28T15:47:47Z",
-  "minimumHostVersion": "1.0.23",
+  "generatedAt": "2026-06-29T14:05:34Z",
+  "minimumHostVersion": "1.0.24",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -995,16 +995,16 @@
       },
       "minimumHostVersion": "1.0.21",
       "package": {
-        "sha256": "9ae58f8916914bc6403c6a42802db5f59859dd797c3761dc461849ea9b148fad",
-        "size": 44588,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.25/right-click.mactoolsplugin.zip"
+        "sha256": "c2fb74e76c9f2c0011fc3dcd5e94c473f94200611964ae99cb673e63e2d6e183",
+        "size": 145540,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.26/right-click.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.25",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.26",
       "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "capabilities": {
@@ -1207,6 +1207,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "MnVQgAFFekFg39TAlHOu3SAt47d/nX/nzPJX306Ebrzuxn4JPdSfJy65B9VCkSWeGNJs+JXQiqs33Oq7uAT7DQ=="
+    "value": "rIfyKTwycWbsyZS6A+ztoov2kMVV2jAhln1PgFC4TqnB47xcn0EvwPrnaxFVzaAnGef4NFfCTLS3kX26smNABA=="
   }
 }
