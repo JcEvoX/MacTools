@@ -4,6 +4,10 @@ import Foundation
 enum RightClickActionError: LocalizedError, Equatable {
     case directoryUnavailable(String)
     case cannotCreateDirectory(String)
+    case cannotCreateFile(String)
+    case unsupportedFileExtension(String)
+    case applicationUnavailable(String)
+    case noValidFiles
 
     var errorDescription: String? {
         switch self {
@@ -11,6 +15,14 @@ enum RightClickActionError: LocalizedError, Equatable {
             "文件夹不可用：\(path)"
         case let .cannotCreateDirectory(path):
             "无法新建文件夹：\(path)"
+        case let .cannotCreateFile(path):
+            "无法新建文件：\(path)"
+        case let .unsupportedFileExtension(ext):
+            "不支持的文件类型：\(ext)"
+        case let .applicationUnavailable(path):
+            "应用不可用：\(path)"
+        case .noValidFiles:
+            "没有可用的文件"
         }
     }
 }
@@ -51,6 +63,21 @@ struct RightClickPathFormatter {
                 return relativePath(of: url, to: base)
             }
             .joined(separator: "\n")
+    }
+
+    /// Shell-escaped paths, space-separated so the whole line can be pasted as
+    /// terminal arguments.
+    static func joinedShellEscapedPaths(_ urls: [URL]) -> String {
+        urls.map { shellEscaped($0.path) }.joined(separator: " ")
+    }
+
+    static func joinedFileURLs(_ urls: [URL]) -> String {
+        urls.map(\.absoluteString).joined(separator: "\n")
+    }
+
+    /// Single-quote wrap, with embedded single quotes escaped as `'\''`.
+    static func shellEscaped(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 
@@ -152,5 +179,48 @@ struct RightClickFileActionService {
         } catch {
             throw RightClickActionError.cannotCreateDirectory(folderURL.path)
         }
+    }
+
+    /// Create an empty file of an allow-listed type inside the target directory,
+    /// then reveal it in Finder. The extension allow list also blocks path
+    /// traversal through the forwarded `ext` parameter.
+    func createFile(in directory: URL, extension fileExtension: String) throws -> URL {
+        guard RightClickNewFile.isSupportedExtension(fileExtension) else {
+            throw RightClickActionError.unsupportedFileExtension(fileExtension)
+        }
+        guard RightClickTargetResolver.isDirectory(directory) else {
+            throw RightClickActionError.directoryUnavailable(directory.path)
+        }
+        let fileURL = RightClickFileNamePlanner.nextAvailableURL(
+            in: directory,
+            baseName: "未命名",
+            pathExtension: fileExtension
+        )
+        // Defense-in-depth: the resolved file must sit directly inside the target.
+        guard fileURL.deletingLastPathComponent().standardizedFileURL.path
+            == directory.standardizedFileURL.path else {
+            throw RightClickActionError.cannotCreateFile(fileURL.path)
+        }
+        // Exclusive create: fail (rather than clobber) if the path appeared
+        // between nextAvailableURL and now (TOCTOU). createFile(atPath:) would
+        // silently truncate an existing file.
+        do {
+            try Data().write(to: fileURL, options: .withoutOverwriting)
+        } catch {
+            throw RightClickActionError.cannotCreateFile(fileURL.path)
+        }
+        workspace.activateFileViewerSelecting([fileURL])
+        return fileURL
+    }
+}
+
+/// New-file types the right-click menu may create. A strict allow list keeps the
+/// feature to its intended types and — because the host's URL scheme can be
+/// invoked by any process — prevents path traversal through the `ext` parameter.
+enum RightClickNewFile {
+    static let supportedExtensions: [String] = ["txt", "md", "json"]
+
+    static func isSupportedExtension(_ ext: String) -> Bool {
+        supportedExtensions.contains(ext.lowercased())
     }
 }

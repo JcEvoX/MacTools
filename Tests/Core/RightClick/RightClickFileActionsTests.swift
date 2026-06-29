@@ -31,6 +31,36 @@ final class RightClickPathFormatterTests: XCTestCase {
             "/Users/test/Desktop/note.txt"
         )
     }
+
+    func testShellEscapedWrapsPlainPathInSingleQuotes() {
+        XCTAssertEqual(
+            RightClickPathFormatter.shellEscaped("/Users/test/My File.txt"),
+            "'/Users/test/My File.txt'"
+        )
+    }
+
+    func testShellEscapedEscapesEmbeddedSingleQuote() {
+        XCTAssertEqual(
+            RightClickPathFormatter.shellEscaped("/a/it's.txt"),
+            "'/a/it'\\''s.txt'"
+        )
+    }
+
+    func testJoinedShellEscapedPathsAreSpaceSeparated() {
+        let urls = [URL(fileURLWithPath: "/a/x.txt"), URL(fileURLWithPath: "/b/y.txt")]
+        XCTAssertEqual(
+            RightClickPathFormatter.joinedShellEscapedPaths(urls),
+            "'/a/x.txt' '/b/y.txt'"
+        )
+    }
+
+    func testJoinedFileURLs() {
+        let urls = [URL(fileURLWithPath: "/a/x.txt"), URL(fileURLWithPath: "/b/y.md")]
+        XCTAssertEqual(
+            RightClickPathFormatter.joinedFileURLs(urls),
+            "file:///a/x.txt\nfile:///b/y.md"
+        )
+    }
 }
 
 final class RightClickFileNamePlannerTests: XCTestCase {
@@ -78,6 +108,32 @@ final class RightClickFileNamePlannerTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdURL.path))
         XCTAssertEqual(workspace.selectedURLs, [createdURL])
+    }
+
+    func testCreateFileCreatesAllowedTypeAndSelectsIt() throws {
+        let workspace = RightClickWorkspaceSpy()
+        let service = RightClickFileActionService(workspace: workspace)
+
+        let createdURL = try service.createFile(in: temporaryDirectory, extension: "md")
+
+        XCTAssertEqual(createdURL.pathExtension, "md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdURL.path))
+        XCTAssertEqual(workspace.selectedURLs, [createdURL])
+    }
+
+    func testCreateFileRejectsUnsupportedExtension() {
+        let service = RightClickFileActionService()
+        XCTAssertThrowsError(try service.createFile(in: temporaryDirectory, extension: "exe"))
+        XCTAssertThrowsError(try service.createFile(in: temporaryDirectory, extension: "../../etc/x"))
+    }
+
+    func testNewFileAllowListAcceptsIntendedRejectsOthers() {
+        XCTAssertTrue(RightClickNewFile.isSupportedExtension("txt"))
+        XCTAssertTrue(RightClickNewFile.isSupportedExtension("MD"))
+        XCTAssertTrue(RightClickNewFile.isSupportedExtension("json"))
+        XCTAssertFalse(RightClickNewFile.isSupportedExtension("exe"))
+        XCTAssertFalse(RightClickNewFile.isSupportedExtension("../../etc/passwd"))
+        XCTAssertFalse(RightClickNewFile.isSupportedExtension(""))
     }
 }
 
