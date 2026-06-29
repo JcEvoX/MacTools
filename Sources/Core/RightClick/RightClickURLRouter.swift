@@ -91,7 +91,11 @@ final class RightClickURLRouter {
             [directory],
             withApplicationAt: terminalURL,
             configuration: NSWorkspace.OpenConfiguration()
-        )
+        ) { [logger] _, error in
+            if let error {
+                logger.error("open in terminal failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     private func handleOpenWith(_ url: URL) {
@@ -99,11 +103,22 @@ final class RightClickURLRouter {
             logger.error("Invalid open-with URL")
             return
         }
+        // Security: the URL scheme can be invoked by any process, so only open
+        // with an app the user actually configured — not any .app on disk.
+        let configuredApps = Set(RightClickConfigurationStore.load().openWithApps.map(\.appPath))
+        guard configuredApps.contains(request.appURL.path) else {
+            logger.error("open-with rejected: app not in configured list: \(request.appURL.path, privacy: .public)")
+            return
+        }
         NSWorkspace.shared.open(
             request.files,
             withApplicationAt: request.appURL,
             configuration: NSWorkspace.OpenConfiguration()
-        )
+        ) { [logger] _, error in
+            if let error {
+                logger.error("open-with failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Parsed + validated open-with request, split out so the validation (app must

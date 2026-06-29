@@ -201,7 +201,12 @@ struct RightClickFileActionService {
             == directory.standardizedFileURL.path else {
             throw RightClickActionError.cannotCreateFile(fileURL.path)
         }
-        guard fileManager.createFile(atPath: fileURL.path, contents: Data(), attributes: nil) else {
+        // Exclusive create: fail (rather than clobber) if the path appeared
+        // between nextAvailableURL and now (TOCTOU). createFile(atPath:) would
+        // silently truncate an existing file.
+        do {
+            try Data().write(to: fileURL, options: .withoutOverwriting)
+        } catch {
             throw RightClickActionError.cannotCreateFile(fileURL.path)
         }
         workspace.activateFileViewerSelecting([fileURL])

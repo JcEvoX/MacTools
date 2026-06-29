@@ -107,9 +107,12 @@ private struct RightClickOpenWithAppRow: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 120)
                 .onChange(of: extensionsText) { _, newValue in
+                    // pathExtension values are dotless; strip a leading "." so a
+                    // user entering ".txt" still matches.
                     app.fileExtensions = newValue
                         .split(separator: ",")
                         .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                        .map { $0.hasPrefix(".") ? String($0.dropFirst()) : $0 }
                         .filter { !$0.isEmpty }
                 }
             Button(role: .destructive, action: onDelete) {
