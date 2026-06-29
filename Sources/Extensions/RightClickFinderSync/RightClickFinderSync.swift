@@ -6,18 +6,27 @@ import OSLog
 final class RightClickFinderSync: FIFinderSync {
     private enum ActionID {
         static let newFolder = "new-folder"
+        static let newFile = "new-file"
+        static let openInTerminal = "open-terminal"
+        static let openWith = "open-with"
         static let copyFileName = "copy-file-name"
         static let copyAbsolutePath = "copy-absolute-path"
         static let copyRelativePath = "copy-relative-path"
+        static let copyShellEscapedPath = "copy-shell-escaped-path"
+        static let copyFileURL = "copy-file-url"
     }
 
     private final class MenuActionContext: NSObject {
         let actionID: String
         let directory: URL?
+        let fileExtension: String?
+        let appName: String?
 
-        init(actionID: String, directory: URL? = nil) {
+        init(actionID: String, directory: URL? = nil, fileExtension: String? = nil, appName: String? = nil) {
             self.actionID = actionID
             self.directory = directory
+            self.fileExtension = fileExtension
+            self.appName = appName
         }
     }
 
@@ -60,6 +69,7 @@ final class RightClickFinderSync: FIFinderSync {
         lastTargetedURL = targetedURL
         titleToActionContext.removeAll()
 
+        let configuration = RightClickConfigurationStore.load()
         let menu = NSMenu(title: "MacTools")
 
         switch menuKind {
@@ -68,10 +78,11 @@ final class RightClickFinderSync: FIFinderSync {
                 selectedURLs: [],
                 targetedURL: targetedURL
             ) {
-                addNewFolderItem(to: menu, directory: directory)
+                addDirectoryItems(to: menu, directory: directory, configuration: configuration)
+                addOpenWithMenu(to: menu, configuration: configuration, targets: [directory])
             }
         case .contextualMenuForItems, .contextualMenuForSidebar, .toolbarItemMenu:
-            addMenuItemsForSelection(selectedURLs, targetedURL: targetedURL, to: menu)
+            addMenuItemsForSelection(selectedURLs, targetedURL: targetedURL, to: menu, configuration: configuration)
         @unknown default:
             break
         }
@@ -87,33 +98,53 @@ final class RightClickFinderSync: FIFinderSync {
         logger.debug("End observing directory: \(url.path, privacy: .public)")
     }
 
-    private func addMenuItemsForSelection(_ selectedURLs: [URL], targetedURL: URL?, to menu: NSMenu) {
+    private func addMenuItemsForSelection(
+        _ selectedURLs: [URL],
+        targetedURL: URL?,
+        to menu: NSMenu,
+        configuration: RightClickConfiguration
+    ) {
         if let directory = RightClickTargetResolver.targetDirectory(
             selectedURLs: selectedURLs,
             targetedURL: targetedURL
         ) {
-            addNewFolderItem(to: menu, directory: directory)
+            addDirectoryItems(to: menu, directory: directory, configuration: configuration)
         }
 
         guard !selectedURLs.isEmpty else {
             return
         }
 
-        addCopyItem(
-            title: "复制文件名",
-            actionID: ActionID.copyFileName,
-            to: menu
-        )
-        addCopyItem(
-            title: "复制绝对路径",
-            actionID: ActionID.copyAbsolutePath,
-            to: menu
-        )
-        addCopyItem(
-            title: "复制相对路径",
-            actionID: ActionID.copyRelativePath,
-            to: menu
-        )
+        if configuration.copyFileName {
+            addCopyItem(title: "复制文件名", actionID: ActionID.copyFileName, to: menu)
+        }
+        if configuration.copyAbsolutePath {
+            addCopyItem(title: "复制绝对路径", actionID: ActionID.copyAbsolutePath, to: menu)
+        }
+        if configuration.copyRelativePath {
+            addCopyItem(title: "复制相对路径", actionID: ActionID.copyRelativePath, to: menu)
+        }
+        if configuration.copyShellEscapedPath {
+            addCopyItem(title: "复制转义路径", actionID: ActionID.copyShellEscapedPath, to: menu)
+        }
+        if configuration.copyFileURL {
+            addCopyItem(title: "复制 file:// 链接", actionID: ActionID.copyFileURL, to: menu)
+        }
+
+        addOpenWithMenu(to: menu, configuration: configuration, targets: selectedURLs)
+    }
+
+    /// Directory-level items shared by container and item right-clicks.
+    private func addDirectoryItems(to menu: NSMenu, directory: URL, configuration: RightClickConfiguration) {
+        if configuration.newFolder {
+            addNewFolderItem(to: menu, directory: directory)
+        }
+        if configuration.newFile {
+            addNewFileMenu(to: menu, directory: directory)
+        }
+        if configuration.openInTerminal {
+            addOpenInTerminalItem(to: menu, directory: directory)
+        }
     }
 
     private func addNewFolderItem(to menu: NSMenu, directory: URL) {
@@ -122,6 +153,66 @@ final class RightClickFinderSync: FIFinderSync {
             directory: directory
         ))
         menu.addItem(item)
+    }
+
+    private func addNewFileMenu(to menu: NSMenu, directory: URL) {
+        let parent = NSMenuItem(title: "新建文件", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "新建文件")
+        for ext in RightClickNewFile.supportedExtensions {
+            let item = actionItem(
+                title: Self.newFileItemTitle(for: ext),
+                context: MenuActionContext(actionID: ActionID.newFile, directory: directory, fileExtension: ext)
+            )
+            submenu.addItem(item)
+        }
+        parent.submenu = submenu
+        menu.addItem(parent)
+    }
+
+    private static func newFileItemTitle(for ext: String) -> String {
+        switch ext {
+        case "txt": "文本文件 (.txt)"
+        case "md": "Markdown (.md)"
+        case "json": "JSON (.json)"
+        default: ".\(ext)"
+        }
+    }
+
+    private func addOpenInTerminalItem(to menu: NSMenu, directory: URL) {
+        let item = actionItem(title: "在终端打开", context: MenuActionContext(
+            actionID: ActionID.openInTerminal,
+            directory: directory
+        ))
+        menu.addItem(item)
+    }
+
+    /// Adds an "open with" submenu for the configured apps that match at least one
+    /// target's extension (an entry with no extension filter matches everything).
+    private func addOpenWithMenu(to menu: NSMenu, configuration: RightClickConfiguration, targets: [URL]) {
+        guard !configuration.openWithApps.isEmpty, !targets.isEmpty else {
+            return
+        }
+        let matching = configuration.openWithApps.filter { app in
+            targets.contains { app.matches(fileExtension: $0.pathExtension) }
+        }
+        guard !matching.isEmpty else {
+            return
+        }
+
+        let parent = NSMenuItem(title: "用应用打开", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "用应用打开")
+        for app in matching {
+            // Identified at click time by the title (the app name): FinderSync
+            // preserves the displayed title; the representedObject + title fallback
+            // below covers the case where representedObject is stripped.
+            let item = actionItem(
+                title: app.name,
+                context: MenuActionContext(actionID: ActionID.openWith, appName: app.name)
+            )
+            submenu.addItem(item)
+        }
+        parent.submenu = submenu
+        menu.addItem(parent)
     }
 
     private func addCopyItem(
@@ -154,15 +245,25 @@ final class RightClickFinderSync: FIFinderSync {
             return
         }
 
-        if context.actionID == ActionID.newFolder,
-           let directory = context.directory {
+        switch context.actionID {
+        case ActionID.newFolder:
+            guard let directory = context.directory else { return }
             openHostURL(path: "/new-folder", queryItems: [
                 URLQueryItem(name: "directory", value: directory.path)
             ])
-            return
-        }
-
-        switch context.actionID {
+        case ActionID.newFile:
+            guard let directory = context.directory, let ext = context.fileExtension else { return }
+            openHostURL(path: "/new-file", queryItems: [
+                URLQueryItem(name: "directory", value: directory.path),
+                URLQueryItem(name: "ext", value: ext)
+            ])
+        case ActionID.openInTerminal:
+            guard let directory = context.directory else { return }
+            openHostURL(path: "/open-terminal", queryItems: [
+                URLQueryItem(name: "directory", value: directory.path)
+            ])
+        case ActionID.openWith:
+            handleOpenWith(appName: context.appName)
         case ActionID.copyFileName:
             copyToPasteboard(RightClickPathFormatter.joinedFileNames(currentSelectedURLs()))
         case ActionID.copyAbsolutePath:
@@ -174,9 +275,34 @@ final class RightClickFinderSync: FIFinderSync {
                     base: currentTargetedURL()
                 )
             )
+        case ActionID.copyShellEscapedPath:
+            copyToPasteboard(RightClickPathFormatter.joinedShellEscapedPaths(currentSelectedURLs()))
+        case ActionID.copyFileURL:
+            copyToPasteboard(RightClickPathFormatter.joinedFileURLs(currentSelectedURLs()))
         default:
             logger.error("Unknown action: \(context.actionID, privacy: .public)")
         }
+    }
+
+    /// Forward an open-with request to the host: resolve the app by its name from
+    /// the current config (the menu item only carries the title), then send the
+    /// app path and the target file paths.
+    private func handleOpenWith(appName: String?) {
+        guard let appName else { return }
+        let configuration = RightClickConfigurationStore.load()
+        guard let app = configuration.openWithApps.first(where: { $0.name == appName }) else {
+            logger.error("open-with: no configured app named \(appName, privacy: .public)")
+            return
+        }
+        let selected = currentSelectedURLs()
+        let targets = selected.isEmpty ? [currentTargetedURL()].compactMap { $0 } : selected
+        guard !targets.isEmpty else {
+            logger.error("open-with: no target items")
+            return
+        }
+        var queryItems = [URLQueryItem(name: "app", value: app.appPath)]
+        queryItems += targets.map { URLQueryItem(name: "file", value: $0.path) }
+        openHostURL(path: "/open-with", queryItems: queryItems)
     }
 
     private func menuActionContext(for item: NSMenuItem) -> MenuActionContext? {

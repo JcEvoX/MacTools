@@ -53,7 +53,7 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
             order: 74,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "在 Finder 右键菜单中快速新建文件夹和复制路径"
+                defaultValue: "在 Finder 右键菜单中快速新建文件/文件夹、复制路径、在终端打开、用应用打开"
             )
         )
     }
@@ -86,12 +86,24 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 ),
                 footnote: localization.string(
                     "settings.extension.footnote",
-                    defaultValue: "启用后，Finder 右键菜单会显示「新建文件夹」「复制文件名」「复制绝对路径」「复制相对路径」。"
+                    defaultValue: "启用后即可在 Finder 右键使用；下方可配置显示哪些菜单项与「用应用打开」的应用。"
                 ),
                 buttonTitle: localization.string("settings.extension.button", defaultValue: "打开扩展管理"),
                 actionID: RightClickControlID.openExtensionSettings
             )
         ]
+    }
+
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(
+            description: localization.string(
+                "configuration.description",
+                defaultValue: "选择 Finder 右键菜单显示哪些项，并管理「用应用打开」的应用列表。"
+            ),
+            prefersFullHeight: true
+        ) { _ in
+            AnyView(RightClickMenuSettingsView())
+        }
     }
 
     func handleAction(_ action: PluginPanelAction) {

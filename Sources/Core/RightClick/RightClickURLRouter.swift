@@ -28,6 +28,12 @@ final class RightClickURLRouter {
         switch url.path {
         case "/new-folder":
             handleNewFolder(url)
+        case "/new-file":
+            handleNewFile(url)
+        case "/open-terminal":
+            handleOpenInTerminal(url)
+        case "/open-with":
+            handleOpenWith(url)
         default:
             logger.error("Unsupported right-click URL path: \(url.path, privacy: .public)")
         }
@@ -45,6 +51,92 @@ final class RightClickURLRouter {
         } catch {
             logger.error("Create folder failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func handleNewFile(_ url: URL) {
+        guard let directoryPath = queryValue("directory", in: url), !directoryPath.isEmpty,
+              let ext = queryValue("ext", in: url) else {
+            logger.error("Missing directory/ext for new-file URL")
+            return
+        }
+
+        do {
+            let fileURL = try fileActionService.createFile(
+                in: URL(fileURLWithPath: directoryPath),
+                extension: ext
+            )
+            logger.info("Created file at \(fileURL.path, privacy: .public)")
+        } catch {
+            logger.error("Create file failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func handleOpenInTerminal(_ url: URL) {
+        guard let directoryPath = queryValue("directory", in: url), !directoryPath.isEmpty else {
+            logger.error("Missing directory for open-terminal URL")
+            return
+        }
+        let directory = URL(fileURLWithPath: directoryPath)
+        guard RightClickTargetResolver.isDirectory(directory) else {
+            logger.error("open-terminal directory unavailable: \(directoryPath, privacy: .public)")
+            return
+        }
+        guard let terminalURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.apple.Terminal"
+        ) else {
+            logger.error("Terminal app not found")
+            return
+        }
+        NSWorkspace.shared.open(
+            [directory],
+            withApplicationAt: terminalURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
+    }
+
+    private func handleOpenWith(_ url: URL) {
+        guard let request = Self.parseOpenWithRequest(url) else {
+            logger.error("Invalid open-with URL")
+            return
+        }
+        NSWorkspace.shared.open(
+            request.files,
+            withApplicationAt: request.appURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
+    }
+
+    /// Parsed + validated open-with request, split out so the validation (app must
+    /// be an existing `.app`, at least one file must exist) is unit-testable
+    /// without launching anything. File-system probes are injected for tests.
+    struct OpenWithRequest: Equatable {
+        let appURL: URL
+        let files: [URL]
+    }
+
+    nonisolated static func parseOpenWithRequest(
+        _ url: URL,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
+        isApplicationBundle: (String) -> Bool = isApplicationBundleOnDisk
+    ) -> OpenWithRequest? {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard let appPath = items.first(where: { $0.name == "app" })?.value,
+              !appPath.isEmpty, isApplicationBundle(appPath) else {
+            return nil
+        }
+        let files = items.filter { $0.name == "file" }
+            .compactMap(\.value)
+            .map { URL(fileURLWithPath: $0) }
+            .filter { fileExists($0.path) }
+        guard !files.isEmpty else { return nil }
+        return OpenWithRequest(appURL: URL(fileURLWithPath: appPath), files: files)
+    }
+
+    nonisolated private static func isApplicationBundleOnDisk(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return path.hasSuffix(".app")
+            && FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     private func queryValue(_ name: String, in url: URL) -> String? {
