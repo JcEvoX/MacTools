@@ -5,19 +5,22 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.24</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.24</link>
-            <sparkle:version>54</sparkle:version>
-            <sparkle:shortVersionString>1.0.24</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.24 -->
+            <title>Version 1.0.25</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.25</link>
+            <sparkle:version>55</sparkle:version>
+            <sparkle:shortVersionString>1.0.25</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.25 -->
+
+## What's Changed
+### Other Changes
+* Extend Finder right-click menu: new file, open in Terminal, open with apps, configurable by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/150
 
 
-
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.23...v1.0.24
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.24...v1.0.25
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Sun, 28 Jun 2026 15:53:11 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.24/MacTools.dmg" length="6264862" type="application/octet-stream" sparkle:edSignature="Rz1JmNkFrdhY4D4ukhXiCZ7FKV312V0D+sbGnuMpIVDdVR6Qg1TVaVnoXvCxnTOk58q5f9V4zK1IspCITUk9Bg==" />
+            <pubDate>Mon, 29 Jun 2026 14:12:39 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.25/MacTools.dmg" length="6349798" type="application/octet-stream" sparkle:edSignature="R7VmDEh/s72n9XTtgN4xuvh84lpCZJmOyNl1lhAMspLYBWMYBPBS02tigFUM3MjDko06R1ljS6PIMkELuK8IAQ==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
