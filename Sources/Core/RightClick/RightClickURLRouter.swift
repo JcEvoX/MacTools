@@ -11,6 +11,7 @@ final class RightClickURLRouter {
         category: "RightClickURLRouter"
     )
     private var fileActionService = RightClickFileActionService()
+    private lazy var acceptedURLSchemes = Self.bundleURLSchemes()
 
     private init() {}
 
@@ -21,7 +22,9 @@ final class RightClickURLRouter {
     }
 
     func handle(_ url: URL) {
-        guard url.scheme == "mactools", url.host == "right-click" else {
+        guard let scheme = url.scheme,
+              acceptedURLSchemes.contains(scheme),
+              url.host == "right-click" else {
             return
         }
 
@@ -163,5 +166,17 @@ final class RightClickURLRouter {
             .queryItems?
             .filter { $0.name == name }
             .compactMap(\.value) ?? []
+    }
+
+    nonisolated static func bundleURLSchemes(bundle: Bundle = .main) -> Set<String> {
+        guard let urlTypes = bundle.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] else {
+            return ["mactools"]
+        }
+
+        let schemes = urlTypes
+            .compactMap { $0["CFBundleURLSchemes"] as? [String] }
+            .flatMap { $0 }
+
+        return schemes.isEmpty ? ["mactools"] : Set(schemes)
     }
 }

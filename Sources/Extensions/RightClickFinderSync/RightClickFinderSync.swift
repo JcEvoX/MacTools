@@ -37,6 +37,7 @@ final class RightClickFinderSync: FIFinderSync {
     private var titleToActionContext: [String: MenuActionContext] = [:]
     private var lastSelectedURLs: [URL] = []
     private var lastTargetedURL: URL?
+    private let hostURLScheme = Bundle.main.object(forInfoDictionaryKey: "MTRightClickHostURLScheme") as? String ?? "mactools"
 
     override init() {
         super.init()
@@ -352,7 +353,7 @@ final class RightClickFinderSync: FIFinderSync {
 
     private func openHostURL(path: String, queryItems: [URLQueryItem]) {
         var components = URLComponents()
-        components.scheme = "mactools"
+        components.scheme = hostURLScheme
         components.host = "right-click"
         components.path = path
         components.queryItems = queryItems

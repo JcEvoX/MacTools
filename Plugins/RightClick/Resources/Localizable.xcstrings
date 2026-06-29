@@ -35,24 +35,41 @@
         }
       }
     },
-    "panel.subtitle" : {
+    "panel.subtitle.disabled" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on the MacTools switch in extension management to use it."
+            "value" : "Enable it in Finder Extensions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开扩展管理里的 MacTools 开关后即可使用"
+            "value" : "在 Finder 扩展中启用"
           }
         }
       }
     },
-    "settings.extension.title" : {
+    "panel.subtitle.enabled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder context menu enabled."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder 右键菜单已启用"
+          }
+        }
+      }
+    },
+    "permission.finderExtension.title" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
@@ -69,70 +86,70 @@
         }
       }
     },
-    "settings.extension.description" : {
+    "permission.finderExtension.description" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turn on the MacTools switch in System Settings extension management; debug builds appear as MacTools Dev."
+            "value" : "Turn on MacTools Right Click in System Settings."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在系统设置的扩展管理中打开 MacTools 开关；调试版显示为 MacTools Dev。"
+            "value" : "在系统设置中打开 MacTools 右键工具。"
           }
         }
       }
     },
-    "settings.extension.status" : {
+    "permission.finderExtension.status.disabled" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "System switch required"
+            "value" : "Disabled"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要打开系统开关"
+            "value" : "未启用"
           }
         }
       }
     },
-    "settings.extension.footnote" : {
+    "permission.finderExtension.status.enabled" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "After enabling it, Finder shows New Folder, Copy File Name, Copy Absolute Path, and Copy Relative Path."
+            "value" : "Enabled"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启用后，Finder 右键菜单会显示「新建文件夹」「复制文件名」「复制绝对路径」「复制相对路径」。"
+            "value" : "已启用"
           }
         }
       }
     },
-    "settings.extension.button" : {
+    "permission.finderExtension.footnote" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open Extension Management"
+            "value" : "Path: Login Items & Extensions > Finder Extensions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开扩展管理"
+            "value" : "入口：登录项与扩展 > Finder 扩展。"
           }
         }
       }

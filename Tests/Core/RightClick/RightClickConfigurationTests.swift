@@ -129,3 +129,30 @@ final class RightClickOpenWithParsingTests: XCTestCase {
         XCTAssertEqual(request?.files.map(\.path), ["/tmp/exists"])
     }
 }
+
+final class RightClickURLSchemeTests: XCTestCase {
+    func testBundleURLSchemesReadsDebugSchemeFromBundleInfo() {
+        let bundle = URLSchemeBundleMock(urlTypes: [
+            ["CFBundleURLSchemes": ["mactools-dev"]]
+        ])
+
+        XCTAssertEqual(RightClickURLRouter.bundleURLSchemes(bundle: bundle), ["mactools-dev"])
+    }
+
+    func testBundleURLSchemesFallsBackToReleaseSchemeWhenMissing() {
+        XCTAssertEqual(RightClickURLRouter.bundleURLSchemes(bundle: URLSchemeBundleMock(urlTypes: nil)), ["mactools"])
+    }
+}
+
+private final class URLSchemeBundleMock: Bundle, @unchecked Sendable {
+    private let urlTypes: [[String: Any]]?
+
+    init(urlTypes: [[String: Any]]?) {
+        self.urlTypes = urlTypes
+        super.init()
+    }
+
+    override func object(forInfoDictionaryKey key: String) -> Any? {
+        key == "CFBundleURLTypes" ? urlTypes : nil
+    }
+}

@@ -20,8 +20,8 @@ private struct RightClickPluginProvider: PluginProvider {
     }
 }
 
-private enum RightClickControlID {
-    static let openExtensionSettings = "open-extension-settings"
+private enum RightClickPermissionID {
+    static let finderExtension = "finder-extension"
 }
 
 @MainActor
@@ -42,6 +42,7 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
         category: "RightClickPlugin"
     )
+    private var activationObserver: NSObjectProtocol?
 
     init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
         self.localization = localization
@@ -58,10 +59,33 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
+    func activate(context _: PluginRuntimeContext) {
+        guard activationObserver == nil else {
+            return
+        }
+
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.onStateChange?()
+            }
+        }
+    }
+
+    func deactivate(reason _: PluginDeactivationReason) {
+        if let activationObserver {
+            NotificationCenter.default.removeObserver(activationObserver)
+            self.activationObserver = nil
+        }
+    }
+
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
-            subtitle: localization.string("panel.subtitle", defaultValue: "打开扩展管理里的 MacTools 开关后即可使用"),
-            isOn: true,
+            subtitle: panelSubtitle,
+            isOn: FIFinderSyncController.isExtensionEnabled,
             isExpanded: false,
             isEnabled: true,
             isVisible: true,
@@ -70,26 +94,16 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         )
     }
 
-    var settingsSections: [PluginSettingsSection] {
+    var permissionRequirements: [PluginPermissionRequirement] {
         [
-            PluginSettingsSection(
-                id: "finder-extension",
-                title: localization.string("settings.extension.title", defaultValue: "Finder 扩展"),
+            PluginPermissionRequirement(
+                id: RightClickPermissionID.finderExtension,
+                kind: .automation,
+                title: localization.string("permission.finderExtension.title", defaultValue: "Finder 扩展"),
                 description: localization.string(
-                    "settings.extension.description",
-                    defaultValue: "在系统设置的扩展管理中打开 MacTools 开关；调试版显示为 MacTools Dev。"
-                ),
-                status: PluginSettingsSection.Status(
-                    text: localization.string("settings.extension.status", defaultValue: "需要打开系统开关"),
-                    systemImage: "puzzlepiece.extension",
-                    tone: .neutral
-                ),
-                footnote: localization.string(
-                    "settings.extension.footnote",
-                    defaultValue: "启用后即可在 Finder 右键使用；下方可配置显示哪些菜单项与「用应用打开」的应用。"
-                ),
-                buttonTitle: localization.string("settings.extension.button", defaultValue: "打开扩展管理"),
-                actionID: RightClickControlID.openExtensionSettings
+                    "permission.finderExtension.description",
+                    defaultValue: "在系统设置中打开 MacTools 右键工具。"
+                )
             )
         ]
     }
@@ -100,7 +114,7 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 "configuration.description",
                 defaultValue: "选择 Finder 右键菜单显示哪些项，并管理「用应用打开」的应用列表。"
             ),
-            prefersFullHeight: true
+            prefersFullHeight: false
         ) { _ in
             AnyView(RightClickMenuSettingsView())
         }
@@ -112,8 +126,28 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    func handleSettingsAction(id: String) {
-        guard id == RightClickControlID.openExtensionSettings else {
+    func permissionState(for permissionID: String) -> PluginPermissionState {
+        guard permissionID == RightClickPermissionID.finderExtension else {
+            return PluginPermissionState(isGranted: true, footnote: nil)
+        }
+
+        let enabled = FIFinderSyncController.isExtensionEnabled
+        return PluginPermissionState(
+            isGranted: enabled,
+            footnote: localization.string(
+                "permission.finderExtension.footnote",
+                defaultValue: "入口：登录项与扩展 > Finder 扩展。"
+            ),
+            statusText: enabled
+                ? localization.string("permission.finderExtension.status.enabled", defaultValue: "已启用")
+                : localization.string("permission.finderExtension.status.disabled", defaultValue: "未启用"),
+            statusSystemImage: enabled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+            statusTone: enabled ? .positive : .caution
+        )
+    }
+
+    func handlePermissionAction(id permissionID: String) {
+        guard permissionID == RightClickPermissionID.finderExtension else {
             return
         }
 
@@ -123,5 +157,15 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
     private func openExtensionManagementInterface() {
         logger.info("Opening Finder extension management interface")
         FIFinderSyncController.showExtensionManagementInterface()
+        onStateChange?()
     }
+
+    private var panelSubtitle: String {
+        if FIFinderSyncController.isExtensionEnabled {
+            return localization.string("panel.subtitle.enabled", defaultValue: "Finder 右键菜单已启用")
+        }
+
+        return localization.string("panel.subtitle.disabled", defaultValue: "在 Finder 扩展中启用")
+    }
+
 }
