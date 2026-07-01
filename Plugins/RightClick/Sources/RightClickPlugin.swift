@@ -25,13 +25,8 @@ private enum RightClickPermissionID {
 }
 
 @MainActor
-final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class RightClickPlugin: MacToolsPlugin {
     let metadata: PluginMetadata
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "启用"
-    )
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -82,18 +77,6 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         }
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
-            subtitle: panelSubtitle,
-            isOn: FIFinderSyncController.isExtensionEnabled,
-            isExpanded: false,
-            isEnabled: true,
-            isVisible: true,
-            detail: nil,
-            errorMessage: nil
-        )
-    }
-
     var permissionRequirements: [PluginPermissionRequirement] {
         [
             PluginPermissionRequirement(
@@ -117,12 +100,6 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
             prefersFullHeight: false
         ) { _ in
             AnyView(RightClickMenuSettingsView())
-        }
-    }
-
-    func handleAction(_ action: PluginPanelAction) {
-        if case .invokeAction = action {
-            openExtensionManagementInterface()
         }
     }
 
@@ -159,13 +136,4 @@ final class RightClickPlugin: MacToolsPlugin, PluginPrimaryPanel {
         FIFinderSyncController.showExtensionManagementInterface()
         onStateChange?()
     }
-
-    private var panelSubtitle: String {
-        if FIFinderSyncController.isExtensionEnabled {
-            return localization.string("panel.subtitle.enabled", defaultValue: "Finder 右键菜单已启用")
-        }
-
-        return localization.string("panel.subtitle.disabled", defaultValue: "在 Finder 扩展中启用")
-    }
-
 }

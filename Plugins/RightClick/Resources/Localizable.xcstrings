@@ -35,40 +35,6 @@
         }
       }
     },
-    "panel.subtitle.disabled" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable it in Finder Extensions."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 Finder 扩展中启用"
-          }
-        }
-      }
-    },
-    "panel.subtitle.enabled" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finder context menu enabled."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finder 右键菜单已启用"
-          }
-        }
-      }
-    },
     "permission.finderExtension.title" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -22,7 +22,7 @@
     "scheme": "RightClickPlugin"
   },
   "capabilities": {
-    "primaryPanel": true,
+    "primaryPanel": false,
     "componentPanel": false,
     "configuration": true
   },
