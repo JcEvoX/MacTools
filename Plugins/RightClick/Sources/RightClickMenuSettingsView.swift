@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MacToolsPluginKit
 
 /// Settings view for the Finder right-click menu, shown via the plugin's
 /// `PluginConfiguration`. It writes the shared `RightClickConfiguration` (read by
@@ -10,51 +11,133 @@ struct RightClickMenuSettingsView: View {
     @State private var configuration = RightClickConfigurationStore.load()
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("新建文件夹", isOn: $configuration.newFolder)
-                Toggle("新建文件（.txt / .md / .json）", isOn: $configuration.newFile)
-                Toggle("在终端打开", isOn: $configuration.openInTerminal)
-            } header: {
-                Text("目录操作")
-            } footer: {
-                Text("在 Finder 右键空白处或选中文件时显示。")
-            }
-
-            Section("「复制」菜单项") {
-                Toggle("复制文件名", isOn: $configuration.copyFileName)
-                Toggle("复制绝对路径", isOn: $configuration.copyAbsolutePath)
-                Toggle("复制相对路径", isOn: $configuration.copyRelativePath)
-                Toggle("复制转义路径（终端）", isOn: $configuration.copyShellEscapedPath)
-                Toggle("复制 file:// 链接", isOn: $configuration.copyFileURL)
-            }
-
-            Section {
-                if configuration.openWithApps.isEmpty {
-                    Text("暂无应用")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach($configuration.openWithApps) { $app in
-                    RightClickOpenWithAppRow(app: $app) {
-                        configuration.openWithApps.removeAll { $0.id == app.id }
-                    }
-                }
-                Button {
-                    addApp()
-                } label: {
-                    Label("添加应用…", systemImage: "plus")
-                }
-                .buttonStyle(.borderless)
-            } header: {
-                Text("「用应用打开」")
-            } footer: {
-                Text("右键文件时用指定应用打开。扩展名留空表示对所有文件显示；多个扩展名用逗号分隔。")
-            }
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            directorySection
+            copySection
+            openWithSection
         }
-        .formStyle(.grouped)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onChange(of: configuration) { _, newValue in
             RightClickConfigurationStore.save(newValue)
         }
+    }
+
+    private var directorySection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            sectionHeader(title: "目录操作", icon: "folder")
+
+            VStack(spacing: 0) {
+                toggleRow(title: "新建文件夹", isOn: $configuration.newFolder)
+                PluginSettingsListDivider()
+                toggleRow(title: "新建文件", description: "支持 .txt / .md / .json", isOn: $configuration.newFile)
+                PluginSettingsListDivider()
+                toggleRow(title: "在终端打开", isOn: $configuration.openInTerminal)
+            }
+            .pluginSettingsCardBackground(.host)
+        }
+    }
+
+    private var copySection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            sectionHeader(title: "复制菜单项", icon: "doc.on.doc")
+
+            VStack(spacing: 0) {
+                toggleRow(title: "复制文件名", isOn: $configuration.copyFileName)
+                PluginSettingsListDivider()
+                toggleRow(title: "复制绝对路径", isOn: $configuration.copyAbsolutePath)
+                PluginSettingsListDivider()
+                toggleRow(title: "复制相对路径", isOn: $configuration.copyRelativePath)
+                PluginSettingsListDivider()
+                toggleRow(title: "复制转义路径", description: "适合终端命令", isOn: $configuration.copyShellEscapedPath)
+                PluginSettingsListDivider()
+                toggleRow(title: "复制 file:// 链接", isOn: $configuration.copyFileURL)
+            }
+            .pluginSettingsCardBackground(.host)
+        }
+    }
+
+    private var openWithSection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            HStack {
+                sectionHeader(title: "用应用打开", icon: "app.badge")
+                Spacer()
+                Button {
+                    addApp()
+                } label: {
+                    Label("添加", systemImage: "plus")
+                        .font(PluginSettingsTheme.Typography.controlLabel)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            VStack(spacing: 0) {
+                if configuration.openWithApps.isEmpty {
+                    emptyOpenWithView
+                } else {
+                    ForEach($configuration.openWithApps) { $app in
+                        RightClickOpenWithAppRow(app: $app) {
+                            configuration.openWithApps.removeAll { $0.id == app.id }
+                        }
+                        if app.id != configuration.openWithApps.last?.id {
+                            PluginSettingsListDivider()
+                        }
+                    }
+                }
+            }
+            .pluginSettingsCardBackground(.host)
+
+            Text("扩展名留空表示对所有文件显示，多个扩展名用逗号分隔。")
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var emptyOpenWithView: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "app.dashed")
+                .pluginSettingsRowIconStyle()
+            Text("暂无应用")
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .pluginSettingsListRowPadding()
+    }
+
+    private func toggleRow(
+        title: String,
+        description: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+
+                if let description {
+                    Text(description)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer()
+
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private func sectionHeader(title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(PluginSettingsTheme.Typography.sectionTitle)
+            .foregroundStyle(.secondary)
     }
 
     /// Let the user pick a `.app` bundle and append it to the list.
@@ -93,19 +176,20 @@ private struct RightClickOpenWithAppRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                 Text(app.name)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Text(app.appPath)
-                    .font(.caption)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
             TextField("扩展名", text: $extensionsText)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 120)
+                .frame(minWidth: 108, idealWidth: 120, maxWidth: 140)
                 .onChange(of: extensionsText) { _, newValue in
                     // pathExtension values are dotless; strip a leading "." so a
                     // user entering ".txt" still matches.
@@ -117,8 +201,15 @@ private struct RightClickOpenWithAppRow: View {
                 }
             Button(role: .destructive, action: onDelete) {
                 Image(systemName: "trash")
+                    .foregroundStyle(.red)
+                    .frame(
+                        width: PluginSettingsTheme.Size.controlHeight,
+                        height: PluginSettingsTheme.Size.controlHeight
+                    )
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .help("删除应用")
         }
+        .pluginSettingsListRowPadding(interactive: true)
     }
 }

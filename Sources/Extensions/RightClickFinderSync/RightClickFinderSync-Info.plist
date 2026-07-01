@@ -22,6 +22,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>MTRightClickHostURLScheme</key>
 	<string>$(MACTOOLS_URL_SCHEME)</string>
+	<key>MTRightClickConfigurationHomeRelativePath</key>
+	<string>$(RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>

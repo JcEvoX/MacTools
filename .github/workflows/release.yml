@@ -184,6 +184,7 @@ jobs:
         run: |
           APP_PATH="${DERIVED_DATA}/Build/Products/Release/${PROJECT_NAME}.app"
           ENTITLEMENTS="Configs/MacTools.entitlements"
+          FINDER_SYNC_ENTITLEMENTS="Sources/Extensions/RightClickFinderSync/RightClickFinderSync.entitlements"
           SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
           SPARKLE_CURRENT="$SPARKLE_FRAMEWORK/Versions/Current"
 
@@ -194,6 +195,17 @@ jobs:
               --keychain "$KEYCHAIN_PATH" \
               --options runtime \
               --timestamp \
+              "$1"
+          }
+
+          sign_path_with_entitlements() {
+            /usr/bin/codesign \
+              --force \
+              --sign "$SIGNING_IDENTITY" \
+              --keychain "$KEYCHAIN_PATH" \
+              --options runtime \
+              --timestamp \
+              --entitlements "$2" \
               "$1"
           }
 
@@ -233,7 +245,11 @@ jobs:
             if [[ "$bundle" == *"/Sparkle.framework" || "$bundle" == *"/Sparkle.framework/"* ]]; then
               continue
             fi
-            sign_path "$bundle"
+            if [[ "$(basename "$bundle")" == "RightClickFinderSync.appex" ]]; then
+              sign_path_with_entitlements "$bundle" "$FINDER_SYNC_ENTITLEMENTS"
+            else
+              sign_path "$bundle"
+            fi
           done < <(find "$APP_PATH/Contents" -depth -type d \( -name "*.framework" -o -name "*.app" -o -name "*.xpc" -o -name "*.appex" \) -print)
 
           if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
@@ -248,6 +264,22 @@ jobs:
             --timestamp \
             --entitlements "$ENTITLEMENTS" \
             "$APP_PATH"
+
+          FINDER_SYNC_APPEX="$APP_PATH/Contents/PlugIns/RightClickFinderSync.appex"
+          FINDER_SYNC_EXTENSION_POINT="$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$FINDER_SYNC_APPEX/Contents/Info.plist")"
+          if [[ "$FINDER_SYNC_EXTENSION_POINT" != "com.apple.FinderSync" ]]; then
+            echo "Finder Sync extension point is invalid: $FINDER_SYNC_EXTENSION_POINT" >&2
+            exit 1
+          fi
+          FINDER_SYNC_SIGNED_ENTITLEMENTS="$(/usr/bin/codesign -d --entitlements :- "$FINDER_SYNC_APPEX" 2>/dev/null || true)"
+          if [[ "$FINDER_SYNC_SIGNED_ENTITLEMENTS" != *"com.apple.security.app-sandbox"* ]]; then
+            echo "Finder Sync extension is missing app sandbox entitlement" >&2
+            exit 1
+          fi
+          if [[ "$FINDER_SYNC_SIGNED_ENTITLEMENTS" != *"com.apple.security.temporary-exception.files.home-relative-path.read-only"* ]]; then
+            echo "Finder Sync extension is missing right-click config read entitlement" >&2
+            exit 1
+          fi
 
           /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 

@@ -92,17 +92,17 @@ struct RightClickOpenWithApp: Codable, Equatable, Identifiable {
 }
 
 /// Reads/writes `RightClickConfiguration` via a JSON file under the user's real
-/// `~/Library/Application Support/MacTools/`.
+/// home directory.
 ///
 /// Why a plain file at the real home — and neither an app group nor
 /// `UserDefaults(suiteName:)`: the non-sandboxed host app is denied write access
 /// to the app group container (containermanagerd), and the host's cfprefsd
 /// domain is separate from the sandboxed extension's, so neither bridges the
-/// boundary. The host writes a file it CAN write (its real Application Support),
+/// boundary. The host writes a file it can write (its real Application Support),
 /// and the sandboxed extension reads it through a read-only
 /// `temporary-exception.files.home-relative-path` entitlement. Both sides resolve
-/// the real home via `getpwuid` (a sandboxed process's `NSHomeDirectory()` points
-/// at its container), so the path matches.
+/// the real home via `getpwuid` and read the same relative path from Info.plist,
+/// so Release and Debug builds do not accidentally share Finder Sync settings.
 enum RightClickConfigurationStore {
     /// Real user home directory, bypassing the sandbox container redirection so
     /// the host app and the sandboxed extension resolve the exact same file.
@@ -113,16 +113,19 @@ enum RightClickConfigurationStore {
         return NSHomeDirectory()
     }()
 
-    /// Directory the config file lives in, relative to the real home. The
-    /// extension's read-only `home-relative-path` entitlement is scoped to this
-    /// directory's `right-click-menu.json` specifically, so keep the file name in
-    /// sync with that entitlement.
-    static let configDirectoryRelativePath = "Library/Application Support/MacTools"
+    /// File path relative to the real home. The extension's read-only
+    /// `home-relative-path` entitlement must stay in sync with this build setting.
+    static var configFileHomeRelativePath: String {
+        if let path = Bundle.main.object(forInfoDictionaryKey: "MTRightClickConfigurationHomeRelativePath") as? String,
+           !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return path
+        }
+        return "Library/Application Support/MacTools/right-click-menu.json"
+    }
 
     static var configFileURL: URL {
         URL(fileURLWithPath: realHomeDirectory)
-            .appendingPathComponent(configDirectoryRelativePath, isDirectory: true)
-            .appendingPathComponent("right-click-menu.json")
+            .appendingPathComponent(configFileHomeRelativePath)
     }
 
     static func load(from fileURL: URL = configFileURL) -> RightClickConfiguration {

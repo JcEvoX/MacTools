@@ -39,6 +39,8 @@
 	<true/>
 	<key>MTPluginCatalogPublicKey</key>
 	<string>$(PLUGIN_CATALOG_PUBLIC_KEY)</string>
+	<key>MTRightClickConfigurationHomeRelativePath</key>
+	<string>$(RIGHT_CLICK_CONFIGURATION_HOME_RELATIVE_PATH)</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>点击日历日期时需要控制系统日历应用并定位到对应日期。</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
