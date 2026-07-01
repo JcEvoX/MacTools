@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-06-29T14:05:34Z",
-  "minimumHostVersion": "1.0.24",
+  "generatedAt": "2026-07-01T11:53:44Z",
+  "minimumHostVersion": "1.0.25",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -217,9 +217,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "19e3802e998374f043a3c51a49bde9ae077cc8532b89a1a0a519bcd2e8de1487",
-        "size": 312585,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.22/calendar.mactoolsplugin.zip"
+        "sha256": "1ff39b9aac6fb127eeaba79a6ae3fdaf9c0a3134b82a4776e51be4fb43047cba",
+        "size": 310105,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/calendar.mactoolsplugin.zip"
       },
       "permissions": [
         "calendarFullAccess",
@@ -227,9 +227,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.22",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "查看日期、节假日和系统日程",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -284,16 +284,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "fac719700426cd936a52f264f9336f8b295e261c3f5c8e3e1083e91aa44427a7",
-        "size": 639023,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.20/device-battery.mactoolsplugin.zip"
+        "sha256": "aec29bf1eda37f8e50b1fb0c92e2a4366e582361659592854530cc9f9b337719",
+        "size": 636714,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/device-battery.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.20",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "查看 Mac、蓝牙外设和雷柏鼠标电量",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -348,16 +348,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "1b99813886fc0683b6e789edea425b1bebdb5b6a45739bebe17e58d6abc0de8a",
-        "size": 375805,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.21/display-brightness.mactoolsplugin.zip"
+        "sha256": "97bbe5aa83407c28d48406bd298fc7f92163bee2a4f56d08210f09e0be63862a",
+        "size": 429197,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/display-brightness.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.21",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "快速调节每个显示器的亮度",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -796,9 +796,9 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "7c5e381717f2c8b480d0e973fdf0b9ee062390a067949c71afa7bb5fdea51222",
-        "size": 803201,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.18/menu-bar-hidden.mactoolsplugin.zip"
+        "sha256": "2a2eff0a9f19405cd8b46d1f35085b31a56de2cac9af7e7eb31b7f60593fe0e5",
+        "size": 802854,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/menu-bar-hidden.mactoolsplugin.zip"
       },
       "permissions": [
         "accessibility",
@@ -806,9 +806,9 @@
       ],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.18",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "菜单栏图标隐藏功能的设置与弹窗界面",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "capabilities": {
@@ -978,7 +978,7 @@
       "capabilities": {
         "componentPanel": false,
         "configuration": true,
-        "primaryPanel": true
+        "primaryPanel": false
       },
       "category": "productivity",
       "displayName": "右键工具",
@@ -995,16 +995,16 @@
       },
       "minimumHostVersion": "1.0.21",
       "package": {
-        "sha256": "c2fb74e76c9f2c0011fc3dcd5e94c473f94200611964ae99cb673e63e2d6e183",
-        "size": 145540,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.26/right-click.mactoolsplugin.zip"
+        "sha256": "dfd2d90b711660ab43047a025f3ce11450af89f6aaec27674b8570166b76c487",
+        "size": 183582,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/right-click.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.26",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "capabilities": {
@@ -1091,16 +1091,16 @@
       },
       "minimumHostVersion": "1.0.2",
       "package": {
-        "sha256": "0e3082d8d9a0dfc0c4fcd4e740ba28ef43ad30fc327e9a49d873ee1eac2a9d78",
-        "size": 503936,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.23/system-status.mactoolsplugin.zip"
+        "sha256": "32fa660b978519420f4993a1f0b793f236776068884f150a503d2ab6b0842a34",
+        "size": 502073,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.27/system-status.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.23",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.27",
       "summary": "实时查看系统状态",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "capabilities": {
@@ -1207,6 +1207,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "rIfyKTwycWbsyZS6A+ztoov2kMVV2jAhln1PgFC4TqnB47xcn0EvwPrnaxFVzaAnGef4NFfCTLS3kX26smNABA=="
+    "value": "KQO3H0Ufj8zNFPHdaHG4C8XW5yf4wyeJCeVz5LfGRJC76SS23swmqWPc0PXfaKPUn5NxL9Bg+qavrRU6INdzAA=="
   }
 }
