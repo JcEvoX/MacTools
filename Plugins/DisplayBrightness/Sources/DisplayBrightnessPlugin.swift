@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import SwiftUI
@@ -14,7 +15,12 @@ private struct DisplayBrightnessPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
-        [DisplayBrightnessPlugin(localization: PluginLocalization(bundle: context.resourceBundle))]
+        [
+            DisplayBrightnessPlugin(
+                localization: PluginLocalization(bundle: context.resourceBundle),
+                shortcutPreferences: DisplayBrightnessShortcutPreferences(storage: context.storage)
+            )
+        ]
     }
 }
 
@@ -22,12 +28,12 @@ enum DisplayBrightnessShortcutDirection: Equatable {
     case decrease
     case increase
 
-    var actionSuffix: String {
+    var actionID: String {
         switch self {
         case .decrease:
-            return ".decrease"
+            return "display-brightness.decrease"
         case .increase:
-            return ".increase"
+            return "display-brightness.increase"
         }
     }
 
@@ -49,15 +55,6 @@ enum DisplayBrightnessShortcutDirection: Equatable {
         }
     }
 
-    var sharedBindingGroupID: String {
-        switch self {
-        case .decrease:
-            return "display-brightness.decrease"
-        case .increase:
-            return "display-brightness.increase"
-        }
-    }
-
     var multiplier: Double {
         switch self {
         case .decrease:
@@ -70,8 +67,8 @@ enum DisplayBrightnessShortcutDirection: Equatable {
 
 struct DisplayBrightnessShortcutAction: Equatable {
     let id: String
-    let displayKey: String
     let direction: DisplayBrightnessShortcutDirection
+    let targetDisplayIDs: [CGDirectDisplayID]
 }
 
 struct DisplayBrightnessShortcutAcceleration {
@@ -128,8 +125,7 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         static let brightnessControlSuffix = ".brightness"
         static let disableBuiltInDisplayControlID = "built-in-display-disable"
         static let restoreBuiltInDisplayControlID = "built-in-display-restore"
-        static let shortcutActionPrefix = "display-brightness.display."
-        static let shortcutDisplayGroupPrefix = "display-brightness.display-group."
+        static let shortcutGroupID = "display-brightness.shortcuts"
     }
 
     let metadata: PluginMetadata
@@ -146,6 +142,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
     private let controller: DisplayBrightnessControlling
     private let displayDisableCoordinator: any DisplayDisableCoordinating
     private let showsDisplayDisableControls: Bool
+    private let shortcutPreferences: DisplayBrightnessShortcutPreferences
+    private let mouseDisplayIDProvider: @MainActor () -> CGDirectDisplayID?
     private let localization: PluginLocalization
     private var isExpanded = false
     private var displayDisableActionTask: Task<Void, Never>?
@@ -157,7 +155,9 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         controller: DisplayBrightnessControlling? = nil,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
         displayDisableCoordinator: (any DisplayDisableCoordinating)? = nil,
-        showsDisplayDisableControls: Bool = true
+        showsDisplayDisableControls: Bool = true,
+        shortcutPreferences: DisplayBrightnessShortcutPreferences? = nil,
+        mouseDisplayIDProvider: @escaping @MainActor () -> CGDirectDisplayID? = DisplayBrightnessPlugin.currentMouseDisplayID
     ) {
         self.localization = localization
         self.controller = controller ?? DisplayBrightnessController(localization: localization)
@@ -166,6 +166,10 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
             store: UserDefaultsDisplayDisableStateStore()
         )
         self.showsDisplayDisableControls = showsDisplayDisableControls
+        self.shortcutPreferences = shortcutPreferences ?? DisplayBrightnessShortcutPreferences(
+            storage: UserDefaultsPluginStorage(pluginID: "display-brightness")
+        )
+        self.mouseDisplayIDProvider = mouseDisplayIDProvider
         self.metadata = PluginMetadata(
             id: "display-brightness",
             title: localization.string("metadata.title", defaultValue: "显示器亮度"),
@@ -214,13 +218,20 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
-    var shortcutDefinitions: [PluginShortcutDefinition] {
-        controller.snapshot().displays.flatMap { display in
-            [
-                shortcutDefinition(for: display.display, direction: .decrease),
-                shortcutDefinition(for: display.display, direction: .increase)
-            ]
+    var configuration: PluginConfiguration? {
+        PluginConfiguration(description: metadata.defaultDescription) { [shortcutPreferences, localization] _ in
+            DisplayBrightnessSettingsView(
+                preferences: shortcutPreferences,
+                localization: localization
+            )
         }
+    }
+
+    var shortcutDefinitions: [PluginShortcutDefinition] {
+        [
+            shortcutDefinition(direction: .decrease),
+            shortcutDefinition(direction: .increase)
+        ]
     }
 
     func refresh() {
@@ -468,38 +479,26 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         SystemDisplayDisableService()
     }
 
-    private func shortcutDefinition(
-        for display: DisplayInfo,
-        direction: DisplayBrightnessShortcutDirection
-    ) -> PluginShortcutDefinition {
-        let displayKey = Self.shortcutDisplayKey(for: display)
-        let actionID = Self.shortcutActionID(displayKey: displayKey, direction: direction)
+    private func shortcutDefinition(direction: DisplayBrightnessShortcutDirection) -> PluginShortcutDefinition {
+        let actionID = direction.actionID
         let directionTitle = direction.title(localization: localization)
 
         return PluginShortcutDefinition(
             id: actionID,
-            title: localization.format(
-                "shortcut.titleFormat",
-                defaultValue: "%@ %@亮度",
-                display.name,
-                directionTitle
-            ),
-            description: localization.format(
-                "shortcut.descriptionFormat",
-                defaultValue: "%@%@ 的亮度。",
-                directionTitle,
-                display.name
-            ),
+            title: localization.format("shortcut.titleFormat", defaultValue: "%@亮度", directionTitle),
+            description: localization.format("shortcut.descriptionFormat", defaultValue: "%@显示器亮度。", directionTitle),
             actionID: actionID,
             scope: .global,
             defaultBinding: nil,
             isRequired: false,
-            sharedBindingGroupID: direction.sharedBindingGroupID,
-            settingsGroupID: "\(Constants.shortcutDisplayGroupPrefix)\(displayKey)",
-            settingsGroupTitle: display.name,
+            settingsGroupID: Constants.shortcutGroupID,
+            settingsGroupTitle: localization.string(
+                "shortcut.settingsGroupTitle",
+                defaultValue: "亮度快捷键"
+            ),
             settingsGroupDescription: localization.string(
                 "shortcut.settingsGroupDescription",
-                defaultValue: "可与其他显示器使用相同快捷键，同时调节。"
+                defaultValue: "按所选作用范围调整显示器亮度。"
             ),
             settingsControlTitle: directionTitle,
             settingsControlSystemImage: direction.systemImage
@@ -508,11 +507,27 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
 
     private func startShortcutAction(id: String) {
         guard shortcutSessions[id] == nil,
-              let action = Self.parseShortcutActionID(id)
+              let direction = Self.shortcutDirection(for: id)
         else {
             return
         }
 
+        var snapshot = controller.snapshot()
+        if snapshot.displays.isEmpty {
+            controller.refresh()
+            snapshot = controller.snapshot()
+        }
+
+        let targetDisplayIDs = shortcutTargetDisplayIDs(in: snapshot)
+        guard !targetDisplayIDs.isEmpty else {
+            return
+        }
+
+        let action = DisplayBrightnessShortcutAction(
+            id: id,
+            direction: direction,
+            targetDisplayIDs: targetDisplayIDs
+        )
         let now = Date()
         let initialStep = shortcutAcceleration.stepForPress(actionID: id, now: now)
         applyShortcutAction(action, step: initialStep, phase: .changed)
@@ -580,25 +595,38 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         step: Int,
         phase: PluginPanelAction.SliderPhase
     ) {
-        guard let display = display(forShortcutKey: action.displayKey) else {
-            return
-        }
-
         let delta = Double(step) / 100 * action.direction.multiplier
-        controller.setBrightness(display.brightness + delta, for: display.id, phase: phase)
+        for display in displays(for: action.targetDisplayIDs) {
+            controller.setBrightness(display.brightness + delta, for: display.id, phase: phase)
+        }
     }
 
     private func commitShortcutAction(_ action: DisplayBrightnessShortcutAction) {
-        guard let display = display(forShortcutKey: action.displayKey) else {
-            return
+        for display in displays(for: action.targetDisplayIDs) {
+            controller.setBrightness(display.brightness, for: display.id, phase: .ended)
         }
-
-        controller.setBrightness(display.brightness, for: display.id, phase: .ended)
     }
 
-    private func display(forShortcutKey displayKey: String) -> DisplayBrightnessDisplay? {
-        controller.snapshot().displays.first {
-            Self.shortcutDisplayKey(for: $0.display) == displayKey
+    private func displays(for displayIDs: [CGDirectDisplayID]) -> [DisplayBrightnessDisplay] {
+        let displaysByID = Dictionary(uniqueKeysWithValues: controller.snapshot().displays.map { ($0.id, $0) })
+        return displayIDs.compactMap { displaysByID[$0] }
+    }
+
+    private func shortcutTargetDisplayIDs(in snapshot: DisplayBrightnessSnapshot) -> [CGDirectDisplayID] {
+        switch shortcutPreferences.targetMode {
+        case .followsMouse:
+            if let mouseDisplayID = mouseDisplayIDProvider(),
+               snapshot.displays.contains(where: { $0.id == mouseDisplayID }) {
+                return [mouseDisplayID]
+            }
+
+            if let mainDisplay = snapshot.displays.first(where: { $0.display.isMain }) {
+                return [mainDisplay.id]
+            }
+
+            return snapshot.displays.first.map { [$0.id] } ?? []
+        case .allDisplays:
+            return snapshot.displays.map(\.id)
         }
     }
 
@@ -637,57 +665,31 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         try? await Task.sleep(nanoseconds: nanoseconds)
     }
 
-    static func shortcutActionID(
-        displayKey: String,
-        direction: DisplayBrightnessShortcutDirection
-    ) -> String {
-        "\(Constants.shortcutActionPrefix)\(displayKey)\(direction.actionSuffix)"
+    static func shortcutDirection(for actionID: String) -> DisplayBrightnessShortcutDirection? {
+        switch actionID {
+        case DisplayBrightnessShortcutDirection.decrease.actionID:
+            return .decrease
+        case DisplayBrightnessShortcutDirection.increase.actionID:
+            return .increase
+        default:
+            return nil
+        }
     }
 
-    static func parseShortcutActionID(_ actionID: String) -> DisplayBrightnessShortcutAction? {
-        guard actionID.hasPrefix(Constants.shortcutActionPrefix) else {
+    private static func currentMouseDisplayID() -> CGDirectDisplayID? {
+        let mouseLocation = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) else {
             return nil
         }
 
-        let direction: DisplayBrightnessShortcutDirection
-        if actionID.hasSuffix(DisplayBrightnessShortcutDirection.decrease.actionSuffix) {
-            direction = .decrease
-        } else if actionID.hasSuffix(DisplayBrightnessShortcutDirection.increase.actionSuffix) {
-            direction = .increase
-        } else {
-            return nil
-        }
-
-        let startIndex = actionID.index(
-            actionID.startIndex,
-            offsetBy: Constants.shortcutActionPrefix.count
-        )
-        let endIndex = actionID.index(
-            actionID.endIndex,
-            offsetBy: -direction.actionSuffix.count
-        )
-        let displayKey = String(actionID[startIndex..<endIndex])
-
-        guard !displayKey.isEmpty else {
-            return nil
-        }
-
-        return DisplayBrightnessShortcutAction(
-            id: actionID,
-            displayKey: displayKey,
-            direction: direction
-        )
+        return displayID(for: screen)
     }
 
-    static func shortcutDisplayKey(for display: DisplayInfo) -> String {
-        if let serialNumber = display.serialNumber {
-            return "v\(display.vendorNumber ?? 0)-m\(display.modelNumber ?? 0)-s\(serialNumber)"
+    private static func displayID(for screen: NSScreen) -> CGDirectDisplayID? {
+        guard let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
         }
 
-        if display.isBuiltin {
-            return "builtin-v\(display.vendorNumber ?? 0)-m\(display.modelNumber ?? 0)"
-        }
-
-        return "id\(display.id)"
+        return screenNumber.uint32Value
     }
 }

@@ -22,7 +22,7 @@
 | Feature | Description |
 | ------- | ----------- |
 | Display Resolution | View connected displays and switch each display to an available resolution. |
-| Display Brightness | Quickly adjust built-in and DDC/CI external display brightness, with per-display shortcut increments and Gamma/Shade fallbacks. |
+| Display Brightness | Quickly adjust built-in and DDC/CI external display brightness, with shortcuts that can follow the mouse or control all displays together, plus Gamma/Shade fallbacks. |
 | True Tone | Automatically adapt display colors to ambient light on MacBooks and compatible displays. |
 | Display Sleep | Put all displays to sleep immediately, then wake them with mouse movement or keyboard input. |
 | Dark Mode | Toggle the system light and dark appearances, with live state sync when the system theme changes. |

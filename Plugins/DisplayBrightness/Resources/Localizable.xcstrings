@@ -109,13 +109,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ Brightness %@"
+            "value": "%@ Brightness"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ %@亮度"
+            "value": "%@亮度"
           }
         }
       }
@@ -126,13 +126,30 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ brightness for %@."
+            "value": "%@ display brightness."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@%@ 的亮度。"
+            "value": "%@显示器亮度。"
+          }
+        }
+      }
+    },
+    "shortcut.settingsGroupTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brightness Shortcuts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "亮度快捷键"
           }
         }
       }
@@ -143,13 +160,115 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Can share the same shortcuts with other displays and adjust together."
+            "value": "Adjust display brightness using the selected target scope."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "可与其他显示器使用相同快捷键，同时调节。"
+            "value": "按所选作用范围调整显示器亮度。"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.sectionTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Target Scope"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作用范围"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcut Target"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快捷键目标"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.followsMouse": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow Mouse"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随鼠标"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.allDisplays": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Displays"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有显示器"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.followsMouseDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only adjusts the display under the pointer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只调整光标所在屏幕。"
+          }
+        }
+      }
+    },
+    "settings.shortcutTarget.allDisplaysDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjusts every controllable display together."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步调整所有可控显示器。"
           }
         }
       }
