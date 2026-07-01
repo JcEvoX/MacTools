@@ -12,7 +12,7 @@
       "summary": "Add quick Finder context menu actions for folders and paths."
     }
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minHostVersion": "1.0.21",
   "pluginKitVersion": 2,
   "bundleRelativePath": "RightClick.bundle",
