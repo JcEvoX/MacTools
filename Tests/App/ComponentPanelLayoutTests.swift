@@ -21,7 +21,10 @@ final class ComponentPanelLayoutTests: XCTestCase {
         XCTAssertEqual(ComponentPanelLayout.verticalSpacing, 6)
         XCTAssertEqual(ComponentPanelLayout.verticalSpacing, ComponentPanelLayout.horizontalPadding)
         XCTAssertEqual(ComponentPanelLayout.horizontalPadding, MenuBarPanelLayout.outerPadding)
+        XCTAssertEqual(ComponentPanelLayout.topPadding, MenuBarPanelLayout.contentTopPadding)
+        XCTAssertEqual(ComponentPanelLayout.bottomPadding, MenuBarPanelLayout.contentBottomPadding)
         XCTAssertEqual(ComponentPanelLayout.verticalPadding, MenuBarPanelLayout.outerPadding)
+        XCTAssertEqual(ComponentPanelLayout.contentVerticalPadding, 10)
         XCTAssertEqual(
             ComponentPanelLayout.panelWidth,
             ComponentPanelLayout.horizontalPadding * 2

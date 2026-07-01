@@ -13,6 +13,7 @@ enum MenuBarPanelLayout {
     static let cornerRadius: CGFloat = 12
     static let panelSpacing: CGFloat = 10
     static let outerPadding: CGFloat = 6
+    static let contentTopPadding: CGFloat = 4
     static let rootSpacing: CGFloat = 0
     static let toolbarHeight: CGFloat = 30
     static let featureRowSpacing: CGFloat = 5
@@ -33,6 +34,14 @@ enum MenuBarPanelLayout {
 
     static var topChromeHeight: CGFloat {
         outerPadding + toolbarHeight + rootSpacing
+    }
+
+    static var contentBottomPadding: CGFloat {
+        outerPadding
+    }
+
+    static var contentVerticalPadding: CGFloat {
+        contentTopPadding + contentBottomPadding
     }
 
     static var minimumContentHeight: CGFloat {
@@ -76,7 +85,7 @@ enum MenuBarPanelLayout {
     }
 
     static func availableFeatureHeight(forPanelHeight panelHeight: CGFloat) -> CGFloat {
-        max(0, panelHeight - topChromeHeight - outerPadding * 2)
+        max(0, panelHeight - topChromeHeight - contentVerticalPadding)
     }
 
     static func preferredPanelHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
@@ -87,7 +96,7 @@ enum MenuBarPanelLayout {
 
     static func preferredFeatureContentHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
         max(
-            featureListHeight(for: panelItems, screen: screen) + outerPadding * 2,
+            featureListHeight(for: panelItems, screen: screen) + contentVerticalPadding,
             minimumContentHeight
         )
     }
@@ -120,7 +129,7 @@ enum MenuBarPanelLayout {
             featureListHeight(
                 featureContentHeight: featureContentHeight,
                 maximumFeatureListHeight: maximumFeatureListHeight
-            ) + outerPadding * 2,
+            ) + contentVerticalPadding,
             minimumContentHeight
         )
     }
@@ -136,7 +145,7 @@ enum MenuBarPanelLayout {
 
         let screenMaximum = (visibleFrameHeight * featurePanelScreenHeightRatio)
             - topChromeHeight
-            - outerPadding * 2
+            - contentVerticalPadding
         return max(0, min(featureListMaximumHeight, screenMaximum))
     }
 
@@ -519,7 +528,9 @@ struct MenuBarContent: View {
             featureList
                 .frame(height: featureListHeight, alignment: .topLeading)
         }
-        .padding(MenuBarPanelLayout.outerPadding)
+        .padding(.top, MenuBarPanelLayout.contentTopPadding)
+        .padding(.horizontal, MenuBarPanelLayout.outerPadding)
+        .padding(.bottom, MenuBarPanelLayout.contentBottomPadding)
         .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
     }
 

@@ -12,6 +12,9 @@ final class MenuBarPanelLayoutTests: XCTestCase {
             MenuBarPanelLayout.baseWidth - (MenuBarPanelLayout.outerPadding * 2)
         )
         XCTAssertEqual(MenuBarPanelLayout.topChromeHeight, 36)
+        XCTAssertEqual(MenuBarPanelLayout.contentTopPadding, 4)
+        XCTAssertEqual(MenuBarPanelLayout.contentBottomPadding, 6)
+        XCTAssertEqual(MenuBarPanelLayout.contentVerticalPadding, 10)
         XCTAssertEqual(MenuBarPanelLayout.minimumContentHeight, 184)
     }
 
@@ -80,7 +83,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(
             MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
             MenuBarPanelLayout.featureListMaximumHeight
-                + MenuBarPanelLayout.outerPadding * 2
+                + MenuBarPanelLayout.contentVerticalPadding
                 + MenuBarPanelLayout.topChromeHeight
         )
         XCTAssertEqual(MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 1000), 750)

@@ -19,6 +19,8 @@ enum ComponentPanelLayout {
     static let cellHeight = metrics.cellHeight
     static let spacing = horizontalSpacing
     static let horizontalPadding = MenuBarPanelLayout.outerPadding
+    static let topPadding = MenuBarPanelLayout.contentTopPadding
+    static let bottomPadding = MenuBarPanelLayout.contentBottomPadding
     static let verticalPadding = MenuBarPanelLayout.outerPadding
     static let verticalSpacing = horizontalPadding
     static let emptyContentHeight: CGFloat = 164
@@ -34,7 +36,7 @@ enum ComponentPanelLayout {
     }
 
     static var contentVerticalPadding: CGFloat {
-        verticalPadding * 2
+        topPadding + bottomPadding
     }
 
     static var scrollClipCornerRadius: CGFloat {
@@ -262,8 +264,9 @@ struct ComponentPanelContent: View {
                 )
             }
         }
+        .padding(.top, ComponentPanelLayout.topPadding)
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
-        .padding(.vertical, ComponentPanelLayout.verticalPadding)
+        .padding(.bottom, ComponentPanelLayout.bottomPadding)
         .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
         .onAppear {
             onPreferredHeightChange()
