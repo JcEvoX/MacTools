@@ -6,11 +6,13 @@ import MacToolsPluginKit
 
 final class MenuBarPanelLayoutTests: XCTestCase {
     func testBaseLayoutMetricsStayStable() {
-        XCTAssertEqual(MenuBarPanelLayout.baseWidth, 288)
+        XCTAssertEqual(MenuBarPanelLayout.baseWidth, 316)
         XCTAssertEqual(
             MenuBarPanelLayout.surfaceWidth,
             MenuBarPanelLayout.baseWidth - (MenuBarPanelLayout.outerPadding * 2)
         )
+        XCTAssertEqual(MenuBarPanelLayout.topChromeHeight, 36)
+        XCTAssertEqual(MenuBarPanelLayout.minimumContentHeight, 184)
     }
 
     func testContentSizeUsesModelWithoutSwiftUILayoutMeasurement() {
@@ -38,7 +40,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
 
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: [item]),
-            NSSize(width: 288, height: 251)
+            NSSize(width: 316, height: 220)
         )
     }
 
@@ -66,7 +68,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
 
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: [item]),
-            NSSize(width: 288, height: 183)
+            NSSize(width: 316, height: 220)
         )
     }
 
@@ -77,7 +79,9 @@ final class MenuBarPanelLayoutTests: XCTestCase {
 
         XCTAssertEqual(
             MenuBarPanelLayout.preferredPanelHeight(for: items, screen: nil),
-            MenuBarPanelLayout.featureListMaximumHeight + MenuBarPanelLayout.fixedFooterHeight
+            MenuBarPanelLayout.featureListMaximumHeight
+                + MenuBarPanelLayout.outerPadding * 2
+                + MenuBarPanelLayout.topChromeHeight
         )
         XCTAssertEqual(MenuBarPanelLayout.maximumPanelHeight(visibleFrameHeight: 1000), 750)
     }
@@ -85,7 +89,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
     func testEmptyContentSizeIncludesMarketplacePrompt() {
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: []),
-            NSSize(width: 288, height: 247)
+            NSSize(width: 316, height: 220)
         )
     }
 

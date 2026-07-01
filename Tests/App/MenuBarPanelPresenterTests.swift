@@ -15,6 +15,35 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelPresenter.popoverBehavior, .applicationDefined)
     }
 
+    func testUnifiedPanelUsesComponentGridWidth() {
+        XCTAssertEqual(MenuBarPanelLayout.baseWidth, ComponentPanelLayout.panelWidth)
+    }
+
+    func testUnifiedPanelModelForwardsSelectionWithoutReplacingRoot() {
+        let model = MenuBarUnifiedPanelModel(
+            selectedTab: .components,
+            contentHeight: 100,
+            maximumFeatureListHeight: 300,
+            isPanelVisible: true
+        )
+        var selectedTab: MenuBarPanelTab?
+        var measuredHeight: CGFloat?
+        model.onTabSelection = { selectedTab = $0 }
+        model.onPreferredContentHeightChange = { tab, height in
+            selectedTab = tab
+            measuredHeight = height
+        }
+
+        model.selectTab(.features)
+        XCTAssertEqual(selectedTab, .features)
+        XCTAssertEqual(model.selectedTab, .components)
+
+        model.updatePreferredContentHeight(tab: .features, measuredHeight: 240)
+        XCTAssertEqual(selectedTab, .features)
+        XCTAssertEqual(measuredHeight, 240)
+        XCTAssertEqual(model.contentHeight, 100)
+    }
+
     func testContainsPresentedWindowIncludesMarkedSecondaryPanelWindow() {
         let presenter = makePresenter()
         let window = makeWindow()

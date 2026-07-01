@@ -6,7 +6,6 @@ struct DeviceBatteryComponentView: View {
     @ObservedObject var viewModel: DeviceBatteryViewModel
     @ObservedObject var store: DeviceBatteryStore
     let localization: PluginLocalization
-    let isPanelVisible: Bool
     let openSettings: () -> Void
 
     var body: some View {
@@ -31,15 +30,6 @@ struct DeviceBatteryComponentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear {
-            if isPanelVisible {
-                viewModel.start(
-                    includeInternalBattery: store.showInternalBattery,
-                    includeBluetoothDevices: store.showBluetoothDevices,
-                    includeRapooDevices: store.showRapooDevices
-                )
-            }
-        }
     }
 
     private var visibleItems: [DeviceBatteryItem] {

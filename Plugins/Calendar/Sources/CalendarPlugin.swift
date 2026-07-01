@@ -28,7 +28,7 @@ private struct CalendarPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
+final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
     private enum PermissionID {
         static let calendarEvents = "calendar-events"
         static let calendarAutomation = "calendar-automation"
@@ -46,6 +46,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
     private let context: PluginRuntimeContext
     private let eventService: CalendarEventServicing
     private let localization: PluginLocalization
+    private let viewModel: CalendarComponentViewModel
 
     init(
         context: PluginRuntimeContext = PluginRuntimeContext(
@@ -58,6 +59,11 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         self.context = context
         self.localization = localization
         self.eventService = eventService ?? CalendarEventService(localization: localization)
+        self.viewModel = CalendarComponentViewModel(
+            eventService: self.eventService,
+            holidayProvider: .bundled(context: context),
+            localization: localization
+        )
         self.metadata = PluginMetadata(
             id: "calendar",
             title: localization.string("metadata.title", defaultValue: "日历"),
@@ -114,17 +120,29 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel {
         AnyView(
             CalendarComponentView(
                 context: context,
-                viewModel: CalendarComponentViewModel(
-                    eventService: eventService,
-                    holidayProvider: .bundled(context: self.context),
-                    localization: localization
-                ),
+                viewModel: viewModel,
                 localization: localization
             )
         )
     }
 
     func refresh() {}
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.start()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.stop()
+    }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
         switch permissionID {

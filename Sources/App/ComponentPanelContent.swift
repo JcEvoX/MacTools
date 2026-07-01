@@ -67,7 +67,7 @@ enum ComponentPanelLayout {
         return maximumBottom
     }
 
-    static func preferredPanelHeight(for items: [PluginComponentItem], screen: NSScreen?) -> CGFloat {
+    static func preferredContentHeight(for items: [PluginComponentItem], screen: NSScreen?) -> CGFloat {
         let rawContentHeight: CGFloat
 
         if items.isEmpty {
@@ -78,10 +78,16 @@ enum ComponentPanelLayout {
         }
 
         let contentHeight = rawContentHeight + contentVerticalPadding
-        let minimumHeight = items.isEmpty ? minimumPanelHeight : contentHeight
+        let minimumHeight = items.isEmpty ? MenuBarPanelLayout.minimumContentHeight : contentHeight
         return min(
             max(contentHeight, minimumHeight),
-            MenuBarPanelLayout.maximumPanelHeight(for: screen)
+            MenuBarPanelLayout.maximumContentHeight(for: screen)
+        )
+    }
+
+    static func preferredPanelHeight(for items: [PluginComponentItem], screen: NSScreen?) -> CGFloat {
+        MenuBarPanelLayout.panelHeight(
+            forContentHeight: preferredContentHeight(for: items, screen: screen)
         )
     }
 }
@@ -220,7 +226,6 @@ enum ComponentGridPlacementEngine {
 struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     let panelHeight: CGFloat
-    let isPanelVisible: Bool
     let onPreferredHeightChange: () -> Void
     let onDismiss: () -> Void
 
@@ -236,9 +241,7 @@ struct ComponentPanelContent: View {
 
     var body: some View {
         Group {
-            if !isPanelVisible {
-                Color.clear
-            } else if pluginHost.componentItems.isEmpty {
+            if pluginHost.componentItems.isEmpty {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -247,7 +250,6 @@ struct ComponentPanelContent: View {
                         pluginHost: pluginHost,
                         items: pluginHost.componentItems,
                         placements: placements,
-                        isPanelVisible: isPanelVisible,
                         onDismiss: onDismiss
                     )
                 }
@@ -264,17 +266,9 @@ struct ComponentPanelContent: View {
         .padding(.vertical, ComponentPanelLayout.verticalPadding)
         .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
         .onAppear {
-            guard isPanelVisible else {
-                return
-            }
-
             onPreferredHeightChange()
         }
         .onChange(of: componentLayoutSignature) {
-            guard isPanelVisible else {
-                return
-            }
-
             onPreferredHeightChange()
         }
     }
@@ -300,22 +294,32 @@ private struct ComponentGridView: View {
     @ObservedObject var pluginHost: PluginHost
     let items: [PluginComponentItem]
     let placements: [ComponentGridPlacement]
-    let isPanelVisible: Bool
     let onDismiss: () -> Void
 
+    private var itemsByID: [String: PluginComponentItem] {
+        Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+    }
+
     var body: some View {
+        let itemLookup = itemsByID
+
         ZStack(alignment: .topLeading) {
             ForEach(placements) { placement in
-                if let item = items.first(where: { $0.id == placement.id }) {
-                    ComponentCardContainer(
-                        pluginHost: pluginHost,
-                        item: item,
-                        isPanelVisible: isPanelVisible,
-                        onDismiss: onDismiss
-                    )
-                    .frame(
+                if let item = itemLookup[placement.id] {
+                    let itemSize = CGSize(
                         width: ComponentPanelLayout.itemWidth(for: placement.span),
                         height: ComponentPanelLayout.itemHeight(for: placement.span)
+                    )
+                    ComponentCardContainer(
+                        item: item,
+                        componentViewItem: pluginHost.componentViewItem(
+                            for: item.id,
+                            dismiss: onDismiss
+                        )
+                    )
+                    .frame(
+                        width: itemSize.width,
+                        height: itemSize.height
                     )
                     .offset(
                         x: ComponentPanelLayout.xOffset(for: placement),
@@ -333,20 +337,20 @@ private struct ComponentGridView: View {
 }
 
 private struct ComponentCardContainer: View {
-    @ObservedObject var pluginHost: PluginHost
     let item: PluginComponentItem
-    let isPanelVisible: Bool
-    let onDismiss: () -> Void
+    let componentViewItem: PluginComponentViewItem?
 
     var body: some View {
-        pluginHost.componentViewItem(
-            for: item.id,
-            dismiss: onDismiss,
-            isPanelVisible: isPanelVisible
-        ).content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .disabled(!item.isEnabled)
-            .opacity(item.isEnabled ? 1 : 0.55)
+        Group {
+            if let componentViewItem {
+                componentViewItem.content
+            } else {
+                Color.clear
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .disabled(!item.isEnabled)
+        .opacity(item.isEnabled ? 1 : 0.55)
     }
 }

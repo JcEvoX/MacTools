@@ -25,7 +25,7 @@ private struct MenuBarHiddenPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel, MenuBarHostStatusItemRecovering {
+final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel, MenuBarHostStatusItemRecovering, PluginPanelSurfaceLifecycleHandling {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
@@ -110,7 +110,25 @@ final class MenuBarHiddenPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCompo
             NotificationCenter.default.removeObserver(launchObserver)
             self.launchObserver = nil
         }
+        controller.setHiddenIconsPanelVisible(false)
         controller.deactivate()
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        controller.setHiddenIconsPanelVisible(true)
+        controller.refreshPermissions()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        controller.setHiddenIconsPanelVisible(false)
     }
 
     private func activateAfterHostStatusItem() {

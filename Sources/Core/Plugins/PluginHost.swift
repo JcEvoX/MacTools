@@ -147,6 +147,8 @@ final class PluginHost: ObservableObject {
     private var shortcutErrors: [String: String] = [:]
     private var componentViewCache: [String: PluginComponentViewItem] = [:]
     private var configurationViewCache: [String: PluginConfigurationViewItem] = [:]
+    private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
+    private var visiblePanelSurfacePluginIDs: [PluginPanelSurface: Set<String>] = [:]
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
     private var didLoadDynamicPlugins = false
@@ -275,6 +277,7 @@ final class PluginHost: ObservableObject {
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
+        hideAllPanelSurfaces()
 
         for plugin in activePlugins {
             guardPluginCall(plugin, operation: "deactivate plugin") {
@@ -546,6 +549,10 @@ final class PluginHost: ObservableObject {
     }
 
     func setFeatureVisibility(_ isVisible: Bool, for pluginID: String) {
+        if !isVisible {
+            removePluginFromVisiblePanelSurfaces(pluginID, notify: true)
+        }
+
         pluginDisplayPreferencesStore.setVisibility(
             isVisible,
             for: pluginID,
@@ -634,14 +641,6 @@ final class PluginHost: ObservableObject {
     }
 
     func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
-        componentViewItem(for: itemID, dismiss: dismiss, isPanelVisible: true)
-    }
-
-    func componentViewItem(
-        for itemID: String,
-        dismiss: @escaping () -> Void,
-        isPanelVisible: Bool
-    ) -> PluginComponentViewItem {
         if let cachedItem = componentViewCache[itemID] {
             return cachedItem
         }
@@ -657,7 +656,7 @@ final class PluginHost: ObservableObject {
         let context = PluginComponentContext(
             pluginID: itemID,
             dismiss: dismiss,
-            isPanelVisible: isPanelVisible
+            isPanelVisible: true
         )
         let content = guardedValue(
             for: plugin,
@@ -674,6 +673,27 @@ final class PluginHost: ObservableObject {
             rebuildDerivedState()
         }
         return item
+    }
+
+    func setPanelSurface(_ surface: PluginPanelSurface, visible isVisible: Bool) {
+        if isVisible {
+            visiblePanelSurfaces.insert(surface)
+        } else {
+            visiblePanelSurfaces.remove(surface)
+        }
+
+        let visiblePluginIDs = isVisible ? pluginIDs(for: surface) : []
+        updateVisiblePanelSurface(surface, visiblePluginIDs: visiblePluginIDs)
+    }
+
+    func isComponentViewCached(for itemID: String) -> Bool {
+        componentViewCache[itemID] != nil
+    }
+
+    func prewarmComponentViews(dismiss: @escaping () -> Void) {
+        for item in componentItems {
+            _ = componentViewItem(for: item.id, dismiss: dismiss)
+        }
     }
 
     func pluginConfigurationViewItem(for pluginID: String) -> PluginConfigurationViewItem {
@@ -965,6 +985,9 @@ final class PluginHost: ObservableObject {
     }
 
     private func replaceDynamicPlugins(_ plugins: [any MacToolsPlugin]) {
+        let previouslyVisibleSurfaces = visiblePanelSurfaces
+        hideAllPanelSurfaces()
+        visiblePanelSurfaces = previouslyVisibleSurfaces
         discardComponentViews()
         configurationViewCache.removeAll()
         syncPluginManagementState()
@@ -1147,6 +1170,7 @@ final class PluginHost: ObservableObject {
             )
         }
         trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
+        syncVisiblePanelSurfaces()
 
         featureManagementItems = orderedDescriptors.map { descriptor in
             let metadata = descriptor.metadata
@@ -1401,6 +1425,7 @@ final class PluginHost: ObservableObject {
         }
 
         isolatedPluginFailures[pluginID] = message
+        removePluginFromVisiblePanelSurfaces(pluginID, notify: false)
         componentViewCache.removeValue(forKey: pluginID)
         configurationViewCache.removeValue(forKey: pluginID)
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
@@ -1634,6 +1659,114 @@ final class PluginHost: ObservableObject {
 
     private func trimComponentViewCache(keeping visibleComponentIDs: Set<String>) {
         componentViewCache = componentViewCache.filter { visibleComponentIDs.contains($0.key) }
+    }
+
+    private func pluginIDs(for surface: PluginPanelSurface) -> Set<String> {
+        switch surface {
+        case .component:
+            return Set(componentItems.map(\.id))
+        case .primary:
+            return Set(panelItems.map(\.id))
+        }
+    }
+
+    private func syncVisiblePanelSurfaces() {
+        for surface in visiblePanelSurfaces {
+            updateVisiblePanelSurface(
+                surface,
+                visiblePluginIDs: pluginIDs(for: surface)
+            )
+        }
+    }
+
+    private func hideAllPanelSurfaces() {
+        for surface in PluginPanelSurface.allCases {
+            updateVisiblePanelSurface(surface, visiblePluginIDs: [])
+        }
+        visiblePanelSurfaces.removeAll()
+    }
+
+    private func updateVisiblePanelSurface(
+        _ surface: PluginPanelSurface,
+        visiblePluginIDs nextVisiblePluginIDs: Set<String>
+    ) {
+        let previousVisiblePluginIDs = visiblePanelSurfacePluginIDs[surface] ?? []
+        let hiddenPluginIDs = previousVisiblePluginIDs.subtracting(nextVisiblePluginIDs)
+        let shownPluginIDs = nextVisiblePluginIDs.subtracting(previousVisiblePluginIDs)
+
+        guard !hiddenPluginIDs.isEmpty || !shownPluginIDs.isEmpty else {
+            return
+        }
+
+        for pluginID in hiddenPluginIDs {
+            notifyPanelSurfaceHidden(surface, pluginID: pluginID)
+        }
+
+        for pluginID in shownPluginIDs {
+            notifyPanelSurfaceVisible(surface, pluginID: pluginID)
+        }
+
+        let visiblePluginIDs = nextVisiblePluginIDs.filter { pluginID in
+            guard let plugin = corePlugin(for: pluginID) else {
+                return false
+            }
+
+            return !isPluginIsolated(plugin)
+        }
+
+        if visiblePluginIDs.isEmpty {
+            visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
+        } else {
+            visiblePanelSurfacePluginIDs[surface] = visiblePluginIDs
+        }
+    }
+
+    private func notifyPanelSurfaceVisible(_ surface: PluginPanelSurface, pluginID: String) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
+        else {
+            return
+        }
+
+        guardPluginCall(plugin, operation: "show \(surface) panel surface") {
+            lifecycleHandler.panelSurfaceDidBecomeVisible(surface)
+        }
+    }
+
+    private func notifyPanelSurfaceHidden(_ surface: PluginPanelSurface, pluginID: String) {
+        guard
+            let plugin = corePlugin(for: pluginID),
+            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
+        else {
+            return
+        }
+
+        guardPluginCall(plugin, operation: "hide \(surface) panel surface") {
+            lifecycleHandler.panelSurfaceDidBecomeHidden(surface)
+        }
+    }
+
+    private func removePluginFromVisiblePanelSurfaces(_ pluginID: String, notify: Bool) {
+        for surface in PluginPanelSurface.allCases {
+            guard var pluginIDs = visiblePanelSurfacePluginIDs[surface] else {
+                continue
+            }
+
+            guard pluginIDs.remove(pluginID) != nil else {
+                continue
+            }
+
+            if notify {
+                notifyPanelSurfaceHidden(surface, pluginID: pluginID)
+            }
+
+            if pluginIDs.isEmpty {
+                visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
+            } else {
+                visiblePanelSurfacePluginIDs[surface] = pluginIDs
+            }
+        }
     }
 
     private func trimConfigurationViewCache(keeping configurationPluginIDs: Set<String>) {

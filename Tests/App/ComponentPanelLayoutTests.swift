@@ -86,12 +86,18 @@ final class ComponentPanelLayoutTests: XCTestCase {
         )
     }
 
-    func testPreferredHeightForItemsIncludesVerticalPaddingWithoutHeader() {
+    func testPreferredHeightForItemsIncludesSharedToolbarAndVerticalPadding() {
         let item = makeItem(id: "system", span: .fourByTwo)
 
         XCTAssertEqual(
-            ComponentPanelLayout.preferredPanelHeight(for: [item], screen: nil),
+            ComponentPanelLayout.preferredContentHeight(for: [item], screen: nil),
             ComponentPanelLayout.itemHeight(for: .fourByTwo) + ComponentPanelLayout.contentVerticalPadding
+        )
+        XCTAssertEqual(
+            ComponentPanelLayout.preferredPanelHeight(for: [item], screen: nil),
+            MenuBarPanelLayout.topChromeHeight
+                + ComponentPanelLayout.itemHeight(for: .fourByTwo)
+                + ComponentPanelLayout.contentVerticalPadding
         )
     }
 

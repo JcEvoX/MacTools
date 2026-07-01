@@ -100,6 +100,22 @@ public extension MacToolsPlugin where Self: PluginComponentPanel {
     }
 }
 
+public enum PluginPanelSurface: CaseIterable, Hashable, Sendable {
+    case component
+    case primary
+}
+
+@MainActor
+public protocol PluginPanelSurfaceLifecycleHandling: AnyObject {
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface)
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface)
+}
+
+public extension PluginPanelSurfaceLifecycleHandling {
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {}
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {}
+}
+
 @MainActor
 public protocol PluginProvider {
     func makePlugins() -> [any MacToolsPlugin]

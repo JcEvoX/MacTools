@@ -3,7 +3,7 @@ import SwiftUI
 import MacToolsPluginKit
 
 enum MenuBarPanelLayout {
-    static let baseWidth: CGFloat = 288
+    static let baseWidth: CGFloat = 316
     static let secondaryPanelWidth: CGFloat = 216
     static let maximumPanelHeight: CGFloat = 720
     static let minimumPanelHeight: CGFloat = 220
@@ -13,15 +13,14 @@ enum MenuBarPanelLayout {
     static let cornerRadius: CGFloat = 12
     static let panelSpacing: CGFloat = 10
     static let outerPadding: CGFloat = 6
-    static let rootSpacing: CGFloat = 6
+    static let rootSpacing: CGFloat = 0
+    static let toolbarHeight: CGFloat = 30
     static let featureRowSpacing: CGFloat = 5
     static let rowHeaderHeight: CGFloat = 26
     static let rowVerticalPadding: CGFloat = 16
     static let detailSpacing: CGFloat = 8
     static let detailControlSpacing: CGFloat = 8
     static let emptyContentHeight: CGFloat = 150
-    static let dividerHeight: CGFloat = 1
-    static let settingsRowHeight: CGFloat = 36
     static let actionRowVerticalPadding: CGFloat = 8
     static let selectRowVerticalPadding: CGFloat = 5
     static let sliderVerticalPadding: CGFloat = 9
@@ -30,6 +29,25 @@ enum MenuBarPanelLayout {
 
     static var surfaceWidth: CGFloat {
         baseWidth - (outerPadding * 2)
+    }
+
+    static var topChromeHeight: CGFloat {
+        outerPadding + toolbarHeight + rootSpacing
+    }
+
+    static var minimumContentHeight: CGFloat {
+        max(0, minimumPanelHeight - topChromeHeight)
+    }
+
+    static func maximumContentHeight(for screen: NSScreen?) -> CGFloat {
+        max(
+            minimumContentHeight,
+            maximumPanelHeight(for: screen) - topChromeHeight
+        )
+    }
+
+    static func panelHeight(forContentHeight contentHeight: CGFloat) -> CGFloat {
+        topChromeHeight + contentHeight
     }
 
     static func width(for panelItems: [PluginPanelItem]) -> CGFloat {
@@ -44,7 +62,7 @@ enum MenuBarPanelLayout {
     }
 
     static func height(for panelItems: [PluginPanelItem]) -> CGFloat {
-        featureContentHeight(for: panelItems) + fixedFooterHeight
+        preferredPanelHeight(for: panelItems, screen: nil)
     }
 
     static func featureContentHeight(for panelItems: [PluginPanelItem]) -> CGFloat {
@@ -57,19 +75,21 @@ enum MenuBarPanelLayout {
             : rowContentHeight + featureSpacing
     }
 
-    static var fixedFooterHeight: CGFloat {
-        dividerHeight
-            + settingsRowHeight * 2
-            + rootSpacing * 2
-            + outerPadding * 2
-    }
-
     static func availableFeatureHeight(forPanelHeight panelHeight: CGFloat) -> CGFloat {
-        max(0, panelHeight - fixedFooterHeight)
+        max(0, panelHeight - topChromeHeight - outerPadding * 2)
     }
 
     static func preferredPanelHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
-        featureListHeight(for: panelItems, screen: screen) + fixedFooterHeight
+        panelHeight(
+            forContentHeight: preferredFeatureContentHeight(for: panelItems, screen: screen)
+        )
+    }
+
+    static func preferredFeatureContentHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
+        max(
+            featureListHeight(for: panelItems, screen: screen) + outerPadding * 2,
+            minimumContentHeight
+        )
     }
 
     static func featureListHeight(for panelItems: [PluginPanelItem], screen: NSScreen?) -> CGFloat {
@@ -84,10 +104,25 @@ enum MenuBarPanelLayout {
         featureContentHeight: CGFloat,
         maximumFeatureListHeight: CGFloat
     ) -> CGFloat {
-        featureListHeight(
-            featureContentHeight: featureContentHeight,
-            maximumFeatureListHeight: maximumFeatureListHeight
-        ) + fixedFooterHeight
+        panelHeight(
+            forContentHeight: preferredFeatureContentHeight(
+                featureContentHeight: featureContentHeight,
+                maximumFeatureListHeight: maximumFeatureListHeight
+            )
+        )
+    }
+
+    static func preferredFeatureContentHeight(
+        featureContentHeight: CGFloat,
+        maximumFeatureListHeight: CGFloat
+    ) -> CGFloat {
+        max(
+            featureListHeight(
+                featureContentHeight: featureContentHeight,
+                maximumFeatureListHeight: maximumFeatureListHeight
+            ) + outerPadding * 2,
+            minimumContentHeight
+        )
     }
 
     static func maximumFeatureListHeight(for screen: NSScreen?) -> CGFloat {
@@ -100,7 +135,8 @@ enum MenuBarPanelLayout {
         }
 
         let screenMaximum = (visibleFrameHeight * featurePanelScreenHeightRatio)
-            - fixedFooterHeight
+            - topChromeHeight
+            - outerPadding * 2
         return max(0, min(featureListMaximumHeight, screenMaximum))
     }
 
@@ -391,6 +427,7 @@ struct MenuBarContent: View {
 
     @ObservedObject var pluginHost: PluginHost
     let maximumFeatureListHeight: CGFloat
+    let isPanelVisible: Bool
     let onPreferredHeightChange: (CGFloat) -> Void
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
@@ -401,13 +438,15 @@ struct MenuBarContent: View {
         content
         .frame(
             width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
-            height: preferredPanelHeight,
+            height: preferredContentHeight,
             alignment: .topLeading
         )
         .background(
             MenuWindowAccessor { window in
-                secondaryPanelController.setHostWindow(window)
-                syncSecondaryPanelWindow()
+                secondaryPanelController.setHostWindow(isPanelVisible ? window : nil)
+                if isPanelVisible {
+                    syncSecondaryPanelWindow()
+                }
             }
         )
         .onAppear {
@@ -422,26 +461,41 @@ struct MenuBarContent: View {
                 hoverCoordinator.dismissImmediately()
             }
 
-            onPreferredHeightChange(preferredPanelHeight)
+            onPreferredHeightChange(preferredContentHeight)
         }
         .animation(.easeOut(duration: 0.18), value: activeSecondaryPanelSignature)
         .onChange(of: activeSecondaryPanelSignature) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onChange(of: hoverCoordinator.selectedRowFrame) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onChange(of: hoverCoordinator.activeActivation) {
-            syncSecondaryPanelWindow()
+            syncSecondaryPanelWindowIfVisible()
         }
         .onReceive(pluginHost.$settingsPresentationRequestCount.dropFirst()) { _ in
-            presentSettings()
+            if isPanelVisible {
+                presentSettings()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
         }
-        .onChange(of: preferredPanelHeight) { _, newHeight in
+        .onChange(of: preferredContentHeight) { _, newHeight in
+            guard isPanelVisible else {
+                return
+            }
+
             onPreferredHeightChange(newHeight)
+        }
+        .onChange(of: isPanelVisible) { _, isVisible in
+            if isVisible {
+                onPreferredHeightChange(preferredContentHeight)
+                syncSecondaryPanelWindow()
+            } else {
+                hoverCoordinator.dismissImmediately()
+                secondaryPanelController.setHostWindow(nil)
+            }
         }
         .onDisappear {
             flushDeferredActionsIfNeeded()
@@ -452,13 +506,18 @@ struct MenuBarContent: View {
         }
     }
 
+    private func syncSecondaryPanelWindowIfVisible() {
+        guard isPanelVisible else {
+            return
+        }
+
+        syncSecondaryPanelWindow()
+    }
+
     private var content: some View {
-        VStack(alignment: .leading, spacing: MenuBarPanelLayout.rootSpacing) {
+        VStack(alignment: .leading, spacing: 0) {
             featureList
                 .frame(height: featureListHeight, alignment: .topLeading)
-
-            Divider()
-            settingsCard
         }
         .padding(MenuBarPanelLayout.outerPadding)
         .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
@@ -489,8 +548,8 @@ struct MenuBarContent: View {
             ?? MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
     }
 
-    private var preferredPanelHeight: CGFloat {
-        MenuBarPanelLayout.preferredPanelHeight(
+    private var preferredContentHeight: CGFloat {
+        MenuBarPanelLayout.preferredFeatureContentHeight(
             featureContentHeight: featureContentHeight,
             maximumFeatureListHeight: maximumFeatureListHeight
         )
@@ -812,24 +871,6 @@ struct MenuBarContent: View {
         )
     }
 
-    private var settingsCard: some View {
-        VStack(spacing: 0) {
-            Button {
-                presentSettings()
-            } label: {
-                MenuActionRowLabel(title: AppL10n.settings("settings.window.title", defaultValue: "设置"), systemImage: "gearshape")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                MenuActionRowLabel(title: AppL10n.settings("app.quit", defaultValue: "退出"), systemImage: "power")
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
-    }
 }
 
 @MainActor
@@ -1979,6 +2020,10 @@ struct ScrollViewScrollerVisibilityConfigurator: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
+        scrollView.automaticallyAdjustsContentInsets = false
+        let zeroInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollView.contentInsets = zeroInsets
+        scrollView.scrollerInsets = zeroInsets
     }
 
     private func nearestScrollView(from view: NSView) -> NSScrollView? {
@@ -2030,42 +2075,5 @@ private struct DateTimeCardPicker: View {
 
     private func sanitizedDate(_ candidate: Date) -> Date {
         max(candidate, minimumDate)
-    }
-}
-
-private struct MenuActionRowLabel: View {
-    let title: String
-    let systemImage: String
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovered = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 14, height: 14)
-
-            Text(title)
-                .font(.system(size: 12.5))
-                .foregroundStyle(.primary)
-
-            Spacer()
-        }
-        .padding(.horizontal, FeatureRowLayout.rowHorizontalPadding)
-        .frame(
-            minWidth: 0,
-            maxWidth: .infinity,
-            minHeight: MenuBarPanelLayout.settingsRowHeight,
-            maxHeight: MenuBarPanelLayout.settingsRowHeight,
-            alignment: .leading
-        )
-        .background(alignment: .center) {
-            RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous)
-                .inset(by: MenuBarHoverStyle.inset)
-                .fill(isEnabled && isHovered ? MenuBarHoverStyle.fill : Color.clear)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: MenuBarHoverStyle.cornerRadius, style: .continuous))
-        .onHover { isHovered = $0 }
     }
 }

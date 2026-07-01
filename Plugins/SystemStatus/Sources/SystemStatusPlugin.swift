@@ -21,7 +21,7 @@ private struct SystemStatusPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
+final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
     let metadata: PluginMetadata
 
     let descriptor = PluginComponentDescriptor(
@@ -92,6 +92,22 @@ final class SystemStatusPlugin: MacToolsPlugin, PluginComponentPanel {
 
     func deactivate(reason: PluginDeactivationReason) {
         viewModel.stop()
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.startForeground()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .component else {
+            return
+        }
+
+        viewModel.returnToBackground()
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -520,8 +536,6 @@ struct SystemStatusComponentView: View {
     var body: some View {
         SystemStatusDashboardView(snapshot: viewModel.snapshot, localization: localization)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .onAppear { viewModel.startForeground() }
-        .onDisappear { viewModel.returnToBackground() }
     }
 
     private var compactCPUCard: some View {

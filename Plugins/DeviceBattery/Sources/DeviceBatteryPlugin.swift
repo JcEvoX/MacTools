@@ -191,7 +191,6 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
                 viewModel: viewModel,
                 store: store,
                 localization: localization,
-                isPanelVisible: context.isPanelVisible,
                 openSettings: openInputMonitoringSettings
             )
         )

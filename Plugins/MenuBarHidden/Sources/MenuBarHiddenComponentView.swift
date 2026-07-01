@@ -11,13 +11,6 @@ struct MenuBarHiddenComponentView: View {
 
     var body: some View {
         iconPanel
-            .onAppear {
-                controller.setHiddenIconsPanelVisible(true)
-                controller.refreshPermissions()
-            }
-            .onDisappear {
-                controller.setHiddenIconsPanelVisible(false)
-            }
     }
 
     private var iconPanel: some View {

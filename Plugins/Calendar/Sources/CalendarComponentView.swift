@@ -13,7 +13,7 @@ struct CalendarComponentView: View {
         static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
     }
 
-    @StateObject private var viewModel: CalendarComponentViewModel
+    @ObservedObject private var viewModel: CalendarComponentViewModel
     private let localization: PluginLocalization
 
     init(
@@ -21,7 +21,7 @@ struct CalendarComponentView: View {
         viewModel: CalendarComponentViewModel,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
         self.localization = localization
     }
 
@@ -31,8 +31,6 @@ struct CalendarComponentView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onAppear { viewModel.start() }
-        .onDisappear { viewModel.stop() }
     }
 
     private var calendarCard: some View {

@@ -365,12 +365,15 @@ final class PluginHostComponentSupportTests: XCTestCase {
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
         let host = makeHost(plugins: [componentPanelPlugin])
 
+        XCTAssertFalse(host.isComponentViewCached(for: "component"))
+
         let first = host.componentViewItem(for: "component", dismiss: {})
         let second = host.componentViewItem(for: "component", dismiss: {})
 
         XCTAssertEqual(first.id, "component")
         XCTAssertEqual(second.id, "component")
         XCTAssertEqual(componentPanelPlugin.makeViewCallCount, 1)
+        XCTAssertTrue(host.isComponentViewCached(for: "component"))
     }
 
     func testDiscardComponentViewsReleasesCachedComponentContent() {
@@ -388,13 +391,61 @@ final class PluginHostComponentSupportTests: XCTestCase {
         XCTAssertEqual(second.makeViewCallCount, 2)
     }
 
-    func testComponentContextCarriesPanelVisibility() {
+    func testComponentContextUsesVisiblePresentationForCachedViews() {
         let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
         let host = makeHost(plugins: [componentPanelPlugin])
 
-        _ = host.componentViewItem(for: "component", dismiss: {}, isPanelVisible: false)
+        _ = host.componentViewItem(for: "component", dismiss: {})
 
-        XCTAssertEqual(componentPanelPlugin.receivedPanelVisibilityValues, [false])
+        XCTAssertEqual(componentPanelPlugin.receivedPanelVisibilityValues, [true])
+    }
+
+    func testPrewarmingComponentViewsBuildsStableVisiblePresentationOnce() {
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
+
+        host.prewarmComponentViews(dismiss: {})
+        _ = host.componentViewItem(for: "component", dismiss: {})
+
+        XCTAssertEqual(componentPanelPlugin.makeViewCallCount, 1)
+        XCTAssertEqual(componentPanelPlugin.receivedPanelVisibilityValues, [true])
+        XCTAssertTrue(host.isComponentViewCached(for: "component"))
+    }
+
+    func testComponentSurfaceLifecycleEventsAreSentWhenPanelVisibilityChanges() {
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let host = makeHost(plugins: [componentPanelPlugin])
+
+        host.setPanelSurface(.component, visible: true)
+        host.setPanelSurface(.component, visible: true)
+        host.setPanelSurface(.component, visible: false)
+        host.setPanelSurface(.component, visible: false)
+
+        XCTAssertEqual(componentPanelPlugin.surfaceEvents, [
+            .visible(.component),
+            .hidden(.component)
+        ])
+    }
+
+    func testComponentSurfaceLifecycleHidesPluginWhenFeatureIsHidden() {
+        let componentPanelPlugin = MockComponentPanelPlugin(id: "component")
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let host = PluginHost(
+            plugins: [componentPanelPlugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager()
+        )
+
+        host.setPanelSurface(.component, visible: true)
+        host.setFeatureVisibility(false, for: "component")
+
+        XCTAssertEqual(componentPanelPlugin.surfaceEvents, [
+            .visible(.component),
+            .hidden(.component)
+        ])
+        XCTAssertTrue(host.componentItems.isEmpty)
     }
 
     func testPrimaryPanelPluginAppearsOnlyInPanelItems() {
@@ -573,7 +624,12 @@ private final class MockDisplayConfigurationObserver: DisplayConfigurationObserv
 }
 
 @MainActor
-private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel {
+private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+    enum SurfaceEvent: Equatable {
+        case visible(PluginPanelSurface)
+        case hidden(PluginPanelSurface)
+    }
+
     let metadata: PluginMetadata
     let descriptor: PluginComponentDescriptor
     let permissionRequirements: [PluginPermissionRequirement]
@@ -586,6 +642,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
     private let isActive: Bool
     private(set) var makeViewCallCount = 0
     private(set) var receivedPanelVisibilityValues: [Bool] = []
+    private(set) var surfaceEvents: [SurfaceEvent] = []
 
     init(
         id: String,
@@ -627,6 +684,14 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
         makeViewCallCount += 1
         receivedPanelVisibilityValues.append(context.isPanelVisible)
         return AnyView(Text(context.pluginID))
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        surfaceEvents.append(.visible(surface))
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        surfaceEvents.append(.hidden(surface))
     }
 
     func refresh() {}
