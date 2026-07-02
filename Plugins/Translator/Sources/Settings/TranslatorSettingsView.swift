@@ -186,8 +186,8 @@ struct TranslatorSettingsView: View {
     private func providerRow(index: Int) -> some View {
         let profile = profiles[index]
 
-        // 行内的开关与移动/删除按钮各自独立响应，仅名称/模型区域作为选择目标，
-        // 避免把交互控件嵌套进同一个行级 Button 造成点击目标冲突。
+        // The row toggle and move/delete buttons handle their own clicks. Only the name/model area
+        // selects the row, avoiding nested interactive controls inside one row-level Button.
         return HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Toggle("", isOn: binding(for: index, keyPath: \.isEnabled))
                 .labelsHidden()
@@ -367,7 +367,7 @@ struct TranslatorSettingsView: View {
         )
     }
 
-    /// 包装语言选择 binding，在用户改动时清除“已保存”提示，避免未保存改动看起来已保存。
+    /// Wraps a language binding and clears the "saved" message when the user makes unsaved edits.
     private func messageClearing(_ binding: Binding<TranslatorLanguage>) -> Binding<TranslatorLanguage> {
         Binding(
             get: { binding.wrappedValue },

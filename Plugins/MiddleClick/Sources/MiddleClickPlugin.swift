@@ -18,15 +18,15 @@ private struct MiddleClickPluginProvider: PluginProvider {
     }
 }
 
-/// 触控板三指点击模拟鼠标中键插件。
+/// Simulates a mouse middle-click from a trackpad tap with the configured finger count.
 ///
-/// 开启后，在触控板上用三根手指轻点（不是按下），会在当前光标位置发送一次鼠标中键事件。
-/// 常见用途：
-/// - 浏览器中间键点击链接，在后台新标签页打开
-/// - 关闭浏览器标签页
-/// - 终端中粘贴选中文本
+/// When enabled, tapping the trackpad with the configured number of fingers converts the system
+/// click at the current pointer location into a middle-click. Typical uses include:
+/// - Opening browser links in background tabs
+/// - Closing browser tabs
+/// - Pasting selected text in terminal apps
 ///
-/// 需要辅助功能（Accessibility）权限才能向其他应用发送鼠标事件。
+/// Accessibility permission is required to deliver mouse events to other apps.
 @MainActor
 final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing {
 
@@ -100,7 +100,6 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         )
         self.requiredFingerCount = storage.integer(forKey: StorageKey.requiredFingerCount)
         
-        // 如果没有存储的值，默认为 3 指
         if self.requiredFingerCount == 0 {
             self.requiredFingerCount = 3
         }
@@ -228,7 +227,7 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         requiredFingerCount = count
         storage.set(count, forKey: StorageKey.requiredFingerCount)
 
-        // session 持续运行；touchCallback 每帧都会读取最新值
+        // Keep the session running; `touchCallback` reads the latest value every frame.
         session?.requiredFingerCount = count
 
         onStateChange?()
@@ -299,11 +298,9 @@ final class MiddleClickPlugin: MacToolsPlugin, PluginPrimaryPanel, Accessibility
         isAccessibilityGranted = AccessibilityCheck.isTrusted()
 
         if previous && !isAccessibilityGranted {
-            // 权限被撤销：停止 session，清除持久化
             stopSession()
             storage.set(false, forKey: StorageKey.isEnabled)
         } else if !previous && isAccessibilityGranted {
-            // 权限新授予：清除错误，按需恢复 session
             lastErrorMessage = nil
             if storage.bool(forKey: StorageKey.isEnabled) {
                 startSession()

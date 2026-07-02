@@ -103,8 +103,8 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var onReorder: (String, LaunchpadDropTarget) -> Void
     var onMakeFolder: (String, String) -> Void         // (targetAppID, draggedAppID) → new folder
     var onAddToFolder: (String, String) -> Void        // (folderID, draggedAppID)
-    var onRenameFolder: (String) -> Void = { _ in }    // folderID — context menu 重命名 (19/P0a)
-    var onDissolveFolder: (String) -> Void = { _ in }  // folderID — context menu 解散，无确认 (R2)
+    var onRenameFolder: (String) -> Void = { _ in }    // folderID — context-menu rename (19/P0a)
+    var onDissolveFolder: (String) -> Void = { _ in }  // folderID — context-menu dissolve without confirmation (R2)
     var onDragBegan: () -> Void
     var onPageSwipe: (Int) -> Void
     var onPageDrag: (CGFloat, CGFloat, Bool) -> Void   // translationX, pageWidth, ended (empty-space mouse drag)
@@ -113,7 +113,7 @@ struct LaunchpadDragGrid: NSViewRepresentable {
     var allowFolderCreation: Bool = true               // false inside an open folder (no nested folders → never arm a merge)
     /// False while searching: the search list is a read-only flat projection, so a reorder drag
     /// would show make-way/merge cues whose drop is then discarded — don't start one, and drop
-    /// the 移到最前/移到最后 menu items (their handlers no-op outside the layout state).
+    /// the move-to-front and move-to-end menu items (their handlers no-op outside the layout state).
     var allowsCustomOrderActions: Bool = true
     var coordinator: LaunchpadDragCoordinator? = nil   // shared across root pages + the open folder; owns the finger-bound folder-exit handoff
     var folderContextID: String? = nil                 // non-nil only on the open folder's grid → its id, so an ejected app knows its source folder

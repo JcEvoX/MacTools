@@ -62,7 +62,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
             order: 65,
             defaultDescription: localization.string("metadata.description", defaultValue: "为常用应用绑定全局快捷键")
         )
-        // 默认启用；仅当用户明确关闭后才存储 false
+        // Enabled by default; only an explicit user pause stores `false`.
         self.isEnabled = context.storage.object(forKey: "isEnabled") == nil
             ? true
             : context.storage.bool(forKey: "isEnabled")
@@ -88,7 +88,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     var permissionRequirements: [PluginPermissionRequirement] { [] }
     var settingsSections: [PluginSettingsSection] { [] }
-    // 热键由插件自己管理，不使用宿主快捷键系统
+    // Hotkeys are managed by this plugin instead of the host shortcut system.
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     var configuration: PluginConfiguration? {
@@ -152,7 +152,7 @@ final class AppHotkeyPlugin: MacToolsPlugin, PluginPrimaryPanel {
         hotkeyManager.sync(entries: isEnabled ? store.entries : [])
     }
 
-    /// 按下快捷键时：若目标应用在前台则隐藏，否则打开/激活。
+    /// Hides the target app when it is frontmost; otherwise opens or activates it.
     private func launch(entryID: UUID) {
         guard let entry = store.entries.first(where: { $0.id == entryID }),
               let bundleURL = entry.bundleURL

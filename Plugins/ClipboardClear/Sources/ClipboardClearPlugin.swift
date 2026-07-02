@@ -19,7 +19,6 @@ private struct ClipboardClearPluginProvider: PluginProvider {
     }
 }
 
-/// 剪贴板清空插件
 @MainActor
 final class ClipboardClearPlugin: MacToolsPlugin, PluginPrimaryPanel {
     static let pluginID = "clipboard-clear"

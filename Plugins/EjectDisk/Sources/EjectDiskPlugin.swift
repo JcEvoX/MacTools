@@ -75,12 +75,10 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             self.onStateChange?()
         }
         
-        // 设置磁盘挂载/卸载事件监听
         setupVolumeMountObserver()
     }
     
     private func setupVolumeMountObserver() {
-        // 如果已经设置了监听，就不再重复设置
         guard volumeMountObservers.isEmpty else { return }
         
         let workspace = NSWorkspace.shared
@@ -178,7 +176,6 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
         let contents = try fileManager.contentsOfDirectory(atPath: volumesPath)
         
         return contents.filter { name in
-            // 排除系统卷
             if name == "Macintosh HD" || name.hasPrefix(".") {
                 return false
             }
@@ -187,7 +184,6 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             var isDir: ObjCBool = false
             let exists = fileManager.fileExists(atPath: volumePath, isDirectory: &isDir)
             
-            // 必须是目录
             return exists && isDir.boolValue
         }
     }
@@ -269,7 +265,6 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginPrimaryPanel {
             }
         }
         
-        // 如果有错误，抛出异常
         if !errorMessages.isEmpty {
             let message = localization.format(
                 "error.partialFailureFormat",

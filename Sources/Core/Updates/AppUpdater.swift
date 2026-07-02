@@ -97,8 +97,8 @@ final class AppUpdater: NSObject, ObservableObject, AppUpdating {
         probeContinuation.resume(returning: result)
     }
 
-    /// Sparkle 在"未找到更新"时会以 SUNoUpdateError（code 1001）通知委托，
-    /// 这不是真实失败，应当作"已是最新版本"处理。
+    /// Sparkle reports "no update found" to its delegate as `SUNoUpdateError` (code 1001).
+    /// Treat it as "already up to date" rather than a real failure.
     private func isNoUpdateError(_ error: Error) -> Bool {
         (error as NSError).code == 1001
     }

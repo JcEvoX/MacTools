@@ -20,8 +20,9 @@ struct SimulatedCopySelectedTextCapture: SelectedTextCapturing {
             )
         }
 
-        // 触发快捷键（如 ⌥D）时用户可能仍按住修饰键，若此时注入 ⌘C，
-        // 物理修饰键会与注入事件叠加（如变成 ⌘⌥C）导致复制失效。先等待修饰键释放。
+        // When a shortcut such as Option-D triggers capture, the user may still be holding modifiers.
+        // Injecting Command-C immediately would combine physical and synthetic modifiers (for example,
+        // Command-Option-C) and fail to copy, so wait until the modifiers are released.
         await waitForModifierKeysToClear()
 
         let pasteboard = NSPasteboard.general

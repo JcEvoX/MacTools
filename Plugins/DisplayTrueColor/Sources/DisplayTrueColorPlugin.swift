@@ -19,7 +19,7 @@ private struct DisplayTrueColorPluginProvider: PluginProvider {
     }
 }
 
-/// 通过 CoreBrightness 私有框架的 CBAdaptationClient 控制原彩显示（True Tone）。
+/// Controls True Tone through CoreBrightness's private `CBAdaptationClient`.
 @MainActor
 final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel {
     let metadata: PluginMetadata

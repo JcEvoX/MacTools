@@ -72,9 +72,9 @@ final class GlobalShortcutManager {
             )
         ]
 
-        // 使用事件分发目标注册/监听热键（与 Magnet、MASShortcut 等一致）。
-        // 在本 App 的运行循环下，全局热键事件不会路由到 GetApplicationEventTarget()，
-        // 会导致热键虽注册成功却从不触发回调。
+        // Register/listen on the event dispatcher target, matching Magnet and MASShortcut. In this
+        // app's run loop, global hotkey events are not routed to `GetApplicationEventTarget()`, so
+        // hotkeys can register successfully but never trigger callbacks.
         _ = eventTypes.withUnsafeBufferPointer { buffer in
             InstallEventHandler(
                 GetEventDispatcherTarget(),

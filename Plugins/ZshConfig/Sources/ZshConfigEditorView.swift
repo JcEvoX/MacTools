@@ -376,7 +376,6 @@ struct ZshConfigEditorView: View {
 
     private var snippetSection: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            // 插入目标提示
             HStack(spacing: 6) {
                 Image(systemName: "arrow.right.circle")
                     .font(PluginSettingsTheme.Typography.statusBadge)
@@ -402,7 +401,6 @@ struct ZshConfigEditorView: View {
             .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
             .pluginSettingsCardBackground(.recessed)
 
-            // 片段列表（手风琴：点击行后在该行下方内联展开）
             VStack(spacing: 0) {
                 ForEach(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                     VStack(spacing: 0) {
@@ -542,7 +540,6 @@ struct ZshConfigEditorView: View {
                 ))
                     .font(PluginSettingsTheme.Typography.rowDescription)
                 if store.selectedType == .zshrc || store.selectedType == .zshenv {
-                    // 命令代码块：左侧 terminal 图标 + 命令文本（可选中），右侧内联图标执行按钮
                     HStack(spacing: 8) {
                         Image(systemName: "terminal")
                             .font(.system(size: 10))
@@ -602,7 +599,6 @@ struct ZshConfigEditorView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .pluginSettingsCardBackground(.recessed)
         .onAppear {
-            // 每次 banner 重新出现（新一次保存后）立刻重置执行状态
             sourceResult = nil
         }
     }
@@ -657,7 +653,6 @@ struct ZshConfigEditorView: View {
                 isRunningSource = false
                 sourceResult = succeeded
             }
-            // 3 秒后自动恢复为「执行」图标；若期间已触发新一次执行则跳过
             try? await Task.sleep(for: .seconds(3))
             guard sourceResultToken == token else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -693,7 +688,6 @@ struct ZshConfigEditorView: View {
         withAnimation(.easeInOut(duration: 0.15)) {
             activeSnippet = nil
             snippetInput = ""
-            // 插入后自动跳到编辑器 tab，让用户看到刚插入的内容
             contentTab = .editor
         }
     }

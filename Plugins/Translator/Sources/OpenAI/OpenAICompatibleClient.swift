@@ -57,7 +57,7 @@ struct OpenAICompatibleClient: Sendable {
         } catch let error as OpenAICompatibleClientError {
             throw error
         } catch {
-            // 仅记录传输层错误类别，不记录请求头、API Key 或响应体。
+            // Log only the transport-level error category; never log headers, API keys, or bodies.
             TranslatorLog.provider.error("translation request transport error")
             throw OpenAICompatibleClientError.requestFailed
         }

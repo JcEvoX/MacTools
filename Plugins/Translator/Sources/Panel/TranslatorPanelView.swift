@@ -6,8 +6,8 @@ final class TranslatorPanelModel: ObservableObject {
     @Published var snapshot: TranslatorPanelSnapshot = .idle
 }
 
-/// 长期承载 SwiftUI 视图树，仅在 `model.snapshot` 变化时由 SwiftUI 差量更新，
-/// 避免每次快照都重建 NSHostingView 而丢失滚动位置与文本选择。
+/// Keeps the SwiftUI view tree alive and lets SwiftUI diff updates when `model.snapshot` changes.
+/// This avoids rebuilding the NSHostingView for every snapshot and losing scroll position or text selection.
 struct TranslatorPanelHostView: View {
     @ObservedObject var model: TranslatorPanelModel
     let localization: PluginLocalization

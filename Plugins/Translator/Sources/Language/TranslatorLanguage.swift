@@ -74,7 +74,7 @@ enum TranslatorLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
         }
     }
 
-    /// 朗读时使用的 BCP-47 语音区域代码，供 `AVSpeechSynthesisVoice(language:)` 选择对应语言的语音。
+    /// BCP-47 voice locale used by `AVSpeechSynthesisVoice(language:)` for speech playback.
     var speechLanguageCode: String {
         switch self {
         case .simplifiedChinese:

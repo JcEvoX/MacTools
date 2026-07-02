@@ -74,7 +74,7 @@ struct LaunchpadGridView: View {
     /// stable identity), so the panel is always rendered while open and zoomed via this flag.
     @State private var folderShown = false
     /// Folder id whose rename field should grab focus + select-all once its panel is mounted —
-    /// set by the context-menu 重命名 and the post-creation auto-open (design §2.5/§2.6).
+    /// set by the context-menu rename action and the post-creation auto-open (design §2.5/§2.6).
     @State private var pendingRenameFocusID: String?
     /// Stable handle into the bridged rename field, so SwiftUI-side hooks (blank tap, folder
     /// close, in-folder drag start) can end the edit session explicitly (design §2.3/§2.7).
@@ -85,7 +85,7 @@ struct LaunchpadGridView: View {
     /// Full ZStack size, captured via a background GeometryReader. The folder pop-out's
     /// `collapsedOffset` needs the whole container (its centre + the grid's chrome offset),
     /// not the post-chrome grid viewport `pagedGrid` measures. `.zero` until the first layout
-    /// pass — the collapsed-offset fallback (design «动画计划» 兜底) catches that frame.
+    /// pass; the collapsed-offset fallback from the animation design catches that frame.
     @State private var containerSize: CGSize = .zero
     /// Shared chrome constants (search bar, paddings, page-dot reserve) — single-sourced
     /// in `LaunchpadLayoutMath.Chrome` so the settings preview can't drift (design §1.1).
@@ -227,7 +227,7 @@ struct LaunchpadGridView: View {
                     .animation(folderShown ? folderOpenAnimation : folderCloseAnimation, value: folderShown)
 
                 // iOS-style pop-out: the panel grows FROM the opened folder's grid cell, not from
-                // the ZStack centre (design 2026-06-13 «动画计划»). `collapsedOffset` slides the
+                // the ZStack centre (animation design 2026-06-13). `collapsedOffset` slides the
                 // (centred) panel onto that cell and `collapsedScale` shrinks it to a dot; opening
                 // returns to `.zero` / `1`. offset + scale + opacity share ONE `.animation(value:
                 // folderShown)` so the three never split into off-beat segments. No `.transition`
@@ -806,11 +806,11 @@ struct LaunchpadGridView: View {
     private var folderCloseAnimation: Animation { .spring(response: 0.32, dampingFraction: 0.92) }
 
     /// Collapsed scale of the folder panel — small enough to read as "from the cell" (~a folder
-    /// thumbnail), not the historical 0.55 centre-zoom (design 2026-06-13 «动画计划»).
+    /// thumbnail), not the historical 0.55 centre-zoom (animation design 2026-06-13).
     private let collapsedScale: CGFloat = 0.18
 
     /// Offset that anchors the collapsed (closed) folder panel onto its grid cell, so it grows
-    /// FROM there (design 2026-06-13 «动画计划»). Pure SwiftUI viewport math via
+    /// FROM there (animation design 2026-06-13). Pure SwiftUI viewport math via
     /// `LaunchpadLayoutMath.folderCollapsedOffset` — no AppKit `convert`.
     ///
     /// Fallbacks (hard requirement — never sling the panel off-screen or compute on a half-laid-out

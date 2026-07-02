@@ -124,7 +124,7 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
                 ),
                 actionID: ActionID.toggle,
                 scope: .global,
-                defaultBinding: nil,        // v1 决定：不抢占系统/用户已有热键
+                defaultBinding: nil,        // v1: do not claim system or user hotkeys by default.
                 isRequired: false
             )
         ]
@@ -147,7 +147,8 @@ final class LaunchpadPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func activate(context: PluginRuntimeContext) {
-        // Resume after a pause (插件隐藏/停用后重新启用): deactivate stopped the cursor poll but
+        // Resume after a pause, such as re-enabling the plugin after hiding or disabling it:
+        // `deactivate` stopped the cursor poll but
         // the corner preference kept its value, so the `$hotCorner` sink (fires on CHANGE) never
         // re-arms it — re-apply explicitly here.
         hotCornerMonitor.update(corner: preferences.hotCorner)

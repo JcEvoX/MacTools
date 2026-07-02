@@ -17,7 +17,8 @@ final class DropZoneViewModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .waiting
 
-    /// drop 已被接受但 URL 异步加载还未完成时为 true，防止 dismissIfIdle 提前关闭
+    /// True after a drop is accepted but before the async URL load finishes.
+    /// Prevents `dismissIfIdle` from closing the panel too early.
     private var isDropPending = false
 
     private let localization: PluginLocalization
@@ -165,8 +166,9 @@ struct FixDropZoneView: View {
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        // 在异步 URL 加载完成前先标记 pending，防止 mouseUp 监听器误判为空闲并关闭面板
-        // SwiftUI drop 回调在主线程触发，可安全使用 assumeIsolated
+        // Mark pending before the async URL load finishes so the mouseUp monitor does not
+        // misclassify the panel as idle and close it. SwiftUI invokes this drop callback
+        // on the main thread, so `assumeIsolated` is safe here.
         MainActor.assumeIsolated { viewModel.beginDrop() }
         _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
             guard
@@ -213,15 +215,15 @@ final class FixDamagedAppDropZonePanel: NSPanel {
         hasShadow = true
         isMovableByWindowBackground = true
 
-        // NSVisualEffectView 是磨砂玻璃效果的正确载体：
-        // .behindWindow 混合模式 + maskImage 圆角遮罩（比 layer.cornerRadius 更可靠）。
+        // NSVisualEffectView is the correct host for the glass effect. `.behindWindow` plus a
+        // rounded `maskImage` is more reliable than `layer.cornerRadius` for this borderless panel.
         let effectView = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
         effectView.material = .popover
         effectView.blendingMode = .behindWindow
         effectView.state = .active
         effectView.maskImage = Self.makeRoundedMaskImage(size: size, cornerRadius: 20)
 
-        // SwiftUI 层只负责边框和内容，背景透明叠在 effectView 上方。
+        // The SwiftUI layer draws only the border and content over the transparent effect view.
         let hostingView = NSHostingView(rootView: FixDropZoneView(
             viewModel: viewModel,
             localization: localization
@@ -238,7 +240,7 @@ final class FixDamagedAppDropZonePanel: NSPanel {
         viewModel.dismissIfIdle()
     }
 
-    /// NSVisualEffectView.maskImage 专用：黑色填充圆角矩形，alpha 通道控制可见区域。
+    /// Builds an `NSVisualEffectView.maskImage`: a black rounded rectangle whose alpha controls visibility.
     private static func makeRoundedMaskImage(size: NSSize, cornerRadius: CGFloat) -> NSImage {
         let image = NSImage(size: size, flipped: false) { rect in
             NSColor.black.setFill()

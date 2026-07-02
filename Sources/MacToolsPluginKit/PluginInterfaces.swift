@@ -135,25 +135,25 @@ public protocol DisplayTopologyRefreshing {
     func refreshDisplayTopology()
 }
 
-/// 可选协议——仅需要浮动窗口锚点的插件才声明遵从。
-/// 不修改 `MacToolsPlugin` witness table，对已安装旧插件无影响。
+/// Optional protocol for plugins that need a floating-window anchor.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
 public protocol DropZoneAnchorProviding: AnyObject {
-    /// 宿主注入：返回状态栏图标按钮在屏幕坐标系中的 frame。
+    /// Host-injected provider returning the status-item button frame in screen coordinates.
     var anchorRectProvider: (() -> NSRect?)? { get set }
 }
 
-/// 可选协议——需要保护宿主菜单栏状态项位置的插件才声明遵从。
+/// Optional protocol for plugins that need to protect the host menu-bar status-item position.
 @MainActor
 public protocol MenuBarHostStatusItemRecovering: AnyObject {
     var hostStatusItemFrameProvider: (() -> NSRect?)? { get set }
     var resetHostStatusItemPosition: (() -> Void)? { get set }
 }
 
-/// 可选协议——需要从自定义 UI（如独立浮窗）主动打开本插件设置页的插件才声明遵从。
-/// 不修改 `MacToolsPlugin` witness table，对已安装旧插件无影响。
+/// Optional protocol for plugins that need to open their settings page from custom UI, such as a floating panel.
+/// Does not change the `MacToolsPlugin` witness table, so installed legacy plugins are unaffected.
 @MainActor
 public protocol PluginConfigurationPresenting: AnyObject {
-    /// 宿主注入：请求展示当前插件的设置页。
+    /// Host-injected callback requesting presentation of this plugin's settings page.
     var requestConfigurationPresentation: (() -> Void)? { get set }
 }

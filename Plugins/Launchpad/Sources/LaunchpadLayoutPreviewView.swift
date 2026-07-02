@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
-/// 排列缩略图预览 (design §4.2): the first row of the settings "外观" group. Pure SwiftUI
+/// Layout thumbnail preview (design §4.2): the first row of the settings appearance group. Pure SwiftUI
 /// over `LaunchpadLayoutPreviewModel` — all geometry comes from the model (which runs the
 /// SAME `LaunchpadLayoutMath` pipeline as the live overlay), this view only draws.
 ///
@@ -72,8 +72,8 @@ struct LaunchpadLayoutPreviewView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .frame(height: Self.canvasHeight)
-            // Caption carries the A4-clamp signal: "N 列 × M 行 · 每页 K 个" is how a
-            // clamped fixed-column setting becomes visible (design §4.2).
+            // Caption carries the A4-clamp signal: the localized "columns x rows, items per page"
+            // text is how a clamped fixed-column setting becomes visible (design §4.2).
             Text(localization.format(
                 "settings.appearance.preview.caption",
                 defaultValue: "%1$d 列 × %2$d 行 · 每页 %3$d 个",

@@ -33,8 +33,8 @@ protocol DisplaySystemSettingsLauncher {
 
 @MainActor
 struct WorkspaceDisplaySystemSettingsLauncher: DisplaySystemSettingsLauncher {
-    // 直接打开「系统设置 → 显示器」，对 Ventura+ 的 System Settings 与
-    // 旧版 System Preferences 都有效。
+    // Opens System Settings > Displays. The URL works for Ventura+ System Settings and the
+    // legacy System Preferences app.
     private static let systemDisplaySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.displays")!
 
     @discardableResult

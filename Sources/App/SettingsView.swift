@@ -664,7 +664,6 @@ private struct PluginConfigurationDetailPane: View {
         Group {
             if let item {
                 if item.prefersFullHeight {
-                    // 全高度布局：header 固定在顶部，自定义视图填满剩余空间
                     VStack(alignment: .leading, spacing: 0) {
                         PluginConfigurationHeader(item: item)
                             .padding(PluginSettingsTheme.Spacing.pagePadding)

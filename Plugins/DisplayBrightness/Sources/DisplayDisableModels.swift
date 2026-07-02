@@ -107,8 +107,9 @@ struct DisplayDisableRecoverySnapshot: Codable, Equatable {
     let modelNumber: UInt32?
     let serialNumber: UInt32?
     let survivorDisplayIDs: [CGDirectDisplayID]
-    // 外接 survivor 的稳定身份（EDID：vendor/model/serial）。CGDirectDisplayID 在睡眠/唤醒后
-    // 可能变号，恢复判定优先按身份匹配、ID 兜底。可选以兼容升级前已持久化的旧快照。
+    // Stable EDID identity for each external survivor. CGDirectDisplayID can change after sleep/wake,
+    // so restore decisions prefer identity matching and fall back to IDs. Optional for snapshots
+    // persisted before this field existed.
     let survivorIdentities: [DisplaySurvivorIdentity]?
     let originalMainDisplayID: CGDirectDisplayID?
 

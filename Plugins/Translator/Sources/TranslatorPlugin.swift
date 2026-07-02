@@ -419,7 +419,8 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         }
 
         do {
-            // 保存前先算出被移除的 profile（旧 providerProfiles 此时仍为持久化中的值）。
+            // Compute removed profiles before saving because `providerProfiles` still reflects
+            // the persisted state at this point.
             let retainedProfileIDs = Set(profiles.map(\.id))
             let removedProfileIDs = providerProfiles
                 .map(\.id)
@@ -453,7 +454,7 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
                 }
             }
 
-            // 清理已删除 profile 残留的 Keychain 凭据与缓存。
+            // Remove stale Keychain credentials and caches for deleted profiles.
             for removedID in removedProfileIDs {
                 try secretStore.deleteAPIKey(forProfileID: removedID)
                 cachedAPIKeys.removeValue(forKey: removedID)
@@ -534,8 +535,9 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
     }
 
     private func resolvedTranslationProviders() -> [ResolvedTranslationProvider] {
-        // 在解析前捕获状态：loadAPIKey 会通过 updateLegacyAPIKeyCacheIfNeeded 提前改写 apiKeyState，
-        // 故比较基准须取解析开始前的值，否则会漏发状态变化通知。
+        // Capture state before resolution: `loadAPIKey` may update `apiKeyState` early through
+        // `updateLegacyAPIKeyCacheIfNeeded`. Compare against the pre-resolution value so state
+        // change notifications are not missed.
         let previousState = apiKeyState
         let resolved = providerProfiles.filter(\.isEnabled).map { profile -> ResolvedTranslationProvider in
             if let validationError = profile.validationError {
@@ -581,8 +583,9 @@ final class TranslatorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginConfigur
         return resolved
     }
 
-    /// 在解析完所有启用 profile 后聚合整体密钥状态：只要存在一个可用 provider 即视为可用，
-    /// 避免单个缺失密钥的 profile 把整体状态拉成 missing。
+    /// Aggregates the overall API-key state after resolving all enabled profiles.
+    /// A single usable provider counts as present so one profile with a missing key does not make
+    /// the whole plugin look missing.
     private func updateAPIKeyState(
         forResolvedProviders resolved: [ResolvedTranslationProvider],
         previousState: APIKeyState

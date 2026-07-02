@@ -171,7 +171,7 @@ final class PluginHost: ObservableObject {
     @Published var selectedSettingsDestination: SettingsDestination = .general
     @Published var selectedFeatureSettingsPane: FeatureSettingsPane = .installed
 
-    /// 由 `MenuBarStatusItemController` 注入，返回状态栏图标按钮的屏幕 frame。
+    /// Injected by `MenuBarStatusItemController`; returns the status-item button frame in screen coordinates.
     var statusItemButtonFrameProvider: (() -> NSRect?)? = nil {
         didSet {
             configureHostStatusItemCallbacks(for: activePlugins)
@@ -559,7 +559,7 @@ final class PluginHost: ObservableObject {
             defaultPluginIDs: defaultPluginIDs
         )
         // For dynamic plugins, pause/resume side effects with visibility.
-        // The plugin stays loaded so it remains visible in the 已安装 list.
+        // The plugin stays loaded so it remains visible in the installed list.
         if dynamicPlugins.contains(where: { $0.metadata.id == pluginID }) {
             if isVisible {
                 dynamicPluginManager?.resumePlugin(pluginID)

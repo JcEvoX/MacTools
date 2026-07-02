@@ -99,7 +99,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        // 「编辑」按钮由宿主拦截并导航到设置页，插件无需额外处理。
+        // The host intercepts the Edit button and navigates to this plugin's settings page.
     }
 
     // MARK: - Configuration

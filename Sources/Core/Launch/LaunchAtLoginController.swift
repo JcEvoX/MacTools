@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import ServiceManagement
 
-/// 抽象出 `SMAppService.mainApp` 的最小协议，便于在测试里替换为可控的假实现。
+/// Minimal abstraction over `SMAppService.mainApp` so tests can inject a controllable fake.
 @MainActor
 protocol LaunchAtLoginServicing: AnyObject {
     var isRegistered: Bool { get }
@@ -31,7 +31,7 @@ final class SystemLaunchAtLoginService: LaunchAtLoginServicing {
     }
 }
 
-/// 维护“开机自启动”开关状态，封装 `SMAppService.mainApp` 的注册与取消注册。
+/// Maintains launch-at-login state and wraps `SMAppService.mainApp` register/unregister calls.
 @MainActor
 final class LaunchAtLoginController: ObservableObject {
     @Published private(set) var isEnabled: Bool
@@ -49,7 +49,7 @@ final class LaunchAtLoginController: ObservableObject {
         self.isEnabled = service.isRegistered
     }
 
-    /// 切换登录项注册状态。状态变化失败时会回滚 `isEnabled` 并设置错误提示。
+    /// Toggles login-item registration and rolls `isEnabled` back to the system state on failure.
     func setEnabled(_ enabled: Bool) {
         let currentStatus = service.isRegistered
         guard currentStatus != enabled else {
@@ -88,7 +88,7 @@ final class LaunchAtLoginController: ObservableObject {
         }
     }
 
-    /// 重新从系统读取注册状态。比如外部 UI（系统设置）改动后可以调用刷新。
+    /// Re-reads registration state from the system, such as after changes in System Settings.
     func refreshStatus() {
         let updated = service.isRegistered
         if isEnabled != updated {

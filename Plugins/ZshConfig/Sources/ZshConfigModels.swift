@@ -3,7 +3,7 @@ import MacToolsPluginKit
 
 // MARK: - ZshConfigFileType
 
-/// zsh 配置文件类型枚举，涵盖用户家目录下所有标准 zsh 配置文件。
+/// Standard zsh configuration files in the user's home directory.
 enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
     case zshrc    = ".zshrc"
     case zshenv   = ".zshenv"
@@ -14,7 +14,7 @@ enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
     var filename: String { rawValue }
 
-    /// 文件用途说明（一句话）
+    /// One-sentence description of the file's role.
     var role: String {
         role()
     }
@@ -34,7 +34,7 @@ enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// 加载时机说明
+    /// Describes when zsh loads this file.
     var whenLoaded: String {
         whenLoaded()
     }
@@ -54,7 +54,7 @@ enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// 推荐用途提示
+    /// Recommended uses for this file.
     var recommendedUse: String {
         recommendedUse()
     }
@@ -74,7 +74,7 @@ enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// 文件的绝对 URL（用户家目录下）
+    /// Absolute URL under the user's home directory.
     var fileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(rawValue)
@@ -83,7 +83,7 @@ enum ZshConfigFileType: String, CaseIterable, Identifiable, Codable {
 
 // MARK: - ZshFileStatus
 
-/// 某个 zsh 配置文件的当前状态快照。
+/// Current status snapshot for a zsh configuration file.
 struct ZshFileStatus {
     let type: ZshConfigFileType
     let exists: Bool
@@ -91,14 +91,13 @@ struct ZshFileStatus {
     let byteSize: Int
     let modifiedDate: Date?
 
-    /// 格式化文件大小字符串
     var formattedSize: String {
         guard exists else { return "" }
         if byteSize < 1024 { return "\(byteSize) B" }
         return String(format: "%.1f KB", Double(byteSize) / 1024)
     }
 
-    /// 通过 FileManager 探测文件实际状态
+    /// Probes the actual file status through FileManager.
     static func probe(_ type: ZshConfigFileType) -> ZshFileStatus {
         let url = type.fileURL
         let fm = FileManager.default
@@ -108,7 +107,6 @@ struct ZshFileStatus {
         if exists {
             isWritable = fm.isWritableFile(atPath: url.path)
         } else {
-            // 文件不存在时检查父目录是否可写（能否创建）
             isWritable = fm.isWritableFile(atPath: url.deletingLastPathComponent().path)
         }
         var byteSize = 0
@@ -130,15 +128,14 @@ struct ZshFileStatus {
 
 // MARK: - ZshSnippet
 
-/// 快速插入片段模板。
+/// Quick-insert snippet template.
 struct ZshSnippet: Identifiable, Sendable {
     let id: String
     let icon: String
     let title: String
     let description: String
-    /// 输入框占位文字提示
     let placeholder: String
-    /// 根据用户输入生成待插入的文本
+    /// Builds the text to insert from user input.
     let buildContent: @Sendable (String) -> String
 
     static let all: [ZshSnippet] = localizedSnippets()
@@ -223,7 +220,6 @@ struct ZshSnippet: Identifiable, Sendable {
             buildContent: { input in
                 let cmd = input.trimmingCharacters(in: .whitespaces)
                 guard !cmd.isEmpty else { return "eval \"$(your-tool init zsh)\"" }
-                // 如果输入已包含 $(...) 或 backtick，直接用 eval
                 if cmd.hasPrefix("$(") || cmd.hasPrefix("`") {
                     return "eval \"\(cmd)\""
                 }

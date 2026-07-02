@@ -43,8 +43,9 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
 
         let displays = service.listDisplays()
         if store.snapshot != nil {
-            // 重新初始化（App 重启、插件热重载/重建）一律按 survivor 是否还在线来决定：
-            // 外接屏还在就保持禁用，外接屏已断开才恢复内建屏；不因“非本会话禁用”而无条件恢复。
+            // On reinitialization (app restart, plugin reload, or plugin rebuild), keep the
+            // built-in display disabled while a survivor is still online. Restore only after
+            // every external survivor is gone, not merely because this session did not disable it.
             reconcileStoredSnapshot(displays: displays)
             return
         }
@@ -267,8 +268,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             return
         }
 
-        // 只要原外接 survivor 还在线就保持禁用；全部消失（真正断开外接屏）才安全恢复内建屏。
-        // 不再用时间窗去无条件恢复，避免外接屏息屏/唤醒、改分辨率等良性拓扑事件误触发恢复。
+        // Keep the built-in display disabled while any original external survivor remains online.
+        // Restore only after all survivors disappear, which indicates a real external disconnect.
+        // A time window is not reliable: sleep/wake or resolution changes can otherwise trigger
+        // an unintended restore during benign topology transitions.
         reconcileStoredSnapshot(displays: displays)
     }
 
@@ -317,13 +320,14 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             }
         }
 
-        // 旧快照没有身份信息时退回按 displayID 匹配。
+        // Older snapshots do not contain EDID identity data, so fall back to displayID matching.
         let survivorIDs = Set(snapshot.survivorDisplayIDs)
         return onlineSurvivors.contains { survivorIDs.contains($0.id) }
     }
 
-    // 优先按 EDID 身份（vendor/model/serial）匹配，避免外接屏睡眠/唤醒后 CGDirectDisplayID
-    // 变号被误判为“已断开”。EDID 信息缺失时退回比对 displayID。
+    // Prefer EDID identity (vendor/model/serial) so a CGDirectDisplayID change after external
+    // display sleep/wake is not misclassified as a disconnect. Fall back to displayID when EDID
+    // data is unavailable.
     private func matchesSurvivor(
         identity: DisplaySurvivorIdentity,
         display: DisplayDisableDisplay

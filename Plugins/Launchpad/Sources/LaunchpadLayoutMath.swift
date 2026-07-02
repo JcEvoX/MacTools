@@ -202,7 +202,7 @@ enum LaunchpadLayoutMath {
 
     /// Offset (relative to a panel CENTRED in the ZStack) that lands the panel's centre on the
     /// opened folder's grid cell — the "from the cell" anchor for the iOS-style pop-out
-    /// (design 2026-06-13 «动画计划»). Pure SwiftUI viewport coordinates, zero AppKit `convert`
+    /// (animation design 2026-06-13). Pure SwiftUI viewport coordinates, zero AppKit `convert`
     /// (the y-flip / scale-transform sampling traps are avoided by never crossing the bridge).
     ///
     /// `cellRect` is the slot frame from `slotRect` — top-left origin, y-down, exactly the SwiftUI

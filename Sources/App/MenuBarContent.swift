@@ -618,7 +618,7 @@ struct MenuBarContent: View {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
         case .dismissBeforeHandling:
-            // 先收 popover 再执行，避免动作打开新窗口时菜单还浮在屏上挡视线。
+            // Dismiss the popover before running actions that may open a new window.
             deferredActionDispatcher.deferActionInvocation(
                 pluginID: item.id,
                 controlID: controlID
@@ -1752,23 +1752,23 @@ private struct PopoverMaterialBackground: NSViewRepresentable {
 
 @MainActor
 private final class SecondaryPanelController: ObservableObject {
-    // 侧栏窗口必须保持与 MenuBarExtra popover 的 *兄弟* 关系，而不是 child window。
+    // The secondary panel must remain a sibling of the MenuBarExtra popover, not a child window.
     //
-    // 背景：`NSWindow.addChildWindow(_:, ordered:)` 会把父子窗口的 key-status 绑成
-    // 同一个 focus group，导致父窗口在用户点击外部时收不到 `didResignKeyNotification`。
-    // 而 `MenuBarExtra(.window)` 的 dismiss 流程（由 SwiftUI 私有的
-    // `WindowMenuBarExtraBehavior` 实现）正是监听 popover 的 `didResignKey` 才触发
-    // 收起。所以一旦把本侧栏以 child window 形式挂上去，popover 永远不会自己关。
+    // Background: `NSWindow.addChildWindow(_:, ordered:)` binds parent and child key status into the
+    // same focus group, so the parent window does not receive `didResignKeyNotification` when the
+    // user clicks outside. `MenuBarExtra(.window)` dismissal, implemented by SwiftUI's private
+    // `WindowMenuBarExtraBehavior`, relies on the popover's `didResignKey` notification. Once this
+    // panel is attached as a child window, the popover never closes itself.
     //
-    // 解决：改为独立（sibling）NSPanel，不调用 `addChildWindow`。位置由
-    // `anchorRect` 直接算出；level 调到 `.popUpMenu` 以保证 Z 序高于 popover；
-    // 生命周期由 SwiftUI 视图的 `.onDisappear` → `hide()` 级联清理。
+    // Solution: keep it as an independent sibling NSPanel and never call `addChildWindow`. Position
+    // is computed directly from `anchorRect`; the level is raised above the popover; lifecycle
+    // cleanup is driven by the SwiftUI view's `.onDisappear` cascading to `hide()`.
     //
-    // 参考：
-    // - MenuBarExtraAccess 源码（对 MenuBarExtraWindow 做 didResignKey 观察）
+    // References:
+    // - MenuBarExtraAccess source, which observes `didResignKey` on `MenuBarExtraWindow`
     //   https://github.com/orchetect/MenuBarExtraAccess
-    // - Apple Feedback FB11984872（无法程序化关闭 window-style MenuBarExtra）
-    // - CocoaDev 「HowCanChildWindowBeKey」https://cocoadev.github.io/HowCanChildWindowBeKey/
+    // - Apple Feedback FB11984872: window-style MenuBarExtra cannot be closed programmatically
+    // - CocoaDev "HowCanChildWindowBeKey": https://cocoadev.github.io/HowCanChildWindowBeKey/
 
     private weak var hostWindow: NSWindow?
     private var panelWindow: SecondaryPanelWindow?
@@ -1802,9 +1802,9 @@ private final class SecondaryPanelController: ObservableObject {
         onSliderChange: @escaping (String, Double, PluginPanelAction.SliderPhase) -> Void
     ) {
         guard let hostWindow else { return }
-        // MenuWindowAccessor.updateNSView 会在 .onDisappear 之后仍派发 async 回调，
-        // 可能在 hide() 之后再次触发 show()。popover 被 dismiss 时 hostWindow 的
-        // isVisible 已经变为 false，以此拦截竞态导致的侧栏重新展示。
+        // `MenuWindowAccessor.updateNSView` can still dispatch async callbacks after `.onDisappear`,
+        // which may call `show()` again after `hide()`. When the popover is dismissed, `hostWindow`
+        // is already not visible; use that to block the race from re-showing the panel.
         guard hostWindow.isVisible else { return }
 
         let rootView = AnyView(
@@ -1821,10 +1821,9 @@ private final class SecondaryPanelController: ObservableObject {
         )
 
         let panelWindow = panelWindow ?? makePanel()
-        // 复用同一个 NSHostingView —— 如果每次 show() 都重建 contentView，
-        // 鼠标按下到释放之间命中的 SwiftUI Button 会被整棵销毁，导致点击丢失
-        // （现象：侧栏里点分辨率毫无反应）。保留原视图并就地更新 rootView，
-        // 既保住按钮的 pressed 状态，也保留 hover 追踪。
+        // Reuse one NSHostingView. Rebuilding `contentView` on every `show()` destroys the SwiftUI
+        // Button hit between mouseDown and mouseUp, dropping clicks such as display-resolution
+        // selections. Updating `rootView` in place preserves pressed state and hover tracking.
         let hostingView: NSHostingView<AnyView>
         if let existing = panelHostingView, panelWindow.contentView === existing {
             existing.rootView = rootView
@@ -1847,8 +1846,8 @@ private final class SecondaryPanelController: ObservableObject {
         let frame = CGRect(origin: origin, size: CGSize(width: width, height: height))
 
         panelWindow.setFrame(frame, display: true)
-        // 运行时把 panel level 动态对齐到 hostWindow.level + 1，保证 Z 序高于 popover。
-        // MenuBarExtra popover 的 level 是 SwiftUI 私有实现细节，不能硬编码。
+        // Align the panel level to `hostWindow.level + 1` at runtime so it stays above the popover.
+        // The MenuBarExtra popover level is a private SwiftUI implementation detail.
         panelWindow.level = NSWindow.Level(rawValue: hostWindow.level.rawValue + 1)
         panelWindow.orderFrontRegardless()
         self.panelWindow = panelWindow
@@ -1876,11 +1875,11 @@ private final class SecondaryPanelController: ObservableObject {
         )
         panel.isFloatingPanel = true
         MenuBarPanelWindowRegistry.markSecondaryPanel(panel)
-        // 必须保持为 false：对 LSUIElement 菜单栏应用来说，MenuBarExtra 展开时
-        // 应用常处于非激活态，但菜单本身仍可交互。若开启 hidesOnDeactivate，
-        // 侧栏会在展示后立即隐藏，甚至陷入 isVisible 仍为 true 但实际像素不上屏
-        // 的半死状态。侧栏生命周期统一由 MenuBarContent 的 onDisappear /
-        // syncSecondaryPanelWindow 来驱动 hide()。
+        // Keep this false. For an LSUIElement menu-bar app, the app is often inactive while
+        // MenuBarExtra is open, but the menu remains interactive. If `hidesOnDeactivate` is enabled,
+        // the panel hides immediately after showing, or can end up with `isVisible == true` while no
+        // pixels are on screen. Panel lifetime is driven by MenuBarContent's `onDisappear` and
+        // `syncSecondaryPanelWindow`.
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -1939,11 +1938,11 @@ private struct MenuWindowAccessor: NSViewRepresentable {
         return view
     }
 
-    // 每次重渲染都把窗口回传给上层 ——上层会调用 syncSecondaryPanelWindow()，
-    // 充当侧栏的兜底刷新（屏幕分辨率切换、popover 短暂不可见等场景下，仅靠 onChange
-    // 钩子可能错过一次需要重新 show() 的时机）。
-    // 必须配合 SecondaryPanelController.show() 中的 NSHostingView 复用，否则会
-    // 在 mouseDown→mouseUp 之间反复重建 contentView，导致按钮点击丢失。
+    // Report the window on every re-render. The parent calls `syncSecondaryPanelWindow()`, which is
+    // the fallback refresh for cases where screen-resolution changes or short popover visibility
+    // gaps cause `onChange` hooks to miss a needed `show()`. This must be paired with NSHostingView
+    // reuse in `SecondaryPanelController.show()`; otherwise contentView rebuilds between mouseDown
+    // and mouseUp can drop button clicks.
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
             onWindowChange(nsView.window)
