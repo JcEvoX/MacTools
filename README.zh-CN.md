@@ -65,6 +65,10 @@
 
 > **右键功能：** 可以使用 Option + 左键点击 MacTools 图标触发右键功能。
 
+## 支持语言
+
+MacTools 支持简体中文、繁體中文、English、Español、Français、Русский、Português、Deutsch、日本語、한국어和 العربية。
+
 ## 安装
 
 ```bash

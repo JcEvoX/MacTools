@@ -64,6 +64,10 @@
 
 > **Right-click action:** You can use Option + left-click on the MacTools icon to trigger the right-click action.
 
+## Supported Languages
+
+MacTools supports Simplified Chinese, Traditional Chinese, English, Spanish, French, Russian, Portuguese, German, Japanese, Korean, and Arabic.
+
 ## Install
 
 ```bash
