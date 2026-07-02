@@ -327,6 +327,28 @@ final class DynamicPluginManagerTests: XCTestCase {
         )
     }
 
+    func testResumePluginReactivatesWithPackageScopedContext() throws {
+        let sourceURL = try makePackage(id: "com.example.demo")
+        let store = makeStore()
+        _ = try store.installPackage(from: sourceURL)
+        let plugin = MockDynamicPlugin(id: "com.example.demo")
+        let loader = StubDynamicPluginLoader { records in
+            records.map { DynamicPluginLoadResult(record: $0, plugins: [plugin], errorMessage: nil) }
+        }
+        let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+        _ = manager.loadInstalledPlugins()
+
+        manager.pausePlugin("com.example.demo")
+        manager.resumePlugin("com.example.demo")
+
+        // Resume must re-activate with the package-scoped context (support
+        // directory etc.), not a bare nil-directory PluginRuntimeContext(pluginID:).
+        let expected = store.runtimeContext(for: store.installedRecords().first!)
+        XCTAssertNotNil(expected.supportDirectory)
+        XCTAssertEqual(plugin.activationContexts.last?.supportDirectory, expected.supportDirectory)
+        XCTAssertEqual(plugin.deactivationReasons, [.disabled])
+    }
+
     private func makeStore() -> PluginPackageStore {
         PluginPackageStore(
             rootDirectory: temporaryRoot,
@@ -443,6 +465,7 @@ private final class MockDynamicPlugin: MacToolsPlugin {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     private(set) var deactivationReasons: [PluginDeactivationReason] = []
+    private(set) var activationContexts: [PluginRuntimeContext] = []
 
     init(id: String) {
         self.metadata = PluginMetadata(
@@ -453,6 +476,10 @@ private final class MockDynamicPlugin: MacToolsPlugin {
             order: 1,
             defaultDescription: "Demo"
         )
+    }
+
+    func activate(context: PluginRuntimeContext) {
+        activationContexts.append(context)
     }
 
     func deactivate(reason: PluginDeactivationReason) {
