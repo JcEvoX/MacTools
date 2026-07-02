@@ -3,13 +3,49 @@
   "displayName": "模拟鼠标中键",
   "summary": "触控板轻点模拟鼠标中键",
   "localizedMetadata": {
-    "zh-Hans": {
-      "displayName": "模拟鼠标中键",
-      "summary": "触控板轻点模拟鼠标中键"
+    "ar": {
+      "displayName": "النقر الأوسط",
+      "summary": "تحويل نقرات لوحة التتبع إلى نقرات متوسطة."
+    },
+    "de": {
+      "displayName": "Mittelklick",
+      "summary": "Verwandeln Sie das Tippen auf dem Trackpad in mittlere Klicks."
     },
     "en": {
       "displayName": "Middle Click",
       "summary": "Turn trackpad taps into middle-clicks."
+    },
+    "es": {
+      "displayName": "Clic central",
+      "summary": "Convierte los toques del trackpad en clics centrales."
+    },
+    "fr": {
+      "displayName": "Clic central",
+      "summary": "Transformez les appuis sur le trackpad en clics du milieu."
+    },
+    "ja": {
+      "displayName": "ミドルクリック",
+      "summary": "トラックパッドのタップを中クリックに変えます。"
+    },
+    "ko": {
+      "displayName": "가운데 클릭",
+      "summary": "트랙패드 탭을 중간 클릭으로 전환하세요."
+    },
+    "pt": {
+      "displayName": "Clique do meio",
+      "summary": "Transforme os toques do trackpad em cliques do meio."
+    },
+    "ru": {
+      "displayName": "Средняя кнопка",
+      "summary": "Превратите касания трекпада в щелчки средней кнопкой мыши."
+    },
+    "zh-Hans": {
+      "displayName": "模拟鼠标中键",
+      "summary": "触控板轻点模拟鼠标中键"
+    },
+    "zh-Hant": {
+      "displayName": "模擬滑鼠中鍵",
+      "summary": "觸控板輕點模擬滑鼠中鍵"
     }
   },
   "version": "1.0.9",
