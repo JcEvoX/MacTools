@@ -5,19 +5,24 @@
         <description>Latest release metadata for MacTools.</description>
         <language>zh-CN</language>
         <item>
-            <title>Version 1.0.26</title>
-            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.26</link>
-            <sparkle:version>56</sparkle:version>
-            <sparkle:shortVersionString>1.0.26</sparkle:shortVersionString>
-            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.26 -->
+            <title>Version 1.0.27</title>
+            <link>https://github.com/ggbond268/MacTools/releases/tag/v1.0.27</link>
+            <sparkle:version>57</sparkle:version>
+            <sparkle:shortVersionString>1.0.27</sparkle:shortVersionString>
+            <description sparkle:format="markdown"><![CDATA[<!-- Release notes generated using configuration in .github/release.yml at v1.0.27 -->
+
+## What's Changed
+### Other Changes
+* Fix: 修复 DisplayBrightness 各 backend 的数据竞争（加锁保护 display 与缓存） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/112
+* Fix: LaunchControl 在 macOS 14+ 上正确识别被禁用的启动项（解析 enabled/disabled） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/116
+* Fix: resumePlugin 复用插件原始运行时上下文（修隐藏/显示后资源目录漂移） by @Goldenmonstew in https://github.com/ggbond268/MacTools/pull/117
 
 
-
-**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.25...v1.0.26
+**Full Changelog**: https://github.com/ggbond268/MacTools/compare/v1.0.26...v1.0.27
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/ggbond268/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Wed, 01 Jul 2026 11:57:24 +0000</pubDate>
-            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.26/MacTools.dmg" length="6409157" type="application/octet-stream" sparkle:edSignature="tJh1hYafdzy2WkQY++yX+MfVqNmskkPxlnNv7j60q93RdVbZWX+XId3fg0fmrQ6C2TyiurD+XKV71t+jWhyfCA==" />
+            <pubDate>Thu, 02 Jul 2026 14:14:56 +0000</pubDate>
+            <enclosure url="https://github.com/ggbond268/MacTools/releases/download/v1.0.27/MacTools.dmg" length="6549155" type="application/octet-stream" sparkle:edSignature="EwIeKXXreA6O7aRXNSzt1YT+z5TYWD0UYjYId7AyyVzijkbCx9YnjrvRHGihVGlDnPKr3TV6s8R+RhPlwHuYBw==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
