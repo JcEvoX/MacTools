@@ -48,7 +48,7 @@
       "summary": "快速調節每個顯示器的亮度"
     }
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "DisplayBrightness.bundle",

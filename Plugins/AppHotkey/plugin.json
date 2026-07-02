@@ -48,7 +48,7 @@
       "summary": "為常用應用綁定全局快速鍵，快速打開或切換到前臺"
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AppHotkey.bundle",

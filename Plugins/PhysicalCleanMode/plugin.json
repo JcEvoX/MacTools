@@ -48,7 +48,7 @@
       "summary": "螢幕全黑並臨時禁用鍵盤輸入"
     }
   },
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "PhysicalCleanMode.bundle",

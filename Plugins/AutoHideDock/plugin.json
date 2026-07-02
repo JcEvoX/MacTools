@@ -48,7 +48,7 @@
       "summary": "自動隱藏Dock，提供更乾淨的桌面環境"
     }
   },
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "AutoHideDock.bundle",

@@ -48,7 +48,7 @@
       "summary": "查看日期、節假日和系統行程"
     }
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "Calendar.bundle",

@@ -48,7 +48,7 @@
       "summary": "一鍵立即鎖定螢幕，進入密碼解鎖界面"
     }
   },
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.2",
   "pluginKitVersion": 2,
   "bundleRelativePath": "LockScreen.bundle",
