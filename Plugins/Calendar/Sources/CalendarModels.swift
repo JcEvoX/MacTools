@@ -99,6 +99,7 @@ struct CalendarMonthModelBuilder {
     private let lunarCalendar: Calendar
     private let holidayProvider: CalendarHolidayProvider
     private let localization: PluginLocalization
+    private let showsHolidayBadges: Bool
 
     init(
         calendar: Calendar = CalendarComponentCalendars.gregorianFollowingSystem(),
@@ -112,6 +113,7 @@ struct CalendarMonthModelBuilder {
         lunarCalendar.locale = Locale(identifier: "zh_Hans_CN")
         lunarCalendar.timeZone = calendar.timeZone
         self.lunarCalendar = lunarCalendar
+        self.showsHolidayBadges = Self.shouldShowHolidayBadges(calendar: calendar)
     }
 
     func makeMonth(
@@ -148,7 +150,7 @@ struct CalendarMonthModelBuilder {
             let dayStart = calendar.startOfDay(for: date)
             let components = calendar.dateComponents([.year, .month, .day], from: dayStart)
             let isInDisplayedMonth = calendar.isDate(dayStart, equalTo: displayedMonthStart, toGranularity: .month)
-            let holidayKind = holidayProvider.kind(for: dayStart, calendar: calendar)
+            let holidayKind = showsHolidayBadges ? holidayProvider.kind(for: dayStart, calendar: calendar) : nil
 
             return CalendarDayModel(
                 id: CalendarComponentCalendars.dayID(for: dayStart, calendar: calendar),
@@ -310,5 +312,10 @@ struct CalendarMonthModelBuilder {
         }
 
         return names[day - 1]
+    }
+
+    private static func shouldShowHolidayBadges(calendar: Calendar) -> Bool {
+        let identifier = calendar.locale?.identifier ?? Locale.autoupdatingCurrent.identifier
+        return identifier.lowercased().hasPrefix("zh")
     }
 }

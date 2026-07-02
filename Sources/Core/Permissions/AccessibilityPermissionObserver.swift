@@ -51,7 +51,7 @@ final class AccessibilityPermissionObserver: AccessibilityPermissionObserving {
         let current = AXIsProcessTrusted()
         guard current != lastKnownTrust else { return }
         lastKnownTrust = current
-        logger.info("辅助功能权限状态变化: \(current ? "已授权" : "已撤销", privacy: .public)")
+        logger.info("Accessibility permission changed: \(current ? "trusted" : "revoked", privacy: .public)")
         onPermissionChange?()
     }
 }

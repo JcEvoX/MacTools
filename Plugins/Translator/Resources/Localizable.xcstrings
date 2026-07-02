@@ -2074,6 +2074,40 @@
           }
         }
       }
+    },
+    "ocr.error.emptyResult": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No text was recognized in the screenshot."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图中没有识别到文字。"
+          }
+        }
+      }
+    },
+    "ocr.error.invalidImage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not read the screenshot."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取截图。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

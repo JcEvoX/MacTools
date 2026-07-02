@@ -34,13 +34,25 @@ enum DisplayDisableServiceError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .privateSPIUnavailable:
-            return "当前系统不支持关闭内建显示屏"
+            return DisplayBrightnessLocalization.string(
+                "displayDisable.unsupported",
+                defaultValue: "当前系统不支持关闭内建显示屏"
+            )
         case .beginConfigurationFailed:
-            return "无法开始显示器配置"
+            return DisplayBrightnessLocalization.string(
+                "displayDisable.error.beginConfiguration",
+                defaultValue: "无法开始显示器配置"
+            )
         case .configureDisplayFailed:
-            return "无法切换显示器状态"
+            return DisplayBrightnessLocalization.string(
+                "displayDisable.error.configureDisplay",
+                defaultValue: "无法切换显示器状态"
+            )
         case .completeConfigurationFailed:
-            return "无法提交显示器配置"
+            return DisplayBrightnessLocalization.string(
+                "displayDisable.error.completeConfiguration",
+                defaultValue: "无法提交显示器配置"
+            )
         }
     }
 }

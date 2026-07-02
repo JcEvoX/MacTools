@@ -1421,8 +1421,8 @@ actor SystemStatusSampler: SystemStatusSampling {
         for name: String,
         localizedName: String? = nil,
         interfaceType: String? = nil,
-        wiredDisplayName: String = "有线",
-        genericDisplayName: String = "网络"
+        wiredDisplayName: String = "Ethernet",
+        genericDisplayName: String = "Network"
     ) -> String {
         let rawName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercasedName = rawName.lowercased()
@@ -1594,9 +1594,9 @@ actor SystemStatusSampler: SystemStatusSampling {
         let multiple: String
 
         static let `default` = NetworkInterfaceDisplayNames(
-            wired: "有线",
-            generic: "网络",
-            multiple: "多接口"
+            wired: "Ethernet",
+            generic: "Network",
+            multiple: "Multiple Interfaces"
         )
     }
 

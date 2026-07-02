@@ -86,7 +86,10 @@ struct DisplayDisableSnapshot: Equatable {
         isDisableAllowed: false,
         isRestoreAllowed: false,
         externalDisplayCount: 0,
-        message: "当前系统不支持关闭内建显示屏"
+        message: DisplayBrightnessLocalization.string(
+            "displayDisable.unsupported",
+            defaultValue: "当前系统不支持关闭内建显示屏"
+        )
     )
 }
 

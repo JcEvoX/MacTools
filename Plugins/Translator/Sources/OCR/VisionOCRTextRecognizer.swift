@@ -1,6 +1,9 @@
 import AppKit
 import Foundation
+import MacToolsPluginKit
 import Vision
+
+private final class TranslatorOCRBundleToken {}
 
 @MainActor
 protocol OCRTextRecognizing {
@@ -15,9 +18,15 @@ enum OCRTextRecognitionError: Error, Equatable, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .invalidImage:
-            return "无法读取截图。"
+            return PluginLocalization(bundle: Bundle(for: TranslatorOCRBundleToken.self)).string(
+                "ocr.error.invalidImage",
+                defaultValue: "无法读取截图。"
+            )
         case .emptyResult:
-            return "截图中没有识别到文字。"
+            return PluginLocalization(bundle: Bundle(for: TranslatorOCRBundleToken.self)).string(
+                "ocr.error.emptyResult",
+                defaultValue: "截图中没有识别到文字。"
+            )
         case let .requestFailed(message):
             return message
         }

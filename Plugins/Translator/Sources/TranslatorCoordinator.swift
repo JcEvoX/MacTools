@@ -252,7 +252,7 @@ final class TranslatorCoordinator {
             )
         } catch {
             guard !Task.isCancelled, sessionID == currentSessionID else { return }
-            let panelError = Self.panelError(forOCR: error)
+            let panelError = Self.panelError(forOCR: error, localization: localization)
             setError(
                 panelError,
                 sourceText: nil,
@@ -584,7 +584,7 @@ final class TranslatorCoordinator {
         }
     }
 
-    private static func panelError(forOCR error: Error) -> TranslatorPanelError {
+    private static func panelError(forOCR error: Error, localization: PluginLocalization) -> TranslatorPanelError {
         if let ocrError = error as? OCRTextRecognitionError {
             switch ocrError {
             case .emptyResult:
@@ -592,11 +592,21 @@ final class TranslatorCoordinator {
             case .invalidImage:
                 return .screenshotFailed
             case let .requestFailed(message):
-                return .requestFailed(message)
+                return .requestFailed(userFacingOCRMessage(message, localization: localization))
             }
         }
 
-        return .requestFailed(error.localizedDescription)
+        return .requestFailed(userFacingOCRMessage(error.localizedDescription, localization: localization))
+    }
+
+    private static func userFacingOCRMessage(_ message: String, localization: PluginLocalization) -> String {
+        if message == OCRTextRecognitionError.invalidImage.errorDescription {
+            return localization.string("ocr.error.invalidImage", defaultValue: "无法读取截图。")
+        }
+        if message == OCRTextRecognitionError.emptyResult.errorDescription {
+            return localization.string("ocr.error.emptyResult", defaultValue: "截图中没有识别到文字。")
+        }
+        return message
     }
 
     nonisolated private static func userFacingMessage(

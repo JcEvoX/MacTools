@@ -98,8 +98,8 @@ final class RightClickPlugin: MacToolsPlugin {
                 defaultValue: "选择 Finder 右键菜单显示哪些项，并管理「用应用打开」的应用列表。"
             ),
             prefersFullHeight: false
-        ) { _ in
-            AnyView(RightClickMenuSettingsView())
+        ) { [localization] _ in
+            AnyView(RightClickMenuSettingsView(localization: localization))
         }
     }
 

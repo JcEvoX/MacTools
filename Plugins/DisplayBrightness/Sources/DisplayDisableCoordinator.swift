@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MacToolsPluginKit
 
 @MainActor
 protocol DisplayDisableCoordinating: AnyObject {
@@ -15,24 +16,28 @@ protocol DisplayDisableCoordinating: AnyObject {
 final class DisplayDisableCoordinator: DisplayDisableCoordinating {
     private let service: any DisplayDisableServicing
     private let store: any DisplayDisableStateStoring
+    private let localization: PluginLocalization
     private let verificationSettleDelay: Duration
 
-    private(set) var snapshot: DisplayDisableSnapshot = .unsupported
+    private(set) var snapshot: DisplayDisableSnapshot
 
     init(
         service: any DisplayDisableServicing,
         store: any DisplayDisableStateStoring,
+        localization: PluginLocalization = DisplayBrightnessLocalization.fallback,
         verificationSettleDelay: Duration = .milliseconds(800)
     ) {
         self.service = service
         self.store = store
+        self.localization = localization
         self.verificationSettleDelay = verificationSettleDelay
+        self.snapshot = Self.unsupportedSnapshot(localization: localization)
         refreshSnapshot()
     }
 
     func refreshSnapshot() {
         guard service.isSupported else {
-            snapshot = .unsupported
+            snapshot = Self.unsupportedSnapshot(localization: localization)
             return
         }
 
@@ -54,7 +59,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: false,
                 isRestoreAllowed: store.snapshot != nil,
                 externalDisplayCount: externalSurvivors(in: displays).count,
-                message: "未检测到内建显示屏"
+                message: localization.string(
+                    "displayDisable.message.noBuiltInDisplay",
+                    defaultValue: "未检测到内建显示屏"
+                )
             )
             return
         }
@@ -65,13 +73,18 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             isDisableAllowed: externalCount > 0,
             isRestoreAllowed: store.snapshot != nil,
             externalDisplayCount: externalCount,
-            message: externalCount > 0 ? nil : "连接外接显示器后可关闭内建显示屏"
+            message: externalCount > 0
+                ? nil
+                : localization.string(
+                    "displayDisable.message.needsExternalDisplay",
+                    defaultValue: "连接外接显示器后可关闭内建显示屏"
+                )
         )
     }
 
     func disableBuiltInDisplay() async {
         guard service.isSupported else {
-            snapshot = .unsupported
+            snapshot = Self.unsupportedSnapshot(localization: localization)
             return
         }
 
@@ -82,7 +95,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: false,
                 isRestoreAllowed: store.snapshot != nil,
                 externalDisplayCount: externalSurvivors(in: displays).count,
-                message: "未检测到内建显示屏"
+                message: localization.string(
+                    "displayDisable.message.noBuiltInDisplay",
+                    defaultValue: "未检测到内建显示屏"
+                )
             )
             return
         }
@@ -94,7 +110,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: false,
                 isRestoreAllowed: store.snapshot != nil,
                 externalDisplayCount: 0,
-                message: "连接外接显示器后可关闭内建显示屏"
+                message: localization.string(
+                    "displayDisable.message.needsExternalDisplay",
+                    defaultValue: "连接外接显示器后可关闭内建显示屏"
+                )
             )
             return
         }
@@ -105,7 +124,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: false,
                 isRestoreAllowed: store.snapshot != nil,
                 externalDisplayCount: survivors.count,
-                message: "镜像显示时暂不支持关闭内建显示屏"
+                message: localization.string(
+                    "displayDisable.message.mirrorUnsupported",
+                    defaultValue: "镜像显示时暂不支持关闭内建显示屏"
+                )
             )
             return
         }
@@ -131,7 +153,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: true,
                 isRestoreAllowed: false,
                 externalDisplayCount: survivors.count,
-                message: "关闭内建显示屏失败"
+                message: localization.string(
+                    "displayDisable.message.disableFailed",
+                    defaultValue: "关闭内建显示屏失败"
+                )
             )
             return
         }
@@ -168,7 +193,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             isDisableAllowed: true,
             isRestoreAllowed: true,
             externalDisplayCount: externalSurvivors(in: verifiedDisplays).count,
-            message: "关闭内建显示屏失败，已尝试恢复"
+            message: localization.string(
+                "displayDisable.message.disableFailedRestored",
+                defaultValue: "关闭内建显示屏失败，已尝试恢复"
+            )
         )
     }
 
@@ -200,7 +228,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             isDisableAllowed: false,
             isRestoreAllowed: true,
             externalDisplayCount: externalSurvivors(in: displays).count,
-            message: "恢复内建显示屏失败"
+            message: localization.string(
+                "displayDisable.message.restoreFailed",
+                defaultValue: "恢复内建显示屏失败"
+            )
         )
     }
 
@@ -221,7 +252,10 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
                 isDisableAllowed: false,
                 isRestoreAllowed: false,
                 externalDisplayCount: externalSurvivors(in: displays).count,
-                message: "恢复内建显示屏失败"
+                message: localization.string(
+                    "displayDisable.message.restoreFailed",
+                    defaultValue: "恢复内建显示屏失败"
+                )
             )
         }
     }
@@ -346,5 +380,18 @@ final class DisplayDisableCoordinator: DisplayDisableCoordinating {
             ids.append(visibleBuiltInID)
         }
         return ids
+    }
+
+    private static func unsupportedSnapshot(localization: PluginLocalization) -> DisplayDisableSnapshot {
+        DisplayDisableSnapshot(
+            status: .unsupported,
+            isDisableAllowed: false,
+            isRestoreAllowed: false,
+            externalDisplayCount: 0,
+            message: localization.string(
+                "displayDisable.unsupported",
+                defaultValue: "当前系统不支持关闭内建显示屏"
+            )
+        )
     }
 }

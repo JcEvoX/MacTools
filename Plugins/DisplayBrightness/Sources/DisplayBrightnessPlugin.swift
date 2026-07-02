@@ -163,7 +163,8 @@ final class DisplayBrightnessPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginS
         self.controller = controller ?? DisplayBrightnessController(localization: localization)
         self.displayDisableCoordinator = displayDisableCoordinator ?? DisplayDisableCoordinator(
             service: Self.defaultDisplayDisableService(),
-            store: UserDefaultsDisplayDisableStateStore()
+            store: UserDefaultsDisplayDisableStateStore(),
+            localization: localization
         )
         self.showsDisplayDisableControls = showsDisplayDisableControls
         self.shortcutPreferences = shortcutPreferences ?? DisplayBrightnessShortcutPreferences(

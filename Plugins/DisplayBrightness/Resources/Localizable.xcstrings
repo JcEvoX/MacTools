@@ -476,6 +476,176 @@
           }
         }
       }
+    },
+    "displayDisable.error.beginConfiguration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not begin display configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法开始显示器配置"
+          }
+        }
+      }
+    },
+    "displayDisable.error.completeConfiguration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not apply display configuration"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法提交显示器配置"
+          }
+        }
+      }
+    },
+    "displayDisable.error.configureDisplay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not change display state"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法切换显示器状态"
+          }
+        }
+      }
+    },
+    "displayDisable.message.disableFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not turn off the built-in display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭内建显示屏失败"
+          }
+        }
+      }
+    },
+    "displayDisable.message.disableFailedRestored": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not turn off the built-in display; tried to restore it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭内建显示屏失败，已尝试恢复"
+          }
+        }
+      }
+    },
+    "displayDisable.message.mirrorUnsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turning off the built-in display is not supported while displays are mirrored"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "镜像显示时暂不支持关闭内建显示屏"
+          }
+        }
+      }
+    },
+    "displayDisable.message.needsExternalDisplay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect an external display before turning off the built-in display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接外接显示器后可关闭内建显示屏"
+          }
+        }
+      }
+    },
+    "displayDisable.message.noBuiltInDisplay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No built-in display detected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未检测到内建显示屏"
+          }
+        }
+      }
+    },
+    "displayDisable.message.restoreFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not restore the built-in display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复内建显示屏失败"
+          }
+        }
+      }
+    },
+    "displayDisable.unsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This system does not support turning off the built-in display"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前系统不支持关闭内建显示屏"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

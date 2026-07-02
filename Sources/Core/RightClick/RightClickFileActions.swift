@@ -1,6 +1,25 @@
 import AppKit
 import Foundation
 
+enum RightClickLocalization {
+    static func string(_ key: String, defaultValue: String, bundle: Bundle = .main) -> String {
+        bundle.localizedString(forKey: key, value: defaultValue, table: "RightClick")
+    }
+
+    static func format(
+        _ key: String,
+        defaultValue: String,
+        bundle: Bundle = .main,
+        _ arguments: CVarArg...
+    ) -> String {
+        String(
+            format: string(key, defaultValue: defaultValue, bundle: bundle),
+            locale: Locale.current,
+            arguments: arguments
+        )
+    }
+}
+
 enum RightClickActionError: LocalizedError, Equatable {
     case directoryUnavailable(String)
     case cannotCreateDirectory(String)
@@ -12,17 +31,17 @@ enum RightClickActionError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .directoryUnavailable(path):
-            "文件夹不可用：\(path)"
+            RightClickLocalization.format("error.directoryUnavailable", defaultValue: "文件夹不可用：%@", path)
         case let .cannotCreateDirectory(path):
-            "无法新建文件夹：\(path)"
+            RightClickLocalization.format("error.cannotCreateDirectory", defaultValue: "无法新建文件夹：%@", path)
         case let .cannotCreateFile(path):
-            "无法新建文件：\(path)"
+            RightClickLocalization.format("error.cannotCreateFile", defaultValue: "无法新建文件：%@", path)
         case let .unsupportedFileExtension(ext):
-            "不支持的文件类型：\(ext)"
+            RightClickLocalization.format("error.unsupportedFileExtension", defaultValue: "不支持的文件类型：%@", ext)
         case let .applicationUnavailable(path):
-            "应用不可用：\(path)"
+            RightClickLocalization.format("error.applicationUnavailable", defaultValue: "应用不可用：%@", path)
         case .noValidFiles:
-            "没有可用的文件"
+            RightClickLocalization.string("error.noValidFiles", defaultValue: "没有可用的文件")
         }
     }
 }
@@ -110,13 +129,16 @@ struct RightClickTargetResolver {
 }
 
 struct RightClickFileNamePlanner {
-    static func nextAvailableFolderURL(in directory: URL, baseName: String = "新建文件夹") -> URL {
+    static func nextAvailableFolderURL(
+        in directory: URL,
+        baseName: String = RightClickLocalization.string("file.defaultFolderName", defaultValue: "新建文件夹")
+    ) -> URL {
         nextAvailableURL(in: directory, baseName: baseName, pathExtension: nil)
     }
 
     static func nextAvailableURL(in directory: URL, baseName: String, pathExtension: String?) -> URL {
         let sanitizedBaseName = baseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "未命名"
+            ? RightClickLocalization.string("file.untitledName", defaultValue: "未命名")
             : baseName.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedExtension = pathExtension?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
 
@@ -193,7 +215,7 @@ struct RightClickFileActionService {
         }
         let fileURL = RightClickFileNamePlanner.nextAvailableURL(
             in: directory,
-            baseName: "未命名",
+            baseName: RightClickLocalization.string("file.untitledName", defaultValue: "未命名"),
             pathExtension: fileExtension
         )
         // Defense-in-depth: the resolved file must sit directly inside the target.
