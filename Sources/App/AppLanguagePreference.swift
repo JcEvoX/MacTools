@@ -9,6 +9,7 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
     static let didChangeNotification = Notification.Name("AppLanguagePreferenceDidChange")
 
     private static let appleLanguagesKey = "AppleLanguages"
+    private static let rightClickFinderSyncBundleSuffix = ".right-click.finder-sync"
 
     var id: String { rawValue }
 
@@ -47,6 +48,13 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
         } else {
             userDefaults.removeObject(forKey: Self.appleLanguagesKey)
         }
+
+        if let extensionBundleIdentifier = Self.rightClickFinderSyncBundleIdentifier() {
+            Self.applyAppleLanguagesOverride(
+                appleLanguagesOverride,
+                toBundleIdentifier: extensionBundleIdentifier
+            )
+        }
     }
 
     static func stored(in userDefaults: UserDefaults = .standard) -> AppLanguagePreference {
@@ -62,5 +70,30 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
 
     static func applyStoredPreference(userDefaults: UserDefaults = .standard) {
         stored(in: userDefaults).applyAppleLanguagesOverride(in: userDefaults)
+    }
+
+    private static func rightClickFinderSyncBundleIdentifier(bundle: Bundle = .main) -> String? {
+        guard let bundleIdentifier = bundle.bundleIdentifier else {
+            return nil
+        }
+
+        return bundleIdentifier + rightClickFinderSyncBundleSuffix
+    }
+
+    private static func applyAppleLanguagesOverride(
+        _ appleLanguagesOverride: [String]?,
+        toBundleIdentifier bundleIdentifier: String
+    ) {
+        let key = appleLanguagesKey as CFString
+        let applicationID = bundleIdentifier as CFString
+        let value = appleLanguagesOverride.map { $0 as CFArray }
+        CFPreferencesSetValue(
+            key,
+            value,
+            applicationID,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        )
+        CFPreferencesAppSynchronize(applicationID)
     }
 }

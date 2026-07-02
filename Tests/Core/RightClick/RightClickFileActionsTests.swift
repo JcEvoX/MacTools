@@ -63,6 +63,53 @@ final class RightClickPathFormatterTests: XCTestCase {
     }
 }
 
+final class RightClickLocalizationTests: XCTestCase {
+    func testExplicitEnglishPreferenceUsesEnglishFinderMenuStrings() {
+        XCTAssertEqual(
+            RightClickLocalization.string(
+                "finder.newFolder",
+                defaultValue: "新建文件夹",
+                preferredLanguages: ["en"]
+            ),
+            "New Folder"
+        )
+    }
+
+    func testExplicitChinesePreferenceUsesChineseFinderMenuStrings() {
+        XCTAssertEqual(
+            RightClickLocalization.string(
+                "finder.newFolder",
+                defaultValue: "New Folder",
+                preferredLanguages: ["zh-Hans"]
+            ),
+            "新建文件夹"
+        )
+    }
+
+    func testChineseRegionPreferenceMatchesSimplifiedChineseStrings() {
+        XCTAssertEqual(
+            RightClickLocalization.string(
+                "finder.openInTerminal",
+                defaultValue: "Open in Terminal",
+                preferredLanguages: ["zh-Hans-CN"]
+            ),
+            "在终端打开"
+        )
+    }
+
+    func testFinderSyncPreferenceLookupChecksHostAppBeforeExtensionDomain() {
+        XCTAssertEqual(
+            RightClickLocalization.preferenceBundleIdentifiersForTesting(
+                bundleIdentifier: "cc.ggbond.mactools.dev.right-click.finder-sync"
+            ),
+            [
+                "cc.ggbond.mactools.dev",
+                "cc.ggbond.mactools.dev.right-click.finder-sync"
+            ]
+        )
+    }
+}
+
 final class RightClickFileNamePlannerTests: XCTestCase {
     private var temporaryDirectory: URL!
 
@@ -80,7 +127,14 @@ final class RightClickFileNamePlannerTests: XCTestCase {
     }
 
     func testNextAvailableFolderUsesDefaultNameWhenAvailable() throws {
-        let url = RightClickFileNamePlanner.nextAvailableFolderURL(in: temporaryDirectory)
+        let url = RightClickFileNamePlanner.nextAvailableFolderURL(
+            in: temporaryDirectory,
+            baseName: RightClickLocalization.string(
+                "file.defaultFolderName",
+                defaultValue: "新建文件夹",
+                preferredLanguages: ["zh-Hans"]
+            )
+        )
 
         XCTAssertEqual(url.lastPathComponent, "新建文件夹")
     }
@@ -95,7 +149,14 @@ final class RightClickFileNamePlannerTests: XCTestCase {
             withIntermediateDirectories: false
         )
 
-        let url = RightClickFileNamePlanner.nextAvailableFolderURL(in: temporaryDirectory)
+        let url = RightClickFileNamePlanner.nextAvailableFolderURL(
+            in: temporaryDirectory,
+            baseName: RightClickLocalization.string(
+                "file.defaultFolderName",
+                defaultValue: "新建文件夹",
+                preferredLanguages: ["zh-Hans"]
+            )
+        )
 
         XCTAssertEqual(url.lastPathComponent, "新建文件夹 3")
     }

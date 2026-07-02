@@ -2,22 +2,143 @@ import AppKit
 import Foundation
 
 enum RightClickLocalization {
-    static func string(_ key: String, defaultValue: String, bundle: Bundle = .main) -> String {
-        bundle.localizedString(forKey: key, value: defaultValue, table: "RightClick")
+    private static let appleLanguagesKey = "AppleLanguages"
+    private static let rightClickTable = "RightClick"
+    private static let finderSyncBundleSuffix = ".right-click.finder-sync"
+
+    static func string(
+        _ key: String,
+        defaultValue: String,
+        bundle: Bundle = .main,
+        preferredLanguages: [String]? = nil
+    ) -> String {
+        if let localizedBundle = localizedBundle(in: bundle, preferredLanguages: preferredLanguages) {
+            let localizedValue = localizedBundle.localizedString(forKey: key, value: nil, table: rightClickTable)
+            if localizedValue != key {
+                return localizedValue
+            }
+        }
+
+        return bundle.localizedString(forKey: key, value: defaultValue, table: rightClickTable)
     }
 
     static func format(
         _ key: String,
         defaultValue: String,
         bundle: Bundle = .main,
+        preferredLanguages: [String]? = nil,
         _ arguments: CVarArg...
     ) -> String {
         String(
-            format: string(key, defaultValue: defaultValue, bundle: bundle),
+            format: string(
+                key,
+                defaultValue: defaultValue,
+                bundle: bundle,
+                preferredLanguages: preferredLanguages
+            ),
             locale: Locale.current,
             arguments: arguments
         )
     }
+
+    private static func localizedBundle(
+        in bundle: Bundle,
+        preferredLanguages: [String]? = nil
+    ) -> Bundle? {
+        for language in preferredLanguages ?? effectivePreferredLanguages(for: bundle) {
+            for candidate in candidateLanguageIdentifiers(for: language) {
+                guard
+                    let path = bundle.path(forResource: candidate, ofType: "lproj"),
+                    let localizedBundle = Bundle(path: path)
+                else {
+                    continue
+                }
+
+                return localizedBundle
+            }
+        }
+
+        return nil
+    }
+
+    private static func effectivePreferredLanguages(for bundle: Bundle) -> [String] {
+        for bundleIdentifier in preferenceBundleIdentifiers(for: bundle) {
+            if let appleLanguages = explicitAppleLanguages(forBundleIdentifier: bundleIdentifier) {
+                return appleLanguages
+            }
+        }
+
+        return Locale.preferredLanguages
+    }
+
+    private static func preferenceBundleIdentifiers(for bundle: Bundle) -> [String] {
+        guard let bundleIdentifier = bundle.bundleIdentifier else {
+            return []
+        }
+
+        return preferenceBundleIdentifiers(forBundleIdentifier: bundleIdentifier)
+    }
+
+    private static func preferenceBundleIdentifiers(forBundleIdentifier bundleIdentifier: String) -> [String] {
+        if bundleIdentifier.hasSuffix(finderSyncBundleSuffix) {
+            let hostBundleIdentifier = String(bundleIdentifier.dropLast(finderSyncBundleSuffix.count))
+            return [hostBundleIdentifier, bundleIdentifier]
+        }
+
+        return [bundleIdentifier]
+    }
+
+    private static func explicitAppleLanguages(forBundleIdentifier bundleIdentifier: String) -> [String]? {
+        let applicationID = bundleIdentifier as CFString
+        CFPreferencesAppSynchronize(applicationID)
+        guard
+            let value = CFPreferencesCopyValue(
+                appleLanguagesKey as CFString,
+                applicationID,
+                kCFPreferencesCurrentUser,
+                kCFPreferencesAnyHost
+            ) as? [String],
+            !value.isEmpty
+        else {
+            return nil
+        }
+
+        return value
+    }
+
+    private static func candidateLanguageIdentifiers(for language: String) -> [String] {
+        let normalized = language.replacingOccurrences(of: "_", with: "-")
+        var candidates = [normalized]
+
+        let components = normalized.split(separator: "-").map(String.init)
+        if let languageCode = components.first {
+            if languageCode == "zh" {
+                if components.contains(where: { ["Hant", "HK", "MO", "TW"].contains($0) }) {
+                    candidates.append("zh-Hant")
+                } else {
+                    candidates.append("zh-Hans")
+                }
+            }
+
+            candidates.append(languageCode)
+        }
+
+        var unique: [String] = []
+        for candidate in candidates where !unique.contains(candidate) {
+            unique.append(candidate)
+        }
+        return unique
+    }
+
+    #if DEBUG
+    static func preferenceBundleIdentifiersForTesting(bundleIdentifier: String?) -> [String] {
+        guard let bundleIdentifier else {
+            return []
+        }
+
+        return preferenceBundleIdentifiers(forBundleIdentifier: bundleIdentifier)
+    }
+    #endif
 }
 
 enum RightClickActionError: LocalizedError, Equatable {
