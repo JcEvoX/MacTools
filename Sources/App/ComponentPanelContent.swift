@@ -228,17 +228,10 @@ enum ComponentGridPlacementEngine {
 struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
     let panelHeight: CGFloat
-    let onPreferredHeightChange: () -> Void
     let onDismiss: () -> Void
 
     private var placements: [ComponentGridPlacement] {
         ComponentGridPlacementEngine.placements(for: pluginHost.componentItems)
-    }
-
-    private var componentLayoutSignature: String {
-        pluginHost.componentItems
-            .map { "\($0.id):\($0.span.width)x\($0.span.height)" }
-            .joined(separator: "|")
     }
 
     var body: some View {
@@ -268,12 +261,6 @@ struct ComponentPanelContent: View {
         .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
         .padding(.bottom, ComponentPanelLayout.bottomPadding)
         .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
-        .onAppear {
-            onPreferredHeightChange()
-        }
-        .onChange(of: componentLayoutSignature) {
-            onPreferredHeightChange()
-        }
     }
 
     private var emptyState: some View {

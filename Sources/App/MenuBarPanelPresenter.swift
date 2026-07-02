@@ -38,6 +38,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let panelModel: MenuBarUnifiedPanelModel
     private let hostingController: NSHostingController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
+    private var heightRefreshCancellables: Set<AnyCancellable> = []
     private var selectedPanel: PanelKind = .components
 
     init(
@@ -78,12 +79,9 @@ final class MenuBarPanelPresenter: NSObject {
         panelModel.onTabSelection = { [weak self] tab in
             self?.select(tab)
         }
-        panelModel.onPreferredContentHeightChange = { [weak self] tab, measuredHeight in
-            self?.handlePreferredContentHeightChange(tab: tab, measuredHeight: measuredHeight)
-        }
-
         configure(popover)
         observeAppearancePreference()
+        observePanelItemChanges()
         applyCurrentAppearance()
         prewarm()
         scheduleComponentViewPrewarm()
@@ -209,6 +207,28 @@ final class MenuBarPanelPresenter: NSObject {
         }
     }
 
+    private func observePanelItemChanges() {
+        pluginHost.$panelItems
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshHeightForVisiblePanel()
+                }
+            }
+            .store(in: &heightRefreshCancellables)
+
+        pluginHost.$componentItems
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshHeightForVisiblePanel()
+                }
+            }
+            .store(in: &heightRefreshCancellables)
+    }
+
     private func applyCurrentAppearance() {
         let preference = AppAppearancePreference.stored()
         preference.apply(to: hostingController.view)
@@ -233,14 +253,17 @@ final class MenuBarPanelPresenter: NSObject {
         screen: NSScreen?,
         isPanelVisible: Bool
     ) {
-        let contentHeight = preferredContentHeight(for: selectedTab, screen: screen)
+        let heightResolution = resolveContentHeight(
+            for: selectedTab,
+            screen: screen
+        )
         panelModel.update(
             selectedTab: selectedTab,
-            contentHeight: contentHeight,
-            maximumFeatureListHeight: MenuBarPanelLayout.maximumFeatureListHeight(for: screen),
+            contentHeight: heightResolution.contentHeight,
+            maximumFeatureListHeight: heightResolution.maximumFeatureListHeight,
             isPanelVisible: isPanelVisible
         )
-        setPopoverHeight(MenuBarPanelLayout.panelHeight(forContentHeight: contentHeight))
+        setPopoverHeight(MenuBarPanelLayout.panelHeight(forContentHeight: heightResolution.contentHeight))
     }
 
     private func select(_ tab: MenuBarPanelTab) {
@@ -275,27 +298,51 @@ final class MenuBarPanelPresenter: NSObject {
         }
 
         let screen = popover.contentViewController?.view.window?.screen ?? NSScreen.main
-        let contentHeight = preferredContentHeight(for: tab, screen: screen)
+        let heightResolution = resolveContentHeight(
+            for: tab,
+            screen: screen
+        )
         panelModel.update(
             selectedTab: tab,
-            contentHeight: contentHeight,
-            maximumFeatureListHeight: MenuBarPanelLayout.maximumFeatureListHeight(for: screen),
+            contentHeight: heightResolution.contentHeight,
+            maximumFeatureListHeight: heightResolution.maximumFeatureListHeight,
             isPanelVisible: popover.isShown
         )
-        setPopoverHeight(MenuBarPanelLayout.panelHeight(forContentHeight: contentHeight))
+        setPopoverHeight(MenuBarPanelLayout.panelHeight(forContentHeight: heightResolution.contentHeight))
     }
 
-    private func preferredContentHeight(for tab: MenuBarPanelTab, screen: NSScreen?) -> CGFloat {
+    private func refreshHeightForVisiblePanel() {
+        guard popover.isShown else {
+            return
+        }
+
+        refreshHeight(for: tab(for: selectedPanel))
+    }
+
+    private func resolveContentHeight(
+        for tab: MenuBarPanelTab,
+        screen: NSScreen?
+    ) -> MenuBarPanelHeightResolution {
+        let maximumFeatureListHeight = MenuBarPanelLayout.maximumFeatureListHeight(for: screen)
+
         switch tab {
         case .components:
-            return ComponentPanelLayout.preferredContentHeight(
-                for: pluginHost.componentItems,
-                screen: screen
+            return MenuBarPanelHeightResolution(
+                contentHeight: ComponentPanelLayout.preferredContentHeight(
+                    for: pluginHost.componentItems,
+                    screen: screen
+                ),
+                maximumFeatureListHeight: maximumFeatureListHeight
             )
         case .features:
-            return MenuBarPanelLayout.preferredFeatureContentHeight(
-                for: pluginHost.panelItems,
-                screen: screen
+            return MenuBarPanelHeightResolution(
+                contentHeight: MenuBarPanelLayout.preferredFeatureContentHeight(
+                    featureContentHeight: MenuBarPanelLayout.featureContentHeight(
+                        for: pluginHost.panelItems
+                    ),
+                    maximumFeatureListHeight: maximumFeatureListHeight
+                ),
+                maximumFeatureListHeight: maximumFeatureListHeight
             )
         }
     }
@@ -323,27 +370,6 @@ final class MenuBarPanelPresenter: NSObject {
         pluginHost.setPanelSurface(.primary, visible: isPanelVisible && tab == .features)
     }
 
-    private func handlePreferredContentHeightChange(
-        tab: MenuBarPanelTab,
-        measuredHeight: CGFloat?
-    ) {
-        guard tab == self.tab(for: selectedPanel) else {
-            return
-        }
-
-        let contentHeight = measuredHeight
-            ?? preferredContentHeight(
-                for: tab,
-                screen: popover.contentViewController?.view.window?.screen ?? NSScreen.main
-            )
-        panelModel.update(
-            selectedTab: tab,
-            contentHeight: contentHeight,
-            maximumFeatureListHeight: panelModel.maximumFeatureListHeight,
-            isPanelVisible: panelModel.isPanelVisible
-        )
-        setPopoverHeight(MenuBarPanelLayout.panelHeight(forContentHeight: contentHeight))
-    }
 }
 
 extension MenuBarPanelPresenter: NSPopoverDelegate {
@@ -386,6 +412,11 @@ enum MenuBarPanelTab: CaseIterable, Equatable {
     }
 }
 
+struct MenuBarPanelHeightResolution: Equatable {
+    let contentHeight: CGFloat
+    let maximumFeatureListHeight: CGFloat
+}
+
 @MainActor
 final class MenuBarUnifiedPanelModel: ObservableObject {
     private(set) var selectedTab: MenuBarPanelTab
@@ -393,7 +424,6 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
     private(set) var maximumFeatureListHeight: CGFloat
     private(set) var isPanelVisible: Bool
     var onTabSelection: ((MenuBarPanelTab) -> Void)?
-    var onPreferredContentHeightChange: ((MenuBarPanelTab, CGFloat?) -> Void)?
 
     init(
         selectedTab: MenuBarPanelTab,
@@ -433,9 +463,6 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
         onTabSelection?(tab)
     }
 
-    func updatePreferredContentHeight(tab: MenuBarPanelTab, measuredHeight: CGFloat?) {
-        onPreferredContentHeightChange?(tab, measuredHeight)
-    }
 }
 
 struct MenuBarUnifiedPanelContent: View {
@@ -475,9 +502,6 @@ struct MenuBarUnifiedPanelContent: View {
             ComponentPanelContent(
                 pluginHost: pluginHost,
                 panelHeight: model.contentHeight,
-                onPreferredHeightChange: {
-                    handlePreferredContentHeightChange(.components, nil)
-                },
                 onDismiss: onDismiss
             )
             .opacity(model.selectedTab == .components ? 1 : 0)
@@ -488,9 +512,6 @@ struct MenuBarUnifiedPanelContent: View {
                 pluginHost: pluginHost,
                 maximumFeatureListHeight: model.maximumFeatureListHeight,
                 isPanelVisible: model.isPanelVisible && model.selectedTab == .features,
-                onPreferredHeightChange: { height in
-                    handlePreferredContentHeightChange(.features, height)
-                },
                 onDismiss: onDismiss,
                 onOpenSettings: onOpenSettings,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
@@ -515,13 +536,6 @@ struct MenuBarUnifiedPanelContent: View {
         model.selectTab(tab)
     }
 
-    private func handlePreferredContentHeightChange(_ tab: MenuBarPanelTab, _ measuredHeight: CGFloat?) {
-        guard model.selectedTab == tab else {
-            return
-        }
-
-        model.updatePreferredContentHeight(tab: tab, measuredHeight: measuredHeight)
-    }
 }
 
 private struct MenuBarPanelToolbar: View {

@@ -27,20 +27,11 @@ final class MenuBarPanelPresenterTests: XCTestCase {
             isPanelVisible: true
         )
         var selectedTab: MenuBarPanelTab?
-        var measuredHeight: CGFloat?
         model.onTabSelection = { selectedTab = $0 }
-        model.onPreferredContentHeightChange = { tab, height in
-            selectedTab = tab
-            measuredHeight = height
-        }
 
         model.selectTab(.features)
         XCTAssertEqual(selectedTab, .features)
         XCTAssertEqual(model.selectedTab, .components)
-
-        model.updatePreferredContentHeight(tab: .features, measuredHeight: 240)
-        XCTAssertEqual(selectedTab, .features)
-        XCTAssertEqual(measuredHeight, 240)
         XCTAssertEqual(model.contentHeight, 100)
     }
 

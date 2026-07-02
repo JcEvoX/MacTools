@@ -17,7 +17,7 @@ enum MenuBarPanelLayout {
     static let rootSpacing: CGFloat = 0
     static let toolbarHeight: CGFloat = 30
     static let featureRowSpacing: CGFloat = 5
-    static let rowHeaderHeight: CGFloat = 26
+    static let rowHeaderHeight: CGFloat = 31
     static let rowVerticalPadding: CGFloat = 16
     static let detailSpacing: CGFloat = 8
     static let detailControlSpacing: CGFloat = 8
@@ -211,6 +211,7 @@ enum MenuBarPanelLayout {
             return 16 + actionRowVerticalPadding * 2
         }
     }
+
 }
 
 private enum FeatureRowLayout {
@@ -432,12 +433,10 @@ struct MenuBarContent: View {
     @StateObject private var secondaryPanelController = SecondaryPanelController()
     @StateObject private var hoverCoordinator = HoverSecondaryPanelCoordinator()
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
-    @State private var measuredFeatureContentHeight: CGFloat?
 
     @ObservedObject var pluginHost: PluginHost
     let maximumFeatureListHeight: CGFloat
     let isPanelVisible: Bool
-    let onPreferredHeightChange: (CGFloat) -> Void
     let onDismiss: () -> Void
     let onOpenSettings: () -> Void
     let onPresentDiskCleanConfiguration: () -> Void
@@ -469,8 +468,6 @@ struct MenuBarContent: View {
             secondaryPanelController.onHostWindowDismissRequest = {
                 hoverCoordinator.dismissImmediately()
             }
-
-            onPreferredHeightChange(preferredContentHeight)
         }
         .animation(.easeOut(duration: 0.18), value: activeSecondaryPanelSignature)
         .onChange(of: activeSecondaryPanelSignature) {
@@ -490,16 +487,8 @@ struct MenuBarContent: View {
         .onReceive(NotificationCenter.default.publisher(for: AppAppearancePreference.didChangeNotification)) { _ in
             secondaryPanelController.applyCurrentAppearance()
         }
-        .onChange(of: preferredContentHeight) { _, newHeight in
-            guard isPanelVisible else {
-                return
-            }
-
-            onPreferredHeightChange(newHeight)
-        }
         .onChange(of: isPanelVisible) { _, isVisible in
             if isVisible {
-                onPreferredHeightChange(preferredContentHeight)
                 syncSecondaryPanelWindow()
             } else {
                 hoverCoordinator.dismissImmediately()
@@ -555,8 +544,7 @@ struct MenuBarContent: View {
     }
 
     private var featureContentHeight: CGFloat {
-        measuredFeatureContentHeight
-            ?? MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
+        MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
     }
 
     private var preferredContentHeight: CGFloat {
@@ -867,19 +855,6 @@ struct MenuBarContent: View {
             }
         }
         .frame(width: MenuBarPanelLayout.surfaceWidth, alignment: .leading)
-        .background(
-            HeightReader { height in
-                guard
-                    height > 0,
-                    measuredFeatureContentHeight == nil
-                        || abs((measuredFeatureContentHeight ?? 0) - height) > 0.5
-                else {
-                    return
-                }
-
-                measuredFeatureContentHeight = height
-            }
-        )
     }
 
 }
@@ -1086,6 +1061,7 @@ struct FeatureRowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: MenuBarPanelLayout.rowHeaderHeight, alignment: .center)
         .contentShape(Rectangle())
     }
 
@@ -1976,29 +1952,6 @@ private struct NavigationRowFrameReader: NSViewRepresentable {
         let rectInWindow = view.convert(view.bounds, to: nil)
         let rectOnScreen = window.convertToScreen(rectInWindow)
         onFrameChange(rectOnScreen)
-    }
-}
-
-private struct HeightReader: View {
-    let onChange: (CGFloat) -> Void
-
-    var body: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .preference(key: HeightPreferenceKey.self, value: proxy.size.height)
-        }
-        .onPreferenceChange(HeightPreferenceKey.self) { height in
-            guard height.isFinite else { return }
-            onChange(height)
-        }
-    }
-}
-
-private struct HeightPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

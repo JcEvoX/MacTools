@@ -16,6 +16,7 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelLayout.contentBottomPadding, 6)
         XCTAssertEqual(MenuBarPanelLayout.contentVerticalPadding, 10)
         XCTAssertEqual(MenuBarPanelLayout.minimumContentHeight, 184)
+        XCTAssertEqual(MenuBarPanelLayout.rowHeaderHeight, 31)
     }
 
     func testContentSizeUsesModelWithoutSwiftUILayoutMeasurement() {
@@ -72,6 +73,41 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(
             MenuBarPanelLayout.contentSize(for: [item]),
             NSSize(width: 316, height: 220)
+        )
+    }
+
+    func testExpandedFeatureContentHeightIncludesFullHeaderTextHeight() {
+        let expandedItem = makeItem(
+            controlStyle: .disclosure,
+            isExpanded: true,
+            controls: [
+                PluginPanelControl(
+                    id: "brightness",
+                    kind: .slider,
+                    options: [],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: "亮度",
+                    sliderValue: 0.7,
+                    sliderBounds: 0...1,
+                    valueLabel: "70%",
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [expandedItem]),
+            MenuBarPanelLayout.rowHeaderHeight
+                + MenuBarPanelLayout.detailSpacing
+                + 15
+                + 6
+                + 18
+                + MenuBarPanelLayout.sliderVerticalPadding * 2
+                + MenuBarPanelLayout.rowVerticalPadding
         )
     }
 
