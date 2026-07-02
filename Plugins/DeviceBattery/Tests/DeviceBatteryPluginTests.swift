@@ -39,6 +39,31 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertFalse(reloaded.showRapooDevices)
     }
 
+    func testStorePersistsLowBatteryNotificationSettings() {
+        let storage = DeviceBatteryMemoryStorage()
+        let store = DeviceBatteryStore(storage: storage)
+
+        XCTAssertFalse(store.lowBatteryNotificationEnabled)
+        XCTAssertEqual(store.lowBatteryNotificationThreshold, 20)
+
+        store.setLowBatteryNotificationEnabled(true)
+        store.setLowBatteryNotificationThreshold(15)
+
+        let reloaded = DeviceBatteryStore(storage: storage)
+        XCTAssertTrue(reloaded.lowBatteryNotificationEnabled)
+        XCTAssertEqual(reloaded.lowBatteryNotificationThreshold, 15)
+    }
+
+    func testStoreClampsLowBatteryNotificationThreshold() {
+        let store = DeviceBatteryStore(storage: DeviceBatteryMemoryStorage())
+
+        store.setLowBatteryNotificationThreshold(0)
+        XCTAssertEqual(store.lowBatteryNotificationThreshold, 1)
+
+        store.setLowBatteryNotificationThreshold(120)
+        XCTAssertEqual(store.lowBatteryNotificationThreshold, 99)
+    }
+
     func testBluetoothPowerLogParserReadsConnectedMouseBattery() {
         let line = """
         2026-06-02 14:05:52.648 Df bluetoothd[616:f85de1] [com.apple.bluetooth:CBPowerSource] Power source updated CBPowerSource Nm 'MX Anywhere 3S', SID 49354549, AcCa Mouse, AcID 0532E370-EA18-11C7-44F9-6D7E86E35891, PID 0xB037 (?), VID 0x046D (?), VIDSrc USB, Type 'Accessory Source', TPT Bluetooth LE, CF 0x1 < Attributes >, IF 0x2 < IOKit >, Present yes, MaxC 100%, Battery -80%
@@ -115,8 +140,129 @@ final class DeviceBatteryPluginTests: XCTestCase {
         )
     }
 
+    func testLowBatteryNotificationMergesMultipleDevices() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+        let snapshot = makeSnapshot(items: [
+            makeBatteryItem(id: "mouse", name: "Mouse", level: 12),
+            makeBatteryItem(id: "keyboard", name: "Keyboard", level: 18),
+            makeBatteryItem(id: "trackpad", name: "Trackpad", level: 38)
+        ])
+
+        controller.evaluate(
+            snapshot: snapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 1)
+        XCTAssertEqual(notifier.notifications[0].deviceIDs, ["mouse", "keyboard"])
+        XCTAssertEqual(notifier.notifications[0].title, "2 台设备电量偏低")
+        XCTAssertTrue(notifier.notifications[0].body.contains("Mouse 12%"))
+        XCTAssertTrue(notifier.notifications[0].body.contains("Keyboard 18%"))
+        XCTAssertFalse(notifier.notifications[0].body.contains("Trackpad"))
+    }
+
+    func testLowBatteryNotificationDoesNotRepeatUntilDeviceRecovers() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+        let lowSnapshot = makeSnapshot(items: [
+            makeBatteryItem(id: "mouse", name: "Mouse", level: 12)
+        ])
+
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+        XCTAssertEqual(notifier.notifications.count, 1)
+
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(id: "mouse", name: "Mouse", level: 35)
+            ]),
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 2)
+    }
+
+    func testLowBatteryNotificationResetsAfterDeviceIsCharged() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+        let lowSnapshot = makeSnapshot(items: [
+            makeBatteryItem(id: "mouse", name: "Mouse", level: 12)
+        ])
+
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(id: "mouse", name: "Mouse", level: 100, chargeState: .charged)
+            ]),
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 2)
+    }
+
+    func testLowBatteryNotificationIgnoresChargingDevicesAndBoundaryValue() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(id: "mouse", name: "Mouse", level: 20),
+                makeBatteryItem(id: "keyboard", name: "Keyboard", level: 12, chargeState: .charging),
+                makeBatteryItem(id: "trackpad", name: "Trackpad", level: 12, isConnected: false)
+            ]),
+            isEnabled: true,
+            threshold: 20,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertTrue(notifier.notifications.isEmpty)
+    }
+
     private func makeContext() -> PluginRuntimeContext {
         PluginRuntimeContext(pluginID: "device-battery", storage: DeviceBatteryMemoryStorage())
+    }
+
+    private func makeSnapshot(items: [DeviceBatteryItem]) -> DeviceBatterySnapshot {
+        DeviceBatterySnapshot(
+            accessState: .ready,
+            items: items,
+            lastUpdated: Date(),
+            rapooState: .idle
+        )
     }
 
     private func makeAirPodsItem(id: String, role: DeviceBatteryComponentRole) -> DeviceBatteryItem {
@@ -133,6 +279,28 @@ final class DeviceBatteryPluginTests: XCTestCase {
             isConnected: true,
             detail: "Headphones",
             componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods", role: role)
+        )
+    }
+
+    private func makeBatteryItem(
+        id: String,
+        name: String,
+        level: Int,
+        chargeState: DeviceBatteryChargeState = .normal,
+        isConnected: Bool = true
+    ) -> DeviceBatteryItem {
+        DeviceBatteryItem(
+            id: id,
+            name: name,
+            model: nil,
+            kind: .bluetooth,
+            level: level,
+            chargeState: chargeState,
+            parentName: nil,
+            source: "test",
+            lastUpdated: Date(),
+            isConnected: isConnected,
+            detail: nil
         )
     }
 }
@@ -161,6 +329,25 @@ private struct StubDeviceBatterySampler: DeviceBatterySampling {
 
     func collectSystemDevices(referenceDate: Date) async -> [DeviceBatteryItem] {
         items
+    }
+}
+
+@MainActor
+private final class RecordingLowBatteryNotifier: DeviceBatteryLowBatteryNotifying {
+    private(set) var notifications: [DeviceBatteryLowBatteryNotification] = []
+
+    func notifyLowBatteryDevices(
+        _ items: [DeviceBatteryItem],
+        threshold: Int,
+        localization: PluginLocalization
+    ) {
+        notifications.append(
+            DeviceBatteryLowBatteryNotificationContent.make(
+                items: items,
+                threshold: threshold,
+                localization: localization
+            )
+        )
     }
 }
 

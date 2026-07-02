@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+@preconcurrency import UserNotifications
 
 @main
 struct MacToolsApp: App {
@@ -17,7 +18,7 @@ struct MacToolsApp: App {
 }
 
 @MainActor
-final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
+final class MacToolsAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let pluginHost = PluginHost(loadDynamicPluginsOnInit: false)
     private let appUpdater = AppUpdater()
     private let menuBarIconSettings = MenuBarIconSettings()
@@ -30,6 +31,7 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppAppearancePreference.applyStoredPreference()
         launchAtLoginController.refreshStatus()
+        UNUserNotificationCenter.current().delegate = self
 
         let windowRouter = AppWindowRouter(
             pluginHost: pluginHost,
@@ -55,6 +57,14 @@ final class MacToolsAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         statusItemController?.dismissPanels()
         pluginHost.deactivateAllPlugins()
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 
     private func bootstrapDynamicPlugins() {

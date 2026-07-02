@@ -114,6 +114,16 @@ enum DeviceBatteryComponentRole: String, Equatable, Sendable {
     }
 }
 
+enum DeviceBatteryLowBatteryThresholds {
+    static let defaultValue = 20
+    static let minimum = 1
+    static let maximum = 99
+
+    static func normalized(_ threshold: Int) -> Int {
+        min(max(threshold, minimum), maximum)
+    }
+}
+
 struct DeviceBatteryComponentIdentity: Equatable, Sendable {
     let groupID: String
     let role: DeviceBatteryComponentRole
@@ -167,6 +177,28 @@ struct DeviceBatteryItem: Identifiable, Equatable, Sendable {
         }
 
         return min(max(level, 0), 100)
+    }
+
+    func isLowBattery(threshold: Int) -> Bool {
+        guard let level = clampedLevel else {
+            return false
+        }
+
+        return isConnected
+            && level < threshold
+            && chargeState != .charging
+            && chargeState != .charged
+            && chargeState != .plugged
+    }
+
+    var isDisplayLowBattery: Bool {
+        guard let level = clampedLevel else {
+            return false
+        }
+
+        return level <= DeviceBatteryLowBatteryThresholds.defaultValue
+            && chargeState != .charging
+            && chargeState != .charged
     }
 }
 
@@ -251,13 +283,12 @@ struct DeviceBatterySnapshot: Equatable, Sendable {
     }
 
     var lowBatteryCount: Int {
-        visibleItems.filter { item in
-            guard let level = item.clampedLevel else {
-                return false
-            }
+        visibleItems.filter(\.isDisplayLowBattery).count
+    }
 
-            return level <= 20 && item.chargeState != .charging && item.chargeState != .charged
-        }.count
+    func lowBatteryItems(threshold: Int) -> [DeviceBatteryItem] {
+        let normalizedThreshold = DeviceBatteryLowBatteryThresholds.normalized(threshold)
+        return visibleItems.filter { $0.isLowBattery(threshold: normalizedThreshold) }
     }
 
     func subtitle(localization: PluginLocalization = PluginLocalization(bundle: .main)) -> String {
@@ -314,10 +345,7 @@ struct DeviceBatterySnapshot: Equatable, Sendable {
     }
 
     private static func itemRank(_ item: DeviceBatteryItem) -> Int {
-        if let level = item.clampedLevel,
-           level <= 20,
-           item.chargeState != .charging,
-           item.chargeState != .charged {
+        if item.isDisplayLowBattery {
             return 0
         }
 

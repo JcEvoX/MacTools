@@ -44,6 +44,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     private let store: DeviceBatteryStore
     private let localization: PluginLocalization
     private let inputMonitoringAuthorizationStatus: () -> DeviceBatteryInputMonitoringAuthorizationStatus
+    private let lowBatteryNotificationController: DeviceBatteryLowBatteryNotificationController
 
     private var componentSpan: PluginComponentSpan {
         let visibleItemCount = viewModel.snapshot.visibleItems.count
@@ -88,12 +89,14 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
         context: PluginRuntimeContext,
         viewModel: DeviceBatteryViewModel,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        inputMonitoringAuthorizationStatus: @escaping () -> DeviceBatteryInputMonitoringAuthorizationStatus
+        inputMonitoringAuthorizationStatus: @escaping () -> DeviceBatteryInputMonitoringAuthorizationStatus,
+        lowBatteryNotifier: any DeviceBatteryLowBatteryNotifying = DeviceBatteryUserNotificationCenterNotifier()
     ) {
         self.viewModel = viewModel
         self.store = DeviceBatteryStore(storage: context.storage)
         self.localization = localization
         self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
+        self.lowBatteryNotificationController = DeviceBatteryLowBatteryNotificationController(notifier: lowBatteryNotifier)
         self.metadata = PluginMetadata(
             id: "device-battery",
             title: localization.string("metadata.title", defaultValue: "设备电量"),
@@ -105,11 +108,16 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
                 defaultValue: "查看 Mac、蓝牙外设和雷柏鼠标电量"
             )
         )
+        viewModel.onSnapshotChange = { [weak self] in
+            self?.handleSnapshotChange()
+        }
     }
 
     var onStateChange: (() -> Void)? {
         didSet {
-            viewModel.onSnapshotChange = onStateChange
+            viewModel.onSnapshotChange = { [weak self] in
+                self?.handleSnapshotChange()
+            }
         }
     }
     var requestPermissionGuidance: ((String) -> Void)?
@@ -147,7 +155,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
                 "configuration.description",
                 defaultValue: "选择组件面板布局和显示内容。"
             )
-        ) { [store, viewModel, localization] _ in
+        ) { [store, viewModel, localization, lowBatteryNotificationController] _ in
             DeviceBatterySettingsView(
                 store: store,
                 localization: localization,
@@ -156,6 +164,14 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
                         includeInternalBattery: store.showInternalBattery,
                         includeBluetoothDevices: store.showBluetoothDevices,
                         includeRapooDevices: store.showRapooDevices
+                    )
+                },
+                onNotificationSettingsChange: {
+                    lowBatteryNotificationController.evaluate(
+                        snapshot: viewModel.snapshot,
+                        isEnabled: store.lowBatteryNotificationEnabled,
+                        threshold: store.lowBatteryNotificationThreshold,
+                        localization: localization
                     )
                 }
             )
@@ -220,6 +236,16 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginComponentPanel {
     }
 
     func handleShortcutAction(id: String) {}
+
+    private func handleSnapshotChange() {
+        lowBatteryNotificationController.evaluate(
+            snapshot: viewModel.snapshot,
+            isEnabled: store.lowBatteryNotificationEnabled,
+            threshold: store.lowBatteryNotificationThreshold,
+            localization: localization
+        )
+        onStateChange?()
+    }
 
     private var inputMonitoringPermissionState: PluginPermissionState {
         let authorizationStatus = inputMonitoringAuthorizationStatus()

@@ -5,23 +5,32 @@ struct DeviceBatterySettingsView: View {
     @ObservedObject var store: DeviceBatteryStore
     let localization: PluginLocalization
     let onChange: () -> Void
+    let onNotificationSettingsChange: () -> Void
+    @State private var thresholdText: String
 
     init(
         store: DeviceBatteryStore,
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        onChange: @escaping () -> Void
+        onChange: @escaping () -> Void,
+        onNotificationSettingsChange: @escaping () -> Void = {}
     ) {
         self.store = store
         self.localization = localization
         self.onChange = onChange
+        self.onNotificationSettingsChange = onNotificationSettingsChange
+        _thresholdText = State(initialValue: "\(store.lowBatteryNotificationThreshold)")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             layoutSection
             sourceSection
+            notificationSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: store.lowBatteryNotificationThreshold) { _, newValue in
+            thresholdText = "\(newValue)"
+        }
     }
 
     private var layoutSection: some View {
@@ -95,6 +104,110 @@ struct DeviceBatterySettingsView: View {
         }
     }
 
+    private var notificationSection: some View {
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            sectionHeader(
+                systemName: "bell.badge",
+                title: localization.string("settings.notification.title", defaultValue: "低电量通知")
+            )
+
+            VStack(spacing: 0) {
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                        Text(localization.string("settings.notification.lowBattery.title", defaultValue: "发送低电量通知"))
+                            .font(PluginSettingsTheme.Typography.rowTitle)
+                        Text(localization.string(
+                            "settings.notification.lowBattery.description",
+                            defaultValue: "设备电量低于阈值时发送系统通知。"
+                        ))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    Toggle("", isOn: Binding(
+                        get: { store.lowBatteryNotificationEnabled },
+                        set: { newValue in
+                            store.setLowBatteryNotificationEnabled(newValue)
+                            onNotificationSettingsChange()
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                }
+                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+                .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+
+                if store.lowBatteryNotificationEnabled {
+                    Divider()
+                        .padding(.leading, PluginSettingsTheme.Spacing.rowHorizontal)
+
+                    thresholdRow
+                }
+            }
+            .pluginSettingsCardBackground(.plugin)
+        }
+    }
+
+    private var thresholdRow: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(localization.string("settings.notification.threshold.title", defaultValue: "通知阈值"))
+                    .font(PluginSettingsTheme.Typography.rowTitle)
+                Text(localization.string(
+                    "settings.notification.threshold.description",
+                    defaultValue: "低于此百分比时提醒。"
+                ))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                TextField(
+                    "",
+                    text: Binding(
+                        get: { thresholdText },
+                        set: { newValue in
+                            thresholdText = newValue.filter(\.isNumber)
+                            guard let threshold = Int(thresholdText) else {
+                                return
+                            }
+
+                            store.setLowBatteryNotificationThreshold(threshold)
+                            onNotificationSettingsChange()
+                        }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(PluginSettingsTheme.Typography.monospacedValue)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 58)
+                .onSubmit(commitThresholdText)
+
+                Text("%")
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+
+                Stepper("", value: Binding(
+                    get: { store.lowBatteryNotificationThreshold },
+                    set: { newValue in
+                        store.setLowBatteryNotificationThreshold(newValue)
+                        onNotificationSettingsChange()
+                    }
+                ), in: DeviceBatteryLowBatteryThresholds.minimum...DeviceBatteryLowBatteryThresholds.maximum)
+                .labelsHidden()
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.interactiveRowVertical)
+    }
+
     private func sourceToggle(
         title: String,
         description: String,
@@ -144,6 +257,13 @@ struct DeviceBatterySettingsView: View {
             Image(systemName: systemName)
         }
         .foregroundStyle(.secondary)
+    }
+
+    private func commitThresholdText() {
+        let threshold = Int(thresholdText) ?? store.lowBatteryNotificationThreshold
+        store.setLowBatteryNotificationThreshold(threshold)
+        thresholdText = "\(store.lowBatteryNotificationThreshold)"
+        onNotificationSettingsChange()
     }
 
     private func iconName(for mode: DeviceBatteryLayoutMode) -> String {
