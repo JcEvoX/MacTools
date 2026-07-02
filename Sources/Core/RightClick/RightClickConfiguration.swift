@@ -7,6 +7,7 @@ import Foundation
 /// This type is compiled into BOTH the host app and the extension targets (they
 /// can't import each other); the JSON written by one is decoded by the other.
 struct RightClickConfiguration: Codable, Equatable {
+    var preferredLanguages: [String]?
     var newFolder: Bool
     var copyFileName: Bool
     var copyAbsolutePath: Bool
@@ -18,6 +19,7 @@ struct RightClickConfiguration: Codable, Equatable {
     var openWithApps: [RightClickOpenWithApp]
 
     init(
+        preferredLanguages: [String]? = nil,
         newFolder: Bool = true,
         copyFileName: Bool = true,
         copyAbsolutePath: Bool = true,
@@ -28,6 +30,7 @@ struct RightClickConfiguration: Codable, Equatable {
         openInTerminal: Bool = true,
         openWithApps: [RightClickOpenWithApp] = []
     ) {
+        self.preferredLanguages = preferredLanguages
         self.newFolder = newFolder
         self.copyFileName = copyFileName
         self.copyAbsolutePath = copyAbsolutePath
@@ -57,6 +60,7 @@ struct RightClickConfiguration: Codable, Equatable {
         func flag(_ key: CodingKeys, _ defaultValue: Bool) -> Bool {
             (try? container.decode(Bool.self, forKey: key)) ?? defaultValue
         }
+        preferredLanguages = try? container.decodeIfPresent([String].self, forKey: .preferredLanguages)
         newFolder = flag(.newFolder, fallback.newFolder)
         copyFileName = flag(.copyFileName, fallback.copyFileName)
         copyAbsolutePath = flag(.copyAbsolutePath, fallback.copyAbsolutePath)

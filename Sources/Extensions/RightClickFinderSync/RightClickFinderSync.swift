@@ -51,7 +51,12 @@ final class RightClickFinderSync: FIFinderSync {
     }
 
     override var toolbarItemToolTip: String {
-        RightClickLocalization.string("finder.toolbarToolTip", defaultValue: "MacTools 右键工具")
+        let configuration = RightClickConfigurationStore.load()
+        return RightClickLocalization.string(
+            "finder.toolbarToolTip",
+            defaultValue: "MacTools 右键工具",
+            preferredLanguages: configuration.preferredLanguages
+        )
     }
 
     override var toolbarItemImage: NSImage {
@@ -118,35 +123,35 @@ final class RightClickFinderSync: FIFinderSync {
 
         if configuration.copyFileName {
             addCopyItem(
-                title: RightClickLocalization.string("finder.copyFileName", defaultValue: "复制文件名"),
+                title: localized("finder.copyFileName", defaultValue: "复制文件名", configuration: configuration),
                 actionID: ActionID.copyFileName,
                 to: menu
             )
         }
         if configuration.copyAbsolutePath {
             addCopyItem(
-                title: RightClickLocalization.string("finder.copyAbsolutePath", defaultValue: "复制绝对路径"),
+                title: localized("finder.copyAbsolutePath", defaultValue: "复制绝对路径", configuration: configuration),
                 actionID: ActionID.copyAbsolutePath,
                 to: menu
             )
         }
         if configuration.copyRelativePath {
             addCopyItem(
-                title: RightClickLocalization.string("finder.copyRelativePath", defaultValue: "复制相对路径"),
+                title: localized("finder.copyRelativePath", defaultValue: "复制相对路径", configuration: configuration),
                 actionID: ActionID.copyRelativePath,
                 to: menu
             )
         }
         if configuration.copyShellEscapedPath {
             addCopyItem(
-                title: RightClickLocalization.string("finder.copyShellEscapedPath", defaultValue: "复制转义路径"),
+                title: localized("finder.copyShellEscapedPath", defaultValue: "复制转义路径", configuration: configuration),
                 actionID: ActionID.copyShellEscapedPath,
                 to: menu
             )
         }
         if configuration.copyFileURL {
             addCopyItem(
-                title: RightClickLocalization.string("finder.copyFileURL", defaultValue: "复制 file:// 链接"),
+                title: localized("finder.copyFileURL", defaultValue: "复制 file:// 链接", configuration: configuration),
                 actionID: ActionID.copyFileURL,
                 to: menu
             )
@@ -158,31 +163,31 @@ final class RightClickFinderSync: FIFinderSync {
     /// Directory-level items shared by container and item right-clicks.
     private func addDirectoryItems(to menu: NSMenu, directory: URL, configuration: RightClickConfiguration) {
         if configuration.newFolder {
-            addNewFolderItem(to: menu, directory: directory)
+            addNewFolderItem(to: menu, directory: directory, configuration: configuration)
         }
         if configuration.newFile {
-            addNewFileMenu(to: menu, directory: directory)
+            addNewFileMenu(to: menu, directory: directory, configuration: configuration)
         }
         if configuration.openInTerminal {
-            addOpenInTerminalItem(to: menu, directory: directory)
+            addOpenInTerminalItem(to: menu, directory: directory, configuration: configuration)
         }
     }
 
-    private func addNewFolderItem(to menu: NSMenu, directory: URL) {
-        let item = actionItem(title: RightClickLocalization.string("finder.newFolder", defaultValue: "新建文件夹"), context: MenuActionContext(
+    private func addNewFolderItem(to menu: NSMenu, directory: URL, configuration: RightClickConfiguration) {
+        let item = actionItem(title: localized("finder.newFolder", defaultValue: "新建文件夹", configuration: configuration), context: MenuActionContext(
             actionID: ActionID.newFolder,
             directory: directory
         ))
         menu.addItem(item)
     }
 
-    private func addNewFileMenu(to menu: NSMenu, directory: URL) {
-        let title = RightClickLocalization.string("finder.newFile", defaultValue: "新建文件")
+    private func addNewFileMenu(to menu: NSMenu, directory: URL, configuration: RightClickConfiguration) {
+        let title = localized("finder.newFile", defaultValue: "新建文件", configuration: configuration)
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: title)
         for ext in RightClickNewFile.supportedExtensions {
             let item = actionItem(
-                title: Self.newFileItemTitle(for: ext),
+                title: Self.newFileItemTitle(for: ext, preferredLanguages: configuration.preferredLanguages),
                 context: MenuActionContext(actionID: ActionID.newFile, directory: directory, fileExtension: ext)
             )
             submenu.addItem(item)
@@ -191,17 +196,21 @@ final class RightClickFinderSync: FIFinderSync {
         menu.addItem(parent)
     }
 
-    private static func newFileItemTitle(for ext: String) -> String {
+    private static func newFileItemTitle(for ext: String, preferredLanguages: [String]?) -> String {
         switch ext {
-        case "txt": RightClickLocalization.string("finder.newFile.text", defaultValue: "文本文件 (.txt)")
+        case "txt": RightClickLocalization.string(
+            "finder.newFile.text",
+            defaultValue: "文本文件 (.txt)",
+            preferredLanguages: preferredLanguages
+        )
         case "md": "Markdown (.md)"
         case "json": "JSON (.json)"
         default: ".\(ext)"
         }
     }
 
-    private func addOpenInTerminalItem(to menu: NSMenu, directory: URL) {
-        let item = actionItem(title: RightClickLocalization.string("finder.openInTerminal", defaultValue: "在终端打开"), context: MenuActionContext(
+    private func addOpenInTerminalItem(to menu: NSMenu, directory: URL, configuration: RightClickConfiguration) {
+        let item = actionItem(title: localized("finder.openInTerminal", defaultValue: "在终端打开", configuration: configuration), context: MenuActionContext(
             actionID: ActionID.openInTerminal,
             directory: directory
         ))
@@ -221,7 +230,7 @@ final class RightClickFinderSync: FIFinderSync {
             return
         }
 
-        let title = RightClickLocalization.string("finder.openWith", defaultValue: "用应用打开")
+        let title = localized("finder.openWith", defaultValue: "用应用打开", configuration: configuration)
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: title)
         var usedTitles: Set<String> = []
@@ -245,6 +254,18 @@ final class RightClickFinderSync: FIFinderSync {
         }
         parent.submenu = submenu
         menu.addItem(parent)
+    }
+
+    private func localized(
+        _ key: String,
+        defaultValue: String,
+        configuration: RightClickConfiguration
+    ) -> String {
+        RightClickLocalization.string(
+            key,
+            defaultValue: defaultValue,
+            preferredLanguages: configuration.preferredLanguages
+        )
     }
 
     private func addCopyItem(

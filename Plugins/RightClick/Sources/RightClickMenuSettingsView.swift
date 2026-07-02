@@ -23,8 +23,14 @@ struct RightClickMenuSettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .onChange(of: configuration) { _, newValue in
-            RightClickConfigurationStore.save(newValue)
+            saveConfiguration(newValue)
         }
+    }
+
+    private func saveConfiguration(_ newValue: RightClickConfiguration) {
+        var configuration = newValue
+        configuration.preferredLanguages = RightClickConfigurationStore.load().preferredLanguages
+        RightClickConfigurationStore.save(configuration)
     }
 
     private var directorySection: some View {

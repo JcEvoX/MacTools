@@ -13,6 +13,7 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
 
         var config = RightClickConfiguration.default
+        config.preferredLanguages = ["en"]
         config.openInTerminal = false
         config.copyFileURL = false
         config.openWithApps = [
@@ -23,6 +24,7 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         let loaded = RightClickConfigurationStore.load(from: fileURL)
 
         XCTAssertEqual(loaded, config)
+        XCTAssertEqual(loaded.preferredLanguages, ["en"])
         XCTAssertFalse(loaded.openInTerminal)
         XCTAssertEqual(loaded.openWithApps.first?.name, "Code")
         XCTAssertEqual(loaded.openWithApps.first?.fileExtensions, ["txt", "md"])
@@ -54,6 +56,7 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         try Data(#"{"newFolder":false}"#.utf8).write(to: fileURL)
 
         let loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertNil(loaded.preferredLanguages)
         XCTAssertFalse(loaded.newFolder)      // present key honored
         XCTAssertTrue(loaded.copyFileName)    // missing key → default
         XCTAssertTrue(loaded.openInTerminal)  // missing key → default

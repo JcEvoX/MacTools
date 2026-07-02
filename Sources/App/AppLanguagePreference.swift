@@ -55,6 +55,7 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
                 toBundleIdentifier: extensionBundleIdentifier
             )
         }
+        Self.applyRightClickFinderSyncLanguageOverride(appleLanguagesOverride)
     }
 
     static func stored(in userDefaults: UserDefaults = .standard) -> AppLanguagePreference {
@@ -95,5 +96,15 @@ enum AppLanguagePreference: String, CaseIterable, Identifiable {
             kCFPreferencesAnyHost
         )
         CFPreferencesAppSynchronize(applicationID)
+    }
+
+    private static func applyRightClickFinderSyncLanguageOverride(_ appleLanguagesOverride: [String]?) {
+        var configuration = RightClickConfigurationStore.load()
+        guard configuration.preferredLanguages != appleLanguagesOverride else {
+            return
+        }
+
+        configuration.preferredLanguages = appleLanguagesOverride
+        RightClickConfigurationStore.save(configuration)
     }
 }
