@@ -76,6 +76,10 @@ final class RightClickFinderSync: FIFinderSync {
         titleToActionContext.removeAll()
 
         let configuration = RightClickConfigurationStore.load()
+        guard configuration.menuEnabled else {
+            return nil
+        }
+
         let menu = NSMenu(title: "MacTools")
 
         switch menuKind {

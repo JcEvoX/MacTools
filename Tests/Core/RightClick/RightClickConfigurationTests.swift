@@ -12,7 +12,7 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         let fileURL = makeTempFileURL()
         defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
 
-        var config = RightClickConfiguration.default
+        var config = RightClickConfiguration.activeDefault
         config.preferredLanguages = ["en"]
         config.openInTerminal = false
         config.copyFileURL = false
@@ -30,11 +30,11 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         XCTAssertEqual(loaded.openWithApps.first?.fileExtensions, ["txt", "md"])
     }
 
-    func testLoadMissingFileReturnsDefault() {
-        XCTAssertEqual(RightClickConfigurationStore.load(from: makeTempFileURL()), .default)
+    func testLoadMissingFileReturnsInactiveDefault() {
+        XCTAssertEqual(RightClickConfigurationStore.load(from: makeTempFileURL()), .inactiveDefault)
     }
 
-    func testLoadCorruptDataReturnsDefault() throws {
+    func testLoadCorruptDataReturnsInactiveDefault() throws {
         let fileURL = makeTempFileURL()
         defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
         try FileManager.default.createDirectory(
@@ -42,7 +42,7 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         )
         try Data("not json".utf8).write(to: fileURL)
 
-        XCTAssertEqual(RightClickConfigurationStore.load(from: fileURL), .default)
+        XCTAssertEqual(RightClickConfigurationStore.load(from: fileURL), .inactiveDefault)
     }
 
     /// A config written before newer keys existed must decode with defaults for
@@ -56,11 +56,47 @@ final class RightClickConfigurationStoreTests: XCTestCase {
         try Data(#"{"newFolder":false}"#.utf8).write(to: fileURL)
 
         let loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertTrue(loaded.menuEnabled)     // missing key -> active default for existing configs
         XCTAssertNil(loaded.preferredLanguages)
         XCTAssertFalse(loaded.newFolder)      // present key honored
         XCTAssertTrue(loaded.copyFileName)    // missing key → default
         XCTAssertTrue(loaded.openInTerminal)  // missing key → default
         XCTAssertEqual(loaded.openWithApps, [])
+    }
+
+    func testSetMenuEnabledInitializesActiveDefaultsWhenMissing() {
+        let fileURL = makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        RightClickConfigurationStore.setMenuEnabled(true, fileURL: fileURL)
+        let loaded = RightClickConfigurationStore.load(from: fileURL)
+
+        XCTAssertTrue(loaded.menuEnabled)
+        XCTAssertEqual(loaded, .activeDefault)
+    }
+
+    func testSetMenuEnabledPreservesExistingSettings() throws {
+        let fileURL = makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        var config = RightClickConfiguration.activeDefault
+        config.copyFileName = false
+        config.openWithApps = [
+            RightClickOpenWithApp(name: "Code", appPath: "/Applications/Code.app")
+        ]
+        XCTAssertTrue(RightClickConfigurationStore.save(config, to: fileURL))
+
+        RightClickConfigurationStore.setMenuEnabled(false, fileURL: fileURL)
+        var loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertFalse(loaded.menuEnabled)
+        XCTAssertFalse(loaded.copyFileName)
+        XCTAssertEqual(loaded.openWithApps.first?.name, "Code")
+
+        RightClickConfigurationStore.setMenuEnabled(true, fileURL: fileURL)
+        loaded = RightClickConfigurationStore.load(from: fileURL)
+        XCTAssertTrue(loaded.menuEnabled)
+        XCTAssertFalse(loaded.copyFileName)
+        XCTAssertEqual(loaded.openWithApps.first?.name, "Code")
     }
 }
 

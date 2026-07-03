@@ -55,6 +55,8 @@ final class RightClickPlugin: MacToolsPlugin {
     }
 
     func activate(context _: PluginRuntimeContext) {
+        RightClickConfigurationStore.setMenuEnabled(true)
+
         guard activationObserver == nil else {
             return
         }
@@ -70,7 +72,11 @@ final class RightClickPlugin: MacToolsPlugin {
         }
     }
 
-    func deactivate(reason _: PluginDeactivationReason) {
+    func deactivate(reason: PluginDeactivationReason) {
+        if reason.requiresStateCleanup {
+            RightClickConfigurationStore.setMenuEnabled(false)
+        }
+
         if let activationObserver {
             NotificationCenter.default.removeObserver(activationObserver)
             self.activationObserver = nil

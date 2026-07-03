@@ -29,7 +29,9 @@ struct RightClickMenuSettingsView: View {
 
     private func saveConfiguration(_ newValue: RightClickConfiguration) {
         var configuration = newValue
-        configuration.preferredLanguages = RightClickConfigurationStore.load().preferredLanguages
+        let currentConfiguration = RightClickConfigurationStore.load()
+        configuration.menuEnabled = currentConfiguration.menuEnabled
+        configuration.preferredLanguages = currentConfiguration.preferredLanguages
         RightClickConfigurationStore.save(configuration)
     }
 

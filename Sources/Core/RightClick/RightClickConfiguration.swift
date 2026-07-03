@@ -1,12 +1,15 @@
 import Foundation
 
-/// User configuration for the MacTools Finder right-click menu, shared between
-/// the host app (writes it from the settings UI) and the sandboxed extension
-/// (reads it to decide which items to show).
+/// Shared state for the MacTools Finder right-click menu.
+///
+/// The host app writes both user preferences and the lightweight lifecycle gate
+/// (`menuEnabled`). The sandboxed extension reads the same file to decide
+/// whether to show anything, then which items to include.
 ///
 /// This type is compiled into BOTH the host app and the extension targets (they
 /// can't import each other); the JSON written by one is decoded by the other.
 struct RightClickConfiguration: Codable, Equatable {
+    var menuEnabled: Bool
     var preferredLanguages: [String]?
     var newFolder: Bool
     var copyFileName: Bool
@@ -19,6 +22,7 @@ struct RightClickConfiguration: Codable, Equatable {
     var openWithApps: [RightClickOpenWithApp]
 
     init(
+        menuEnabled: Bool = false,
         preferredLanguages: [String]? = nil,
         newFolder: Bool = true,
         copyFileName: Bool = true,
@@ -30,6 +34,7 @@ struct RightClickConfiguration: Codable, Equatable {
         openInTerminal: Bool = true,
         openWithApps: [RightClickOpenWithApp] = []
     ) {
+        self.menuEnabled = menuEnabled
         self.preferredLanguages = preferredLanguages
         self.newFolder = newFolder
         self.copyFileName = copyFileName
@@ -42,10 +47,14 @@ struct RightClickConfiguration: Codable, Equatable {
         self.openWithApps = openWithApps
     }
 
-    /// Defaults keep the previously shipped items on (new folder + the three
-    /// copies) and enable the newly added ones, so a fresh install shows the full
-    /// menu until the user customizes it.
-    static let `default` = RightClickConfiguration()
+    /// Used when the shared file is missing or unreadable. The extension should
+    /// stay silent until the host plugin explicitly activates and writes state.
+    static let inactiveDefault = RightClickConfiguration(menuEnabled: false)
+
+    /// Menu defaults used once the host plugin is active.
+    static let activeDefault = RightClickConfiguration(menuEnabled: true)
+
+    static let `default` = inactiveDefault
 
     /// True when at least one copy action is enabled (used to skip the section).
     var hasAnyCopyAction: Bool {
@@ -56,10 +65,11 @@ struct RightClickConfiguration: Codable, Equatable {
     /// to their defaults instead of failing the whole decode.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let fallback = RightClickConfiguration.default
+        let fallback = RightClickConfiguration.activeDefault
         func flag(_ key: CodingKeys, _ defaultValue: Bool) -> Bool {
             (try? container.decode(Bool.self, forKey: key)) ?? defaultValue
         }
+        menuEnabled = flag(.menuEnabled, fallback.menuEnabled)
         preferredLanguages = try? container.decodeIfPresent([String].self, forKey: .preferredLanguages)
         newFolder = flag(.newFolder, fallback.newFolder)
         copyFileName = flag(.copyFileName, fallback.copyFileName)
@@ -136,9 +146,18 @@ enum RightClickConfigurationStore {
         guard let data = try? Data(contentsOf: fileURL),
               let configuration = try? JSONDecoder().decode(RightClickConfiguration.self, from: data)
         else {
-            return .default
+            return .inactiveDefault
         }
         return configuration
+    }
+
+    static func setMenuEnabled(_ enabled: Bool, fileURL: URL = configFileURL) {
+        var configuration = load(from: fileURL)
+        if enabled, configuration == .inactiveDefault {
+            configuration = .activeDefault
+        }
+        configuration.menuEnabled = enabled
+        _ = save(configuration, to: fileURL)
     }
 
     @discardableResult
