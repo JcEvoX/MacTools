@@ -3,33 +3,33 @@ import CoreGraphics
 import Foundation
 import OSLog
 
-struct MouseScrollReverserSessionState: Equatable, Sendable {
+struct MouseEnhancerSessionState: Equatable, Sendable {
     var scrollTapInstalled: Bool
     var gestureTapInstalled: Bool
 
-    static let inactive = MouseScrollReverserSessionState(
+    static let inactive = MouseEnhancerSessionState(
         scrollTapInstalled: false,
         gestureTapInstalled: false
     )
 }
 
 @MainActor
-protocol MouseScrollReverserSessionManaging: AnyObject {
-    var state: MouseScrollReverserSessionState { get }
+protocol MouseEnhancerSessionManaging: AnyObject {
+    var state: MouseEnhancerSessionState { get }
 
     @discardableResult
-    func activate(configuration: MouseScrollReverserConfiguration) -> Bool
-    func update(configuration: MouseScrollReverserConfiguration)
+    func activate(configuration: MouseEnhancerConfiguration) -> Bool
+    func update(configuration: MouseEnhancerConfiguration)
     func deactivate()
 }
 
-final class MouseScrollReverserSession: MouseScrollReverserSessionManaging, @unchecked Sendable {
+final class MouseEnhancerSession: MouseEnhancerSessionManaging, @unchecked Sendable {
     private enum Timing {
         static let wakeRestartDelay: TimeInterval = 2
     }
 
     private static let gestureEventType = CGEventType(rawValue: UInt32(NSEvent.EventType.gesture.rawValue))!
-    private static weak var activeSession: MouseScrollReverserSession?
+    private static weak var activeSession: MouseEnhancerSession?
 
     private let processor: MouseScrollEventProcessor
 
@@ -42,22 +42,22 @@ final class MouseScrollReverserSession: MouseScrollReverserSessionManaging, @unc
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
-        category: "MouseScrollReverserSession"
+        category: "MouseEnhancerSession"
     )
 
-    var state: MouseScrollReverserSessionState {
-        MouseScrollReverserSessionState(
+    var state: MouseEnhancerSessionState {
+        MouseEnhancerSessionState(
             scrollTapInstalled: scrollTap != nil,
             gestureTapInstalled: gestureTap != nil
         )
     }
 
-    init(configuration: MouseScrollReverserConfiguration = .default) {
+    init(configuration: MouseEnhancerConfiguration = .default) {
         self.processor = MouseScrollEventProcessor(configuration: configuration)
     }
 
     @discardableResult
-    func activate(configuration: MouseScrollReverserConfiguration) -> Bool {
+    func activate(configuration: MouseEnhancerConfiguration) -> Bool {
         Self.activeSession?.deactivate()
         Self.activeSession = self
         processor.configuration = configuration
@@ -65,7 +65,7 @@ final class MouseScrollReverserSession: MouseScrollReverserSessionManaging, @unc
         return scrollTap != nil
     }
 
-    func update(configuration: MouseScrollReverserConfiguration) {
+    func update(configuration: MouseEnhancerConfiguration) {
         processor.configuration = configuration
     }
 
@@ -258,14 +258,14 @@ final class MouseScrollReverserSession: MouseScrollReverserSessionManaging, @unc
             return Unmanaged.passUnretained(event)
         }
 
-        let session = Unmanaged<MouseScrollReverserSession>.fromOpaque(userInfo).takeUnretainedValue()
+        let session = Unmanaged<MouseEnhancerSession>.fromOpaque(userInfo).takeUnretainedValue()
 
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             session.enableTapsIfNeeded()
             return Unmanaged.passUnretained(event)
         }
 
-        if type == MouseScrollReverserSession.gestureEventType {
+        if type == MouseEnhancerSession.gestureEventType {
             let touching = NSEvent(cgEvent: event)?.touches(matching: .touching, in: nil).count ?? 0
             session.processor.recordGestureTouchingCount(touching)
             return Unmanaged.passUnretained(event)

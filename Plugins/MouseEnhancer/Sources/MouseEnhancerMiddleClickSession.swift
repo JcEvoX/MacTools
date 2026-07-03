@@ -6,6 +6,14 @@ import IOKit
 import MultitouchSupport
 import OSLog
 
+@MainActor
+protocol MouseEnhancerMiddleClickSessionManaging: AnyObject {
+    var requiredFingerCount: Int { get set }
+
+    func activate()
+    func deactivate()
+}
+
 /// Manages trackpad multitouch callbacks and converts a system left-click into a middle-click
 /// in place through a CGEvent tap when the configured finger count is detected.
 ///
@@ -27,7 +35,7 @@ import OSLog
 /// main thread, so the type is explicitly marked `@unchecked Sendable`. All lifecycle methods
 /// (`start`, `stop`, `activate`, `deactivate`) and internal restart scheduling are expected to run
 /// on the main thread.
-final class MiddleClickSession: @unchecked Sendable {
+final class MouseEnhancerMiddleClickSession: MouseEnhancerMiddleClickSessionManaging, @unchecked Sendable {
 
     // MARK: - CGEvent Tap State (read and written by CGEvent tap and C callback threads)
 
@@ -50,17 +58,17 @@ final class MiddleClickSession: @unchecked Sendable {
     private var ioIterator: io_iterator_t = 0
     private var displayCallbackRegistered = false
     private var restartWorkItem: DispatchWorkItem?
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MiddleClickSession")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MouseEnhancerMiddleClickSession")
 
     /// After wake, the multitouch driver may not be ready; delay before rebuilding listeners.
     /// Keep this aligned with artginzburg/MiddleClick at 10 seconds: long sleep can make driver
-    /// re-enumeration vary across hardware, and 2-3 second delays reproduced "middle click stopped
+    /// re-enumeration vary across hardware, and 2-3 second delays reproduced "MiddleClick stopped
     /// working" in testing. Users rarely need middle-click in the first few seconds after unlock.
     private static let wakeRestartDelay: TimeInterval = 10
 
     // MARK: - Singleton Reference (for C callback access)
 
-    nonisolated(unsafe) static weak var activeSession: MiddleClickSession?
+    nonisolated(unsafe) static weak var activeSession: MouseEnhancerMiddleClickSession?
 
     // MARK: - MTDeviceCreateList (private symbol linked through @_silgen_name)
 
@@ -76,7 +84,7 @@ final class MiddleClickSession: @unchecked Sendable {
     // Maintains only the `threeDown` flag; no gesture recognition is performed here.
 
     private let touchCallback: MTFrameCallbackFunction = { _, data, nFingers, _, _ in
-        guard let session = MiddleClickSession.activeSession else { return }
+        guard let session = MouseEnhancerMiddleClickSession.activeSession else { return }
         session.threeDown = (nFingers == Int32(session.requiredFingerCount))
     }
 
@@ -92,7 +100,7 @@ final class MiddleClickSession: @unchecked Sendable {
         // `@convention(c)` closures cannot capture context, so `self` is passed through `userInfo`.
         let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let ptr = userInfo else { return Unmanaged.passUnretained(event) }
-            let session = Unmanaged<MiddleClickSession>.fromOpaque(ptr).takeUnretainedValue()
+            let session = Unmanaged<MouseEnhancerMiddleClickSession>.fromOpaque(ptr).takeUnretainedValue()
             let kCenter = Int64(CGMouseButton.center.rawValue)
             let passthrough = Unmanaged.passUnretained(event)
 
@@ -191,14 +199,14 @@ final class MiddleClickSession: @unchecked Sendable {
     }
 
     func activate() {
-        MiddleClickSession.activeSession?.stop()
-        MiddleClickSession.activeSession = self
+        MouseEnhancerMiddleClickSession.activeSession?.stop()
+        MouseEnhancerMiddleClickSession.activeSession = self
         start()
     }
 
     func deactivate() {
-        if MiddleClickSession.activeSession === self {
-            MiddleClickSession.activeSession = nil
+        if MouseEnhancerMiddleClickSession.activeSession === self {
+            MouseEnhancerMiddleClickSession.activeSession = nil
         }
         stop()
     }
@@ -237,12 +245,15 @@ final class MiddleClickSession: @unchecked Sendable {
 
     private func observeSystemWake() {
         guard wakeObserver == nil else { return }
+        let restartDelay = Self.wakeRestartDelay
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.scheduleRestart(after: Self.wakeRestartDelay, reason: "systemWake")
+            Task { @MainActor [weak self] in
+                self?.scheduleRestart(after: restartDelay, reason: "systemWake")
+            }
         }
     }
 
@@ -277,9 +288,9 @@ final class MiddleClickSession: @unchecked Sendable {
             IOServiceMatching("AppleMultitouchDevice"),
             { userData, iterator in
                 // The iterator must be drained or subsequent notifications will not fire.
-                MiddleClickSession.drainIterator(iterator)
+                MouseEnhancerMiddleClickSession.drainIterator(iterator)
                 guard let userData else { return }
-                let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
+                let session = Unmanaged<MouseEnhancerMiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
                 DispatchQueue.main.async {
                     session.scheduleRestart(after: 2, reason: "multitouchDeviceArrived")
                 }
@@ -326,7 +337,7 @@ final class MiddleClickSession: @unchecked Sendable {
         let interesting: CGDisplayChangeSummaryFlags = [.setModeFlag, .addFlag, .removeFlag, .disabledFlag]
         guard !flags.intersection(interesting).isEmpty else { return }
         guard let userData else { return }
-        let session = Unmanaged<MiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
+        let session = Unmanaged<MouseEnhancerMiddleClickSession>.fromOpaque(userData).takeUnretainedValue()
         DispatchQueue.main.async {
             session.scheduleRestart(after: 2, reason: "displayReconfigured")
         }

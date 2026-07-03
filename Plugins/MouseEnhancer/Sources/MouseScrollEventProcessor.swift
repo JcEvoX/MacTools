@@ -30,8 +30,10 @@ struct MouseScrollDeltas: Equatable, Sendable {
 }
 
 struct MouseScrollProcessingResult: Equatable, Sendable {
-    var source: MouseScrollReverserDevice
+    var source: MouseEnhancerDevice
     var shouldReverse: Bool
+    var reverseHorizontal: Bool
+    var reverseVertical: Bool
     var deltas: MouseScrollDeltas
 }
 
@@ -41,14 +43,14 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
         static let touchStaleThreshold: UInt64 = 333_000_000
     }
 
-    nonisolated(unsafe) var configuration: MouseScrollReverserConfiguration
+    nonisolated(unsafe) var configuration: MouseEnhancerConfiguration
     nonisolated(unsafe) private var touchingCount = 0
     nonisolated(unsafe) private var lastTouchTime: UInt64 = 0
-    nonisolated(unsafe) private var lastSource: MouseScrollReverserDevice = .mouse
+    nonisolated(unsafe) private var lastSource: MouseEnhancerDevice = .mouse
     nonisolated(unsafe) private var hasSeenGestureEvent = false
     nonisolated(unsafe) private var gestureMonitoringAvailable = false
 
-    init(configuration: MouseScrollReverserConfiguration) {
+    init(configuration: MouseEnhancerConfiguration) {
         self.configuration = configuration
     }
 
@@ -79,7 +81,7 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
     func classify(
         snapshot: MouseScrollEventSnapshot,
         timestamp: UInt64 = DispatchTime.now().uptimeNanoseconds
-    ) -> MouseScrollReverserDevice {
+    ) -> MouseEnhancerDevice {
         let touching = touchingCount
         touchingCount = 0
 
@@ -120,13 +122,27 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
         let source = classify(snapshot: snapshot, timestamp: timestamp)
         let shouldReverse = configuration.shouldReverse(device: source)
         guard shouldReverse else {
-            return MouseScrollProcessingResult(source: source, shouldReverse: false, deltas: deltas)
+            return MouseScrollProcessingResult(
+                source: source,
+                shouldReverse: false,
+                reverseHorizontal: false,
+                reverseVertical: false,
+                deltas: deltas
+            )
         }
 
+        let reverseHorizontal = configuration.shouldReverseHorizontal(device: source)
+        let reverseVertical = configuration.shouldReverseVertical(device: source)
         return MouseScrollProcessingResult(
             source: source,
             shouldReverse: true,
-            deltas: Self.reversed(deltas: deltas, configuration: configuration)
+            reverseHorizontal: reverseHorizontal,
+            reverseVertical: reverseVertical,
+            deltas: Self.reversed(
+                deltas: deltas,
+                reverseHorizontal: reverseHorizontal,
+                reverseVertical: reverseVertical
+            )
         )
     }
 
@@ -140,21 +156,26 @@ final class MouseScrollEventProcessor: @unchecked Sendable {
             return result
         }
 
-        event.applyScrollDeltas(result.deltas, configuration: configuration)
+        event.applyScrollDeltas(
+            result.deltas,
+            reverseHorizontal: result.reverseHorizontal,
+            reverseVertical: result.reverseVertical
+        )
         return result
     }
 
     private static func reversed(
         deltas: MouseScrollDeltas,
-        configuration: MouseScrollReverserConfiguration
+        reverseHorizontal: Bool,
+        reverseVertical: Bool
     ) -> MouseScrollDeltas {
         var next = deltas
-        if configuration.reverseVertical {
+        if reverseVertical {
             next.deltaAxis1 = -next.deltaAxis1
             next.pointDeltaAxis1 = -next.pointDeltaAxis1
             next.fixedPointDeltaAxis1 = -next.fixedPointDeltaAxis1
         }
-        if configuration.reverseHorizontal {
+        if reverseHorizontal {
             next.deltaAxis2 = -next.deltaAxis2
             next.pointDeltaAxis2 = -next.pointDeltaAxis2
             next.fixedPointDeltaAxis2 = -next.fixedPointDeltaAxis2
@@ -197,17 +218,18 @@ private extension MouseScrollDeltas {
 private extension CGEvent {
     func applyScrollDeltas(
         _ deltas: MouseScrollDeltas,
-        configuration: MouseScrollReverserConfiguration
+        reverseHorizontal: Bool,
+        reverseVertical: Bool
     ) {
         // Set line deltas first. macOS may derive point/fixed deltas from them,
         // so point and fixed values are restored afterwards to preserve smooth scrolling.
-        if configuration.reverseVertical {
+        if reverseVertical {
             setIntegerValueField(.scrollWheelEventDeltaAxis1, value: deltas.deltaAxis1)
             setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: deltas.fixedPointDeltaAxis1)
             setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: deltas.pointDeltaAxis1)
         }
 
-        if configuration.reverseHorizontal {
+        if reverseHorizontal {
             setIntegerValueField(.scrollWheelEventDeltaAxis2, value: deltas.deltaAxis2)
             setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: deltas.fixedPointDeltaAxis2)
             setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: deltas.pointDeltaAxis2)

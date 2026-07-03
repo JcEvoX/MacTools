@@ -5,19 +5,19 @@ import OSLog
 import SwiftUI
 import MacToolsPluginKit
 
-public final class MouseScrollReverserPluginFactory: NSObject, MacToolsPluginBundleFactory {
+public final class MouseEnhancerPluginFactory: NSObject, MacToolsPluginBundleFactory {
     public static func makeProvider(context: PluginRuntimeContext) throws -> any PluginProvider {
-        MouseScrollReverserPluginProvider(context: context)
+        MouseEnhancerPluginProvider(context: context)
     }
 }
 
 @MainActor
-private struct MouseScrollReverserPluginProvider: PluginProvider {
+private struct MouseEnhancerPluginProvider: PluginProvider {
     let context: PluginRuntimeContext
 
     func makePlugins() -> [any MacToolsPlugin] {
         [
-            MouseScrollReverserPlugin(
+            MouseEnhancerPlugin(
                 context: context,
                 localization: PluginLocalization(bundle: context.resourceBundle)
             ),
@@ -25,72 +25,80 @@ private struct MouseScrollReverserPluginProvider: PluginProvider {
     }
 }
 
-enum MouseScrollReverserInputMonitoringAuthorizationStatus {
+enum MouseEnhancerInputMonitoringAuthorizationStatus {
     case granted
     case denied
     case unknown
 }
 
 @MainActor
-final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing {
+final class MouseEnhancerPlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing, PluginConfigurationPresenting {
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
     }
 
     let metadata: PluginMetadata
-
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .switch,
-        menuActionBehavior: .keepPresented
-    )
+    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestConfigurationPresentation: (() -> Void)?
 
-    let store: MouseScrollReverserStore
+    let store: MouseEnhancerStore
 
     private let localization: PluginLocalization
-    private let session: any MouseScrollReverserSessionManaging
+    private let session: any MouseEnhancerSessionManaging
+    private let makeMiddleClickSession: @MainActor () -> any MouseEnhancerMiddleClickSessionManaging
+    private var middleClickSession: (any MouseEnhancerMiddleClickSessionManaging)?
     private let accessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityTrust: @MainActor (Bool) -> Bool
-    private let inputMonitoringAuthorizationStatus: @MainActor () -> MouseScrollReverserInputMonitoringAuthorizationStatus
+    private let inputMonitoringAuthorizationStatus: @MainActor () -> MouseEnhancerInputMonitoringAuthorizationStatus
     private let openURL: (URL) -> Void
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
-        category: "MouseScrollReverserPlugin"
+        category: "MouseEnhancerPlugin"
     )
 
     private var isAccessibilityGranted: Bool
     private var lastErrorMessage: String?
 
     init(
-        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "mouse-scroll-reverser"),
-        session: (any MouseScrollReverserSessionManaging)? = nil,
+        context: PluginRuntimeContext = PluginRuntimeContext(pluginID: "mouse-enhancer"),
+        session: (any MouseEnhancerSessionManaging)? = nil,
+        makeMiddleClickSession: @escaping @MainActor () -> any MouseEnhancerMiddleClickSessionManaging = {
+            MouseEnhancerMiddleClickSession()
+        },
         localization: PluginLocalization = PluginLocalization(bundle: .main),
-        accessibilityTrusted: @escaping @MainActor () -> Bool = MouseScrollReverserAccessibilityCheck.isTrusted,
-        requestAccessibilityTrust: @escaping @MainActor (Bool) -> Bool = MouseScrollReverserAccessibilityCheck.requestTrust(prompt:),
-        inputMonitoringAuthorizationStatus: @escaping @MainActor () -> MouseScrollReverserInputMonitoringAuthorizationStatus = MouseScrollReverserPlugin.currentInputMonitoringAuthorizationStatus,
+        accessibilityTrusted: @escaping @MainActor () -> Bool = MouseEnhancerAccessibilityCheck.isTrusted,
+        requestAccessibilityTrust: @escaping @MainActor (Bool) -> Bool = MouseEnhancerAccessibilityCheck.requestTrust(prompt:),
+        inputMonitoringAuthorizationStatus: @escaping @MainActor () -> MouseEnhancerInputMonitoringAuthorizationStatus = MouseEnhancerPlugin.currentInputMonitoringAuthorizationStatus,
         openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) {
         self.localization = localization
-        self.store = MouseScrollReverserStore(storage: context.storage)
-        self.session = session ?? MouseScrollReverserSession()
+        self.store = MouseEnhancerStore(storage: context.storage)
+        self.session = session ?? MouseEnhancerSession()
+        self.makeMiddleClickSession = makeMiddleClickSession
         self.accessibilityTrusted = accessibilityTrusted
         self.requestAccessibilityTrust = requestAccessibilityTrust
         self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
         self.openURL = openURL
         self.isAccessibilityGranted = accessibilityTrusted()
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .keepPresented,
+            buttonTitle: localization.string("panel.button.settings", defaultValue: "设置")
+        )
         self.metadata = PluginMetadata(
-            id: "mouse-scroll-reverser",
-            title: localization.string("metadata.title", defaultValue: "鼠标滚动翻转"),
+            id: "mouse-enhancer",
+            title: localization.string("metadata.title", defaultValue: "鼠标增强"),
             iconName: "computermouse",
             iconTint: Color(nsColor: .systemTeal),
             order: 56,
             defaultDescription: localization.string(
                 "metadata.description",
-                defaultValue: "按设备和方向反转滚动"
+                defaultValue: "增强鼠标与触控板滚动控制"
             )
         )
     }
@@ -98,6 +106,7 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
     func activate(context: PluginRuntimeContext) {
         refreshAccessibilityPermission()
         applyCurrentConfiguration()
+        applyMiddleClickConfiguration()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
@@ -106,19 +115,21 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         }
 
         session.deactivate()
+        stopMiddleClickSession()
         onStateChange?()
     }
 
     func refresh() {
         refreshAccessibilityPermission()
         applyCurrentConfiguration()
+        applyMiddleClickConfiguration()
         onStateChange?()
     }
 
     var primaryPanelState: PluginPanelState {
         PluginPanelState(
             subtitle: panelSubtitle,
-            isOn: session.state.scrollTapInstalled,
+            isOn: false,
             isExpanded: false,
             isEnabled: true,
             isVisible: true,
@@ -132,19 +143,19 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
             PluginPermissionRequirement(
                 id: PermissionID.accessibility,
                 kind: .accessibility,
-                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能授权"),
+                title: localization.string("permission.accessibility.title", defaultValue: "辅助功能"),
                 description: localization.string(
                     "permission.accessibility.description",
-                    defaultValue: "修改系统滚动事件需要辅助功能权限。"
+                    defaultValue: "用于监听滚动事件和发送中键点击。"
                 )
             ),
             PluginPermissionRequirement(
                 id: PermissionID.inputMonitoring,
                 kind: .inputMonitoring,
-                title: localization.string("permission.inputMonitoring.title", defaultValue: "输入监控授权"),
+                title: localization.string("permission.inputMonitoring.title", defaultValue: "输入监控"),
                 description: localization.string(
                     "permission.inputMonitoring.description",
-                    defaultValue: "用于区分鼠标滚轮和触控板手势，减少误判。"
+                    defaultValue: "用于区分鼠标滚轮和触控板手势。"
                 )
             ),
         ]
@@ -160,7 +171,7 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
             }
 
             return AnyView(
-                MouseScrollReverserSettingsView(
+                MouseEnhancerSettingsView(
                     store: self.store,
                     localization: self.localization,
                     onChange: { [weak self] in
@@ -172,11 +183,12 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        guard case let .setSwitch(enabled) = action else {
+        switch action {
+        case .invokeAction(controlID: _):
+            requestConfigurationPresentation?()
+        default:
             return
         }
-
-        setEnabled(enabled)
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -188,7 +200,7 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
                     ? nil
                     : localization.string(
                         "permission.accessibility.footnote",
-                        defaultValue: "前往系统设置 → 隐私与安全性 → 辅助功能，允许 MacTools。"
+                        defaultValue: "系统设置 → 隐私与安全性 → 辅助功能，允许 MacTools。"
                     )
             )
         case PermissionID.inputMonitoring:
@@ -218,13 +230,15 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
 
         if previous && !isAccessibilityGranted {
             session.deactivate()
+            stopMiddleClickSession()
             lastErrorMessage = localization.string(
                 "error.accessibilityRevoked",
-                defaultValue: "辅助功能权限已关闭，滚动翻转已暂停。"
+                defaultValue: "辅助功能权限已关闭，鼠标增强已暂停。"
             )
         } else if !previous && isAccessibilityGranted {
             lastErrorMessage = nil
             applyCurrentConfiguration()
+            applyMiddleClickConfiguration()
         }
 
         if previous != isAccessibilityGranted {
@@ -232,35 +246,42 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         }
     }
 
-    private func setEnabled(_ enabled: Bool) {
+    private func ensureAccessibilityPermissionForActiveConfiguration() -> Bool {
         lastErrorMessage = nil
 
-        if enabled {
-            isAccessibilityGranted = accessibilityTrusted()
-            if !isAccessibilityGranted {
-                isAccessibilityGranted = requestAccessibilityTrust(true)
-            }
-
-            guard isAccessibilityGranted else {
-                store.setEnabled(false)
-                lastErrorMessage = localization.string(
-                    "error.accessibilityRequired",
-                    defaultValue: "滚动翻转需要辅助功能权限，请先前往设置完成授权。"
-                )
-                requestPermissionGuidance?(PermissionID.accessibility)
-                onStateChange?()
-                return
-            }
+        let configuration = store.configuration
+        guard configuration.shouldInstallEventTap || configuration.middleClickEnabled else {
+            return true
         }
 
-        store.setEnabled(enabled)
-        applyCurrentConfiguration()
-        onStateChange?()
+        isAccessibilityGranted = accessibilityTrusted()
+        if !isAccessibilityGranted {
+            isAccessibilityGranted = requestAccessibilityTrust(true)
+        }
+
+        guard isAccessibilityGranted else {
+            lastErrorMessage = localization.string(
+                "error.accessibilityRequired",
+                defaultValue: "鼠标增强需要辅助功能权限，请先前往设置完成授权。"
+            )
+            requestPermissionGuidance?(PermissionID.accessibility)
+            return false
+        }
+
+        return true
     }
 
-    private func configurationDidChange() {
+    func configurationDidChange() {
         lastErrorMessage = nil
+        guard ensureAccessibilityPermissionForActiveConfiguration() else {
+            session.deactivate()
+            stopMiddleClickSession()
+            onStateChange?()
+            return
+        }
+
         applyCurrentConfiguration()
+        applyMiddleClickConfiguration()
         onStateChange?()
     }
 
@@ -274,6 +295,10 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
 
         guard isAccessibilityGranted else {
             session.deactivate()
+            lastErrorMessage = localization.string(
+                "error.accessibilityRequired",
+                defaultValue: "鼠标增强需要辅助功能权限，请先前往设置完成授权。"
+            )
             return
         }
 
@@ -283,7 +308,6 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         }
 
         guard session.activate(configuration: configuration) else {
-            store.setEnabled(false)
             lastErrorMessage = localization.string(
                 "error.tapUnavailable",
                 defaultValue: "无法启动滚动事件监听，请确认辅助功能授权后重试。"
@@ -291,6 +315,40 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
             logger.error("failed to install scroll event tap")
             return
         }
+    }
+
+    private func applyMiddleClickConfiguration() {
+        let configuration = store.configuration
+
+        guard configuration.middleClickEnabled else {
+            stopMiddleClickSession()
+            return
+        }
+
+        guard isAccessibilityGranted else {
+            stopMiddleClickSession()
+            lastErrorMessage = localization.string(
+                "error.accessibilityRequired",
+                defaultValue: "鼠标增强需要辅助功能权限，请先前往设置完成授权。"
+            )
+            return
+        }
+
+        if let middleClickSession {
+            middleClickSession.requiredFingerCount = configuration.middleClickFingerCount
+            return
+        }
+
+        let newSession = makeMiddleClickSession()
+        newSession.requiredFingerCount = configuration.middleClickFingerCount
+        newSession.activate()
+        middleClickSession = newSession
+        logger.info("middle click enabled requiredFingerCount=\(configuration.middleClickFingerCount, privacy: .public)")
+    }
+
+    private func stopMiddleClickSession() {
+        middleClickSession?.deactivate()
+        middleClickSession = nil
     }
 
     private func handleAccessibilityPermissionAction() {
@@ -303,10 +361,11 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         if isAccessibilityGranted {
             lastErrorMessage = nil
             applyCurrentConfiguration()
+            applyMiddleClickConfiguration()
         } else {
             lastErrorMessage = localization.string(
                 "error.accessibilityRequired",
-                defaultValue: "滚动翻转需要辅助功能权限，请先前往设置完成授权。"
+                defaultValue: "鼠标增强需要辅助功能权限，请先前往设置完成授权。"
             )
         }
         onStateChange?()
@@ -324,23 +383,27 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
             )
         }
 
-        if configuration.isEnabled, !isAccessibilityGranted {
+        if activeConfigurationNeedsAccessibility(configuration), !isAccessibilityGranted {
             return localization.string("panel.subtitle.needsAccessibility", defaultValue: "启用前需要辅助功能授权")
         }
 
-        if configuration.isEnabled, !configuration.hasSelectedAxis {
-            return localization.string("panel.subtitle.noAxis", defaultValue: "请选择水平或垂直方向")
+        if !configuration.shouldInstallEventTap, !configuration.middleClickEnabled {
+            return localization.string("panel.subtitle.off", defaultValue: "未启用增强功能")
         }
 
-        if configuration.isEnabled, !configuration.hasSelectedDevice {
-            return localization.string("panel.subtitle.noDevice", defaultValue: "请选择鼠标或触控板")
+        if configuration.middleClickEnabled, !configuration.shouldInstallEventTap {
+            return localization.format(
+                "panel.subtitle.middleClickEnabledFormat",
+                defaultValue: "模拟中键 · %d指",
+                configuration.middleClickFingerCount
+            )
         }
 
         return metadata.defaultDescription
     }
 
-    private func deviceSummary(_ configuration: MouseScrollReverserConfiguration) -> String {
-        switch (configuration.reverseMouse, configuration.reverseTrackpad) {
+    private func deviceSummary(_ configuration: MouseEnhancerConfiguration) -> String {
+        switch (configuration.hasMouseReversing, configuration.hasTrackpadReversing) {
         case (true, true):
             return localization.string("summary.device.all", defaultValue: "鼠标和触控板")
         case (true, false):
@@ -352,8 +415,11 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         }
     }
 
-    private func axisSummary(_ configuration: MouseScrollReverserConfiguration) -> String {
-        switch (configuration.reverseVertical, configuration.reverseHorizontal) {
+    private func axisSummary(_ configuration: MouseEnhancerConfiguration) -> String {
+        let hasVertical = configuration.reverseMouseVertical || configuration.reverseTrackpadVertical
+        let hasHorizontal = configuration.reverseMouseHorizontal || configuration.reverseTrackpadHorizontal
+
+        switch (hasVertical, hasHorizontal) {
         case (true, true):
             return localization.string("summary.axis.all", defaultValue: "水平和垂直")
         case (true, false):
@@ -365,6 +431,10 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
         }
     }
 
+    private func activeConfigurationNeedsAccessibility(_ configuration: MouseEnhancerConfiguration) -> Bool {
+        configuration.shouldInstallEventTap || configuration.middleClickEnabled
+    }
+
     private var inputMonitoringPermissionState: PluginPermissionState {
         switch inputMonitoringAuthorizationStatus() {
         case .granted:
@@ -372,7 +442,7 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
                 isGranted: true,
                 footnote: localization.string(
                     "permission.inputMonitoring.granted",
-                    defaultValue: "已允许 MacTools 使用输入监控，可更可靠地区分鼠标和触控板。"
+                    defaultValue: "已允许，可提升设备识别准确性。"
                 )
             )
         case .denied, .unknown:
@@ -380,13 +450,13 @@ final class MouseScrollReverserPlugin: MacToolsPlugin, PluginPrimaryPanel, Acces
                 isGranted: false,
                 footnote: localization.string(
                     "permission.inputMonitoring.footnote",
-                    defaultValue: "前往系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。未授权时会保守处理连续滚动，避免误伤触控板。"
+                    defaultValue: "系统设置 → 隐私与安全性 → 输入监控，允许 MacTools。"
                 )
             )
         }
     }
 
-    private static func currentInputMonitoringAuthorizationStatus() -> MouseScrollReverserInputMonitoringAuthorizationStatus {
+    private static func currentInputMonitoringAuthorizationStatus() -> MouseEnhancerInputMonitoringAuthorizationStatus {
         switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
         case kIOHIDAccessTypeGranted:
             return .granted

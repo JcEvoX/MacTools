@@ -1,7 +1,7 @@
 import ApplicationServices
 
 @MainActor
-enum MouseScrollReverserAccessibilityCheck {
+enum MouseEnhancerAccessibilityCheck {
     private static let trustedCheckOptionPromptKey = "AXTrustedCheckOptionPrompt"
 
     static func isTrusted() -> Bool {
