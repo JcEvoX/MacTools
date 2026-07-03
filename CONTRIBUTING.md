@@ -63,14 +63,14 @@ Thanks for your interest in MacTools. Please keep each contribution small and cl
 - Releases are handled by maintainers. Do not create tags, publish GitHub Releases, or commit release artifacts in ordinary contributions.
 - For GitHub-based releases, prefer `Actions` -> `Prepare Release`. Enter `type`, target `version`, and whether to `release`; when `release` is enabled, the workflow continues to the actual release workflow after bumping, committing, and creating the tag.
 - For quick releases, prefer `make release`. The command interactively chooses `app` or `plugin`, analyzes the next `patch`/`minor`/`major` version, previews the bump, then only after confirmation runs `git pull --rebase`, lightweight checks, version updates, commit, tag creation, and tag push.
-- App releases update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`. After pushing a `v*.*.*` tag, the `Release` workflow builds, signs, notarizes, and uploads the DMG.
+- App releases update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Configs/AppVersion.xcconfig`. The app and embedded extensions inherit this shared version config. After pushing a `v*.*.*` tag, the `Release` workflow builds, signs, notarizes, and uploads the DMG.
 - Plugin releases push a `plugins-*` batch tag. The default `auto` mode uses the production catalog to find new plugins, already bumped plugins, and package-related plugin changes; it updates `plugin.json.version` when needed, then the `Plugin Release` workflow builds plugins and merges the signed catalog.
 - On first launch, a new app version checks installed plugins and automatically updates them from the signed production catalog. It does not automatically install plugins the user has not installed.
 - Non-interactive examples: `make release ARGS="--type app --version 1.0.7 --yes"` or `make release ARGS="--type plugin --version 1.0.10 --plugin-mode selected --plugin calendar --yes"`.
 - Add `--dry-run` to preview the steps. The working tree must be clean before a real release.
 - Before local release builds, copy `scripts/release.local.env.sample` to `scripts/release.local.env` and fill in at least `DEVELOPER_ID_APPLICATION`.
 - If Apple notarization is needed, store credentials first with `xcrun notarytool store-credentials`.
-- Version numbers default to `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`.
+- Version numbers default to `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Configs/AppVersion.xcconfig`.
 - Local production builds can still use the lower-level script: `./scripts/release-local.sh`; before publishing to GitHub Releases, run `gh auth login`, then `./scripts/release-local.sh --publish`.
 - Plugin library releases are triggered by `plugins-*` batch tags through the `Plugin Release` workflow. By default, only plugins with bumped versions are built and uploaded, then merged into the production catalog. The catalog private key, Developer ID certificate, and GitHub token must come from CI secrets or local environment variables.
 - GitHub Actions build and release configuration is documented in `docs/github-actions.md`; plugin catalog, package structure, and batch release flows are documented in `docs/plugins/plugin-catalog.md`.

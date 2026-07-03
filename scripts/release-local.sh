@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
-PROJECT_SPEC="$ROOT_DIR/project.yml"
+APP_VERSION_CONFIG="$ROOT_DIR/Configs/AppVersion.xcconfig"
 PROJECT_FILE="$ROOT_DIR/MacTools.xcodeproj"
 XCODEBUILD="${XCODEBUILD:-$SCRIPT_DIR/xcodebuild-filtered.sh}"
 APP_NAME="MacTools"
@@ -36,8 +36,8 @@ Usage:
   ./scripts/release-local.sh [options]
 
 Options:
-  --version <version>        Release marketing version. Defaults to project.yml.
-  --build-number <number>    Release build number. Defaults to project.yml.
+  --version <version>        Release marketing version. Defaults to Configs/AppVersion.xcconfig.
+  --build-number <number>    Release build number. Defaults to Configs/AppVersion.xcconfig.
   --tag <tag>                Git tag / release tag. Defaults to v<version>.
   --notes-file <path>        Release notes file for GitHub Release upload.
   --publish                  Push the tag and sync the DMG to GitHub Releases.
@@ -157,9 +157,9 @@ $matched_identity
   fi
 }
 
-function read_project_setting() {
+function read_version_setting() {
   local key="$1"
-  awk -v key="$key" '$1 == key ":" { print $2; exit }' "$PROJECT_SPEC"
+  awk -v key="$key" '$1 == key && $2 == "=" { print $3; exit }' "$APP_VERSION_CONFIG"
 }
 
 function git_repository() {
@@ -565,13 +565,13 @@ require_command shasum
 require_command codesign
 require_command git
 
-VERSION="${VERSION:-$(read_project_setting MARKETING_VERSION)}"
-BUILD_NUMBER="${BUILD_NUMBER:-$(read_project_setting CURRENT_PROJECT_VERSION)}"
+VERSION="${VERSION:-$(read_version_setting MARKETING_VERSION)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$(read_version_setting CURRENT_PROJECT_VERSION)}"
 TAG="${TAG:-v$VERSION}"
 NOTES_FILE="${NOTES_FILE:-${GITHUB_RELEASE_NOTES_FILE:-}}"
 
-[[ -n "$VERSION" ]] || fail "无法从 project.yml 读取 MARKETING_VERSION。"
-[[ -n "$BUILD_NUMBER" ]] || fail "无法从 project.yml 读取 CURRENT_PROJECT_VERSION。"
+[[ -n "$VERSION" ]] || fail "无法从 Configs/AppVersion.xcconfig 读取 MARKETING_VERSION。"
+[[ -n "$BUILD_NUMBER" ]] || fail "无法从 Configs/AppVersion.xcconfig 读取 CURRENT_PROJECT_VERSION。"
 if [[ -n "$NOTES_FILE" && ! -f "$NOTES_FILE" ]]; then
   fail "Release notes 文件不存在：$NOTES_FILE"
 fi
