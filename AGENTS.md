@@ -90,6 +90,7 @@
 
 ## Documentation And Resources
 - User-visible feature changes should update `README.md`.
+- User-visible app or plugin changes should add or update one concise English changelog fragment under `changes/unreleased/*.md`. Use `release: app` for app releases and `release: plugin` for plugin batch releases, plus `type: added`, `changed`, `fixed`, `security`, `removed`, `deprecated`, `maintenance`, or `summary`. If one change needs both release channels, write one app fragment for the host/app impact and one plugin fragment for the plugin-package impact; do not duplicate the same sentence. Keep entries user-facing, avoid duplicate wording, and do not describe implementation details. Pure refactors, tests, and local-only release mechanics do not need a fragment unless users or maintainers need to know about them.
 - Plugin directories, manifests, catalogs, or release-flow changes should update `docs/plugins/` and `CONTRIBUTING.md`.
 - Large product/interaction changes may add date-prefixed documents under `docs/superpowers/specs/` or `docs/superpowers/plans/`.
 - Icons, asset catalogs, `LocalConfig.xcconfig`, and release env files are usually maintained by the user or generation flow; avoid unrelated changes.

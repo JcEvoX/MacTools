@@ -16,6 +16,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 APP_VERSION_CONFIG = ROOT_DIR / "Configs" / "AppVersion.xcconfig"
+CHANGELOG_PATH = ROOT_DIR / "CHANGELOG.md"
+CHANGELOG_FRAGMENT_DIR = ROOT_DIR / "changes" / "unreleased"
 PLUGIN_SOURCE_DIR = ROOT_DIR / "Plugins"
 PLUGIN_CATALOG = ROOT_DIR / "docs/plugins/catalog.json"
 PLUGIN_PLAN_PATH = ROOT_DIR / "build/release/plugin-plan.json"
@@ -61,7 +63,7 @@ class PluginAnalysis:
 
 
 def info(message: str) -> None:
-    print(f"[release] {message}")
+    print(f"[release] {message}", flush=True)
 
 
 def fail(message: str) -> None:
@@ -79,6 +81,9 @@ def run(
     if dry_run and mutates:
         print("+ " + " ".join(shell_quote(part) for part in args))
         return subprocess.CompletedProcess(args, 0, "" if capture else None, "")
+
+    sys.stdout.flush()
+    sys.stderr.flush()
 
     kwargs: dict[str, object] = {
         "cwd": cwd,
@@ -732,6 +737,44 @@ def run_app_check(skip_check: bool, dry_run: bool) -> None:
         run(["make", "build"], dry_run=dry_run, mutates=True)
 
 
+def changelog_fragment_paths(release: str) -> list[Path]:
+    if not CHANGELOG_FRAGMENT_DIR.exists():
+        return []
+    paths: list[Path] = []
+    release_pattern = re.compile(rf"(?m)^\s*release\s*:\s*['\"]?{re.escape(release)}['\"]?\s*$")
+    for path in sorted(CHANGELOG_FRAGMENT_DIR.glob("*.md")):
+        if not path.is_file():
+            continue
+        content = path.read_text(encoding="utf-8")
+        if release_pattern.search(content):
+            paths.append(path)
+    return paths
+
+
+def changelog_status_label(release: str) -> str:
+    count = len(changelog_fragment_paths(release))
+    if count == 1:
+        return f"1 pending {release} fragment"
+    return f"{count} pending {release} fragments"
+
+
+def validate_changelog(release: str, require_pending: bool) -> None:
+    command = ["python3", "scripts/changelog.py", "validate", "--release", release]
+    if require_pending:
+        command.append("--require-pending")
+    run(command)
+
+
+def prepare_changelog(release: str, tag: str, dry_run: bool) -> list[Path]:
+    paths = [CHANGELOG_PATH, *changelog_fragment_paths(release)]
+    info(f"Preparing CHANGELOG.md for {tag}")
+    command = ["python3", "scripts/changelog.py", "prepare", "--release", release, "--tag", tag]
+    if dry_run:
+        command.append("--dry-run")
+    run(command, dry_run=False)
+    return paths
+
+
 def run_plugin_generate_check(skip_check: bool, dry_run: bool) -> None:
     if skip_check:
         info("Skipping plugin check")
@@ -768,7 +811,7 @@ def commit_if_needed(paths: list[Path], message: str, dry_run: bool) -> bool:
         print("+ git add " + " ".join(shell_quote(path) for path in relative_paths))
         print("+ git commit -m " + shell_quote(message))
         return True
-    run(["git", "add", *relative_paths], dry_run=dry_run, mutates=True)
+    run(["git", "add", "--all", "--", *relative_paths], dry_run=dry_run, mutates=True)
     staged = git(["diff", "--cached", "--name-only"])
     if not staged:
         info("No version file changes to commit")
@@ -859,6 +902,7 @@ def app_check_label(skip_check: bool) -> str:
 
 
 def release_app(args: argparse.Namespace) -> None:
+    validate_changelog("app", require_pending=True)
     current_version, current_build = read_app_versions()
     latest_tag = latest_tag_version("v*", APP_TAG_RE)
     base_version = max_version(
@@ -883,9 +927,11 @@ def release_app(args: argparse.Namespace) -> None:
     print(f"  下一版本: {next_version} ({next_build})")
     print(f"  tag: {tag}")
     print(f"  check: {app_check_label(args.skip_check)}")
+    print(f"  changelog: {changelog_status_label('app')}")
     confirm("确认执行 bump、check、commit、tag 和 push？", args.yes)
 
     sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
+    validate_changelog("app", require_pending=True)
     current_version_after_sync, current_build_after_sync = read_app_versions()
     latest_tag_after_sync = latest_tag_version("v*", APP_TAG_RE)
     base_version_after_sync = max_version(
@@ -905,7 +951,8 @@ def release_app(args: argparse.Namespace) -> None:
     check_tag_available(tag, args.remote)
     run_app_check(args.skip_check, args.dry_run)
     write_app_versions(next_version, next_build, args.dry_run)
-    commit_if_needed([APP_VERSION_CONFIG], f"chore: release {tag}", args.dry_run)
+    changelog_paths = prepare_changelog("app", tag, args.dry_run)
+    commit_if_needed([APP_VERSION_CONFIG, *changelog_paths], f"chore: release {tag}", args.dry_run)
     push_branch_and_tag(args.remote, args.branch, tag, args.dry_run)
     info(f"App release tag pushed: {tag}")
 
@@ -917,6 +964,7 @@ def release_plugin(args: argparse.Namespace) -> None:
     analysis = analyze_plugins(mode, selection)
     if not analysis.release_required:
         fail("未检测到需要发布的插件变化。若要强制发布，请使用 ARGS=\"--type plugin --plugin-mode all\"。")
+    validate_changelog("plugin", require_pending=True)
 
     latest_batch = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
     base_version = latest_batch or "0.0.0"
@@ -937,6 +985,7 @@ def release_plugin(args: argparse.Namespace) -> None:
     print(f"  下一批次 tag: {tag}")
     print(f"  将发布插件: {', '.join(analysis.selected_ids) if analysis.selected_ids else '(catalog-only)'}")
     print(f"  check: {'skip' if args.skip_check else 'make generate + plan-plugin-release'}")
+    print(f"  changelog: {changelog_status_label('plugin')}")
     summarize_plugin_analysis(analysis)
     plugins_to_bump = plugins_requiring_version_bump(mode, analysis)
     if plugins_to_bump:
@@ -947,6 +996,7 @@ def release_plugin(args: argparse.Namespace) -> None:
     confirm("确认执行 bump、check、commit、tag 和 push？", args.yes)
 
     sync_branch_after_confirm(args.remote, args.branch, args.dry_run)
+    validate_changelog("plugin", require_pending=True)
     latest_batch_after_sync = latest_tag_version("plugins-*", PLUGIN_TAG_RE)
     if requested_version and semver_tuple(next_batch) <= semver_tuple(latest_batch_after_sync or "0.0.0"):
         fail(f"同步远端后目标插件批次不再高于基准版本：{latest_batch_after_sync} -> {next_batch}")
@@ -973,8 +1023,9 @@ def release_plugin(args: argparse.Namespace) -> None:
 
     run_plugin_generate_check(args.skip_check, args.dry_run)
     run_plugin_plan_check(mode, selection, args.skip_check, args.dry_run)
+    changelog_paths = prepare_changelog("plugin", tag, args.dry_run)
     changed_manifests = [plugin.manifest_path for plugin in plugins_to_bump]
-    made_commit = commit_if_needed(changed_manifests, f"chore: release {tag}", args.dry_run)
+    made_commit = commit_if_needed([*changed_manifests, *changelog_paths], f"chore: release {tag}", args.dry_run)
     if not made_commit and not args.dry_run:
         head = git(["rev-parse", "--short", "HEAD"])
         info(f"No version bump commit needed; tagging current HEAD {head}.")

@@ -543,19 +543,18 @@ function publish_release() {
   ensure_clean_git
   ensure_tag_ready
 
+  if [[ -z "$NOTES_FILE" ]]; then
+    NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/mactools-release-notes.XXXXXX.md")"
+    python3 "$ROOT_DIR/scripts/changelog.py" extract --tag "$TAG" --output "$NOTES_FILE"
+  fi
+
   info "Syncing asset to GitHub Release $TAG ($repository)"
 
   if gh release view "$TAG" --repo "$repository" >/dev/null 2>&1; then
     gh release upload "$TAG" "$dmg_path" --repo "$repository" --clobber
-    if [[ -n "$NOTES_FILE" ]]; then
-      gh release edit "$TAG" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
-    fi
+    gh release edit "$TAG" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
   else
-    if [[ -n "$NOTES_FILE" ]]; then
-      gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
-    else
-      gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --generate-notes
-    fi
+    gh release create "$TAG" "$dmg_path" --repo "$repository" --title "$APP_NAME $VERSION" --notes-file "$NOTES_FILE"
   fi
 }
 

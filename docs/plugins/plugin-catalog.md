@@ -139,7 +139,7 @@ Recommended production flow is an incremental batch plugin release:
 1. Run `make release`.
 2. Choose `plugin`, release mode, and `patch`/`minor`/`major`.
 3. The helper analyzes the production catalog and shows the planned manifest bumps.
-4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
+4. After confirmation, the helper syncs `main`, bumps changed plugin manifests when needed, compiles `release: plugin` changelog fragments into `CHANGELOG.md`, runs a release plan check, commits the bump, and pushes a batch tag such as `plugins-1.0.1`.
 5. The `Plugin Release` GitHub Action reads the current production catalog from `origin/main`.
 6. In default `auto` mode, the workflow selects only new plugins and plugins whose manifest version is higher than the previous catalog entry.
 7. If package-relevant files changed inside a plugin or its `pluginKitVersion` changed but that plugin version did not increase, the workflow fails before signing or uploading. PluginKit ABI changes require a full `mode=all` rebuild; other shared host changes can use `mode=all` or explicit `--shared-path` values when they really require repackaging existing plugins.
@@ -149,6 +149,8 @@ Recommended production flow is an incremental batch plugin release:
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
+
+The GitHub Release body for each plugin batch is extracted from the matching `CHANGELOG.md` entry, such as `## [plugins-1.0.1]`.
 
 An incremental release record contains only packages changed in that batch:
 
