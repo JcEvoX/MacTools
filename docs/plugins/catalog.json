@@ -1,7 +1,7 @@
 {
   "catalogID": "com.ggbond.mactools.plugins",
-  "generatedAt": "2026-07-02T14:26:14Z",
-  "minimumHostVersion": "1.0.26",
+  "generatedAt": "2026-07-03T15:09:14Z",
+  "minimumHostVersion": "1.0.27",
   "pluginKitVersion": 2,
   "plugins": [
     {
@@ -1781,6 +1781,45 @@
     {
       "capabilities": {
         "componentPanel": false,
+        "configuration": true,
+        "primaryPanel": true
+      },
+      "category": "productivity",
+      "displayName": "鼠标增强",
+      "id": "mouse-enhancer",
+      "localizedMetadata": {
+        "en": {
+          "displayName": "Mouse Enhancer",
+          "summary": "Enhance mouse and trackpad controls."
+        },
+        "zh-Hans": {
+          "displayName": "鼠标增强",
+          "summary": "增强鼠标与触控板控制"
+        },
+        "zh-Hant": {
+          "displayName": "滑鼠增強",
+          "summary": "增強滑鼠與觸控板控制"
+        }
+      },
+      "minimumHostVersion": "1.0.2",
+      "package": {
+        "sha256": "1b1c512a97b95617d3c7fc4e8839a72297f18ff3e281d5d99ead67bf1c4d3a58",
+        "size": 204210,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.29/mouse-enhancer.mactoolsplugin.zip"
+      },
+      "permissions": [
+        "accessibility",
+        "inputMonitoring"
+      ],
+      "pluginKitVersion": 2,
+      "releaseChannel": null,
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.29",
+      "summary": "增强鼠标与触控板控制",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "componentPanel": false,
         "configuration": false,
         "primaryPanel": true
       },
@@ -2041,16 +2080,16 @@
       },
       "minimumHostVersion": "1.0.21",
       "package": {
-        "sha256": "6eb5cfd81fa4e88f403fd0017b786883eb42981660a74e8e905e4f953713a268",
-        "size": 212749,
-        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.28/right-click.mactoolsplugin.zip"
+        "sha256": "9ea70863053e37cde0634881d011128afa578d88662050fbf858efb7609fdec9",
+        "size": 216109,
+        "url": "https://github.com/ggbond268/MacTools/releases/download/plugins-1.0.29/right-click.mactoolsplugin.zip"
       },
       "permissions": [],
       "pluginKitVersion": 2,
       "releaseChannel": null,
-      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.28",
+      "releaseNotesURL": "https://github.com/ggbond268/MacTools/releases/tag/plugins-1.0.29",
       "summary": "为 Finder 右键菜单添加新建文件夹和路径复制",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "capabilities": {
@@ -2469,6 +2508,6 @@
   "schemaVersion": 1,
   "signature": {
     "algorithm": "ed25519",
-    "value": "60REU54OuUrByDeEw6Y5NcqFQBs4d51iosP8Vt1JU9oBBgNcadDdzirdcz9sOc3zGem8zb5P4SBiiaJKHtzdDg=="
+    "value": "8IGpzaPbd/Kot1sJxQAfzR4rv5M/Ic6QHBK2DvQkiaRc7na1E18ykudHttyfeNps1xEliNmwHVlQTNXD6WrxCA=="
   }
 }
