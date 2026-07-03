@@ -1,0 +1,39 @@
+{
+  "id": "mouse-scroll-reverser",
+  "displayName": "鼠标滚动翻转",
+  "summary": "按设备和方向反转鼠标滚轮与触控板滚动",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Scroll Reverser",
+      "summary": "Reverse mouse wheel and trackpad scrolling by device and axis."
+    },
+    "zh-Hans": {
+      "displayName": "鼠标滚动翻转",
+      "summary": "按设备和方向反转鼠标滚轮与触控板滚动"
+    },
+    "zh-Hant": {
+      "displayName": "滑鼠滾動翻轉",
+      "summary": "依裝置和方向反轉滑鼠滾輪與觸控板滾動"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "MouseScrollReverser.bundle",
+  "factoryClass": "MouseScrollReverserPlugin.MouseScrollReverserPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "MouseScrollReverserPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [
+    "accessibility",
+    "inputMonitoring"
+  ],
+  "category": "productivity"
+}
+

@@ -30,6 +30,7 @@
 | Prevent Sleep | Keep the system awake while idle, with automatic stop options after 30 minutes, 1 hour, 2 hours, or 5 hours. |
 | Clean Mode | Show a full-screen black overlay and temporarily disable input for cleaning the screen, keyboard, or trackpad. |
 | Middle Click | Trigger middle click with a three-finger trackpad tap by converting system events through a CGEvent tap, without affecting other gestures or left click. |
+| Scroll Reverser | Reverse mouse wheel and trackpad scrolling by device and axis, with a menu-bar switch and plugin settings for horizontal, vertical, mouse, and trackpad scopes. |
 | Hide Notch | Mask the top notch area on built-in notch displays without modifying the original wallpaper. |
 | Hide Menu Bar Icons | Hide icons to the left of a menu bar divider, with drag-based layout for visible, hidden, and always-hidden areas. |
 | Auto Hide Menu Bar | Automatically hide the menu bar to make more screen space available. |
