@@ -203,6 +203,142 @@ final class DeviceBatteryPluginTests: XCTestCase {
         XCTAssertEqual(notifier.notifications.count, 2)
     }
 
+    func testLowBatteryNotificationDoesNotRepeatWhenSourceIDChanges() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "bluetooth-powerlog-airpods-left",
+                    name: "AirPods 左耳",
+                    level: 7,
+                    kind: .airPodsPart,
+                    parentName: "AirPods 充电盒",
+                    componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods-address", role: .left)
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "apple-headphone-advertisement-airpods-left",
+                    name: "AirPods 左耳",
+                    level: 6,
+                    kind: .airPodsPart,
+                    parentName: "AirPods 充电盒",
+                    componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods-advertisement", role: .left)
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 1)
+    }
+
+    func testLowBatteryNotificationDoesNotRepeatWhenDeviceKindChanges() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "bluetooth-mx-anywhere",
+                    name: "MX Anywhere 3S",
+                    level: 9,
+                    kind: .bluetooth
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "batterycenter-mx-anywhere",
+                    name: "MX Anywhere 3S",
+                    level: 8,
+                    kind: .magicAccessory
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 1)
+    }
+
+    func testLowBatteryNotificationDoesNotRepeatWhenAggregateRoleChanges() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "corebluetooth-airpods",
+                    name: "AirPods",
+                    level: 9,
+                    kind: .airPodsPart,
+                    componentIdentity: DeviceBatteryComponentIdentity(groupID: "airpods", role: .aggregate)
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: makeSnapshot(items: [
+                makeBatteryItem(
+                    id: "batterycenter-airpods",
+                    name: "AirPods",
+                    level: 8,
+                    kind: .airPodsPart
+                )
+            ]),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 1)
+    }
+
+    func testLowBatteryNotificationDoesNotResetWhenDeviceTemporarilyMissing() {
+        let notifier = RecordingLowBatteryNotifier()
+        let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
+        let lowSnapshot = makeSnapshot(items: [
+            makeBatteryItem(id: "mouse", name: "Mouse", level: 8)
+        ])
+
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: makeSnapshot(items: []),
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+        controller.evaluate(
+            snapshot: lowSnapshot,
+            isEnabled: true,
+            threshold: 10,
+            localization: PluginLocalization(bundle: .main)
+        )
+
+        XCTAssertEqual(notifier.notifications.count, 1)
+    }
+
     func testLowBatteryNotificationResetsAfterDeviceIsCharged() {
         let notifier = RecordingLowBatteryNotifier()
         let controller = DeviceBatteryLowBatteryNotificationController(notifier: notifier)
@@ -286,21 +422,25 @@ final class DeviceBatteryPluginTests: XCTestCase {
         id: String,
         name: String,
         level: Int,
+        kind: DeviceBatteryKind = .bluetooth,
         chargeState: DeviceBatteryChargeState = .normal,
-        isConnected: Bool = true
+        isConnected: Bool = true,
+        parentName: String? = nil,
+        componentIdentity: DeviceBatteryComponentIdentity? = nil
     ) -> DeviceBatteryItem {
         DeviceBatteryItem(
             id: id,
             name: name,
             model: nil,
-            kind: .bluetooth,
+            kind: kind,
             level: level,
             chargeState: chargeState,
-            parentName: nil,
+            parentName: parentName,
             source: "test",
             lastUpdated: Date(),
             isConnected: isConnected,
-            detail: nil
+            detail: nil,
+            componentIdentity: componentIdentity
         )
     }
 }

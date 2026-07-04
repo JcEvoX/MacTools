@@ -20,7 +20,7 @@ protocol DeviceBatteryLowBatteryNotifying {
 @MainActor
 final class DeviceBatteryLowBatteryNotificationController {
     private let notifier: any DeviceBatteryLowBatteryNotifying
-    private var notifiedDeviceIDs: Set<String> = []
+    private var notifiedDeviceKeys: Set<String> = []
 
     init(notifier: any DeviceBatteryLowBatteryNotifying) {
         self.notifier = notifier
@@ -34,15 +34,19 @@ final class DeviceBatteryLowBatteryNotificationController {
     ) {
         let normalizedThreshold = DeviceBatteryLowBatteryThresholds.normalized(threshold)
         guard isEnabled else {
-            notifiedDeviceIDs.removeAll()
+            notifiedDeviceKeys.removeAll()
             return
         }
 
         let lowBatteryItems = snapshot.lowBatteryItems(threshold: normalizedThreshold)
-        let lowBatteryDeviceIDs = Set(lowBatteryItems.map(\.id))
-        notifiedDeviceIDs.formIntersection(lowBatteryDeviceIDs)
+        let recoveredDeviceKeys = snapshot.visibleItems
+            .filter { $0.shouldResetLowBatteryNotification(threshold: normalizedThreshold) }
+            .map(\.lowBatteryNotificationKey)
+        notifiedDeviceKeys.subtract(recoveredDeviceKeys)
 
-        let newLowBatteryItems = lowBatteryItems.filter { !notifiedDeviceIDs.contains($0.id) }
+        let newLowBatteryItems = lowBatteryItems.filter {
+            !notifiedDeviceKeys.contains($0.lowBatteryNotificationKey)
+        }
         guard !newLowBatteryItems.isEmpty else {
             return
         }
@@ -52,7 +56,43 @@ final class DeviceBatteryLowBatteryNotificationController {
             threshold: normalizedThreshold,
             localization: localization
         )
-        notifiedDeviceIDs.formUnion(newLowBatteryItems.map(\.id))
+        notifiedDeviceKeys.formUnion(newLowBatteryItems.map(\.lowBatteryNotificationKey))
+    }
+}
+
+private extension DeviceBatteryItem {
+    var lowBatteryNotificationKey: String {
+        [
+            parentName.map(Self.normalizedNotificationText) ?? "",
+            Self.normalizedNotificationText(name),
+            lowBatteryNotificationRoleKey
+        ]
+            .joined(separator: "|")
+    }
+
+    private var lowBatteryNotificationRoleKey: String {
+        guard let role = componentIdentity?.role, role != .aggregate else {
+            return ""
+        }
+
+        return role.rawValue
+    }
+
+    func shouldResetLowBatteryNotification(threshold: Int) -> Bool {
+        if chargeState.isActiveChargingState {
+            return true
+        }
+
+        guard isConnected, let level = clampedLevel else {
+            return false
+        }
+
+        return level >= threshold
+    }
+
+    private static func normalizedNotificationText(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }
 
