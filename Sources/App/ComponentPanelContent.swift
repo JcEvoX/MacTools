@@ -227,7 +227,7 @@ enum ComponentGridPlacementEngine {
 
 struct ComponentPanelContent: View {
     @ObservedObject var pluginHost: PluginHost
-    let panelHeight: CGFloat
+    let contentBodyHeight: CGFloat
     let onDismiss: () -> Void
 
     private var placements: [ComponentGridPlacement] {
@@ -257,10 +257,11 @@ struct ComponentPanelContent: View {
                 )
             }
         }
-        .padding(.top, ComponentPanelLayout.topPadding)
-        .padding(.horizontal, ComponentPanelLayout.horizontalPadding)
-        .padding(.bottom, ComponentPanelLayout.bottomPadding)
-        .frame(width: ComponentPanelLayout.panelWidth, height: panelHeight, alignment: .topLeading)
+        .frame(
+            width: ComponentPanelLayout.gridWidth,
+            height: contentBodyHeight,
+            alignment: .topLeading
+        )
     }
 
     private var emptyState: some View {

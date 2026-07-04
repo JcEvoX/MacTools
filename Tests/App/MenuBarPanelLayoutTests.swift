@@ -15,6 +15,10 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertEqual(MenuBarPanelLayout.contentTopPadding, 4)
         XCTAssertEqual(MenuBarPanelLayout.contentBottomPadding, 6)
         XCTAssertEqual(MenuBarPanelLayout.contentVerticalPadding, 10)
+        XCTAssertEqual(
+            MenuBarPanelLayout.contentBodyHeight(forContentHeight: 184),
+            174
+        )
         XCTAssertEqual(MenuBarPanelLayout.minimumContentHeight, 184)
         XCTAssertEqual(MenuBarPanelLayout.rowHeaderHeight, 31)
     }
@@ -107,6 +111,100 @@ final class MenuBarPanelLayoutTests: XCTestCase {
                 + 6
                 + 18
                 + MenuBarPanelLayout.sliderVerticalPadding * 2
+                + MenuBarPanelLayout.rowVerticalPadding
+        )
+    }
+
+    func testSwitchFeatureContentHeightIncludesDisplayedDetail() {
+        let item = makeItem(
+            controlStyle: .switch,
+            isExpanded: false,
+            controls: [
+                PluginPanelControl(
+                    id: "duration",
+                    kind: .segmented,
+                    options: [
+                        PluginPanelControlOption(id: "forever", title: "永不"),
+                        PluginPanelControlOption(id: "thirty-minutes", title: "30min")
+                    ],
+                    selectedOptionID: "forever",
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: nil,
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [item]),
+            MenuBarPanelLayout.rowHeaderHeight
+                + MenuBarPanelLayout.detailSpacing
+                + 24
+                + MenuBarPanelLayout.rowVerticalPadding
+        )
+    }
+
+    func testButtonFeatureContentHeightIncludesDisplayedDetail() {
+        let item = makeItem(
+            controlStyle: .button,
+            isExpanded: false,
+            controls: [
+                PluginPanelControl(
+                    id: "open-details",
+                    kind: .actionRow,
+                    options: [],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: nil,
+                    actionTitle: "打开详情",
+                    actionIconSystemName: "arrow.up.right.square",
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [item]),
+            MenuBarPanelLayout.rowHeaderHeight
+                + MenuBarPanelLayout.detailSpacing
+                + 16
+                + MenuBarPanelLayout.actionRowVerticalPadding * 2
+                + MenuBarPanelLayout.rowVerticalPadding
+        )
+    }
+
+    func testCollapsedDisclosureFeatureContentHeightIgnoresDetail() {
+        let item = makeItem(
+            controlStyle: .disclosure,
+            isExpanded: false,
+            controls: [
+                PluginPanelControl(
+                    id: "brightness",
+                    kind: .slider,
+                    options: [],
+                    selectedOptionID: nil,
+                    dateValue: nil,
+                    minimumDate: nil,
+                    displayedComponents: nil,
+                    datePickerStyle: nil,
+                    sectionTitle: "亮度",
+                    sliderValue: 0.7,
+                    sliderBounds: 0...1,
+                    valueLabel: "70%",
+                    isEnabled: true
+                )
+            ]
+        )
+
+        XCTAssertEqual(
+            MenuBarPanelLayout.featureContentHeight(for: [item]),
+            MenuBarPanelLayout.rowHeaderHeight
                 + MenuBarPanelLayout.rowVerticalPadding
         )
     }

@@ -18,7 +18,8 @@ private struct EmptyTrashPluginProvider: PluginProvider {
     }
 }
 
-final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
+@MainActor
+final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginPanelSurfaceLifecycleHandling {
     let metadata: PluginMetadata
 
     let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
@@ -28,13 +29,23 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     private let localization: PluginLocalization
+    private let countItems: @Sendable () async -> Int
+    private let countRefreshDelay: Duration
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "EmptyTrashPlugin")
     private var itemCount: Int = 0
     private var isEmptying = false
     private var lastErrorMessage: String?
+    private var isPrimaryPanelVisible = false
+    private var countRefreshTask: Task<Void, Never>?
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        countItems: @escaping @Sendable () async -> Int = EmptyTrashPlugin.fetchTrashItemCount,
+        countRefreshDelay: Duration = .milliseconds(150)
+    ) {
         self.localization = localization
+        self.countItems = countItems
+        self.countRefreshDelay = countRefreshDelay
         self.metadata = PluginMetadata(
             id: "empty-trash",
             title: localization.string("metadata.title", defaultValue: "清空废纸篓"),
@@ -70,21 +81,42 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutDefinitions: [PluginShortcutDefinition] { [] }
 
     func refresh() {
-        Task { @MainActor in
-            scheduleCountRefresh()
+        scheduleCountRefreshIfVisible()
+    }
+
+    func deactivate(reason _: PluginDeactivationReason) {
+        countRefreshTask?.cancel()
+        countRefreshTask = nil
+        isPrimaryPanelVisible = false
+    }
+
+    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
+        guard surface == .primary else {
+            return
         }
+
+        isPrimaryPanelVisible = true
+        scheduleCountRefresh()
+    }
+
+    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
+        guard surface == .primary else {
+            return
+        }
+
+        isPrimaryPanelVisible = false
+        countRefreshTask?.cancel()
+        countRefreshTask = nil
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        Task { @MainActor in
-            switch action {
-            case let .invokeAction(controlID):
-                if controlID == "execute" {
-                    emptyTrash()
-                }
-            default:
-                break
+        switch action {
+        case let .invokeAction(controlID):
+            if controlID == "execute" {
+                emptyTrash()
             }
+        default:
+            break
         }
     }
 
@@ -98,17 +130,39 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     // MARK: - Private
 
-    @MainActor
     private func scheduleCountRefresh() {
-        Task {
-            let count = await Self.fetchTrashItemCount()
-            await MainActor.run {
-                if self.itemCount != count {
-                    self.itemCount = count
-                    self.onStateChange?()
-                }
+        countRefreshTask?.cancel()
+        let delay = countRefreshDelay
+        countRefreshTask = Task { @MainActor [weak self, delay] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
             }
+
+            guard let self, !Task.isCancelled else {
+                return
+            }
+
+            let count = await self.countItems()
+            guard !Task.isCancelled else {
+                return
+            }
+
+            if self.itemCount != count {
+                self.itemCount = count
+                self.onStateChange?()
+            }
+            self.countRefreshTask = nil
         }
+    }
+
+    private func scheduleCountRefreshIfVisible() {
+        guard isPrimaryPanelVisible else {
+            return
+        }
+
+        scheduleCountRefresh()
     }
 
     private var subtitle: String {
@@ -135,14 +189,14 @@ final class EmptyTrashPlugin: MacToolsPlugin, PluginPrimaryPanel {
                     self.isEmptying = false
                     self.itemCount = 0
                     self.onStateChange?()
-                    self.scheduleCountRefresh()
+                    self.scheduleCountRefreshIfVisible()
                 }
             } catch {
                 await MainActor.run {
                     self.isEmptying = false
                     self.lastErrorMessage = error.localizedDescription
                     self.onStateChange?()
-                    self.scheduleCountRefresh()
+                    self.scheduleCountRefreshIfVisible()
                     self.logger.error("Empty trash failed: \(error)")
                 }
             }

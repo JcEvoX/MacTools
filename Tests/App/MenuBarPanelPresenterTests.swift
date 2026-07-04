@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 @testable import MacTools
 
@@ -17,6 +18,18 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 
     func testUnifiedPanelUsesComponentGridWidth() {
         XCTAssertEqual(MenuBarPanelLayout.baseWidth, ComponentPanelLayout.panelWidth)
+    }
+
+    func testPopoverSizingIsLayoutDriven() throws {
+        if #available(macOS 14.0, *) {
+            let presenter = makePresenter()
+            let popover = presenter.debugPopoverForTests
+            let controller = try XCTUnwrap(
+                popover.contentViewController as? NSHostingController<MenuBarUnifiedPanelContent>
+            )
+
+            XCTAssertTrue(controller.sizingOptions.isEmpty)
+        }
     }
 
     func testUnifiedPanelModelForwardsSelectionWithoutReplacingRoot() {

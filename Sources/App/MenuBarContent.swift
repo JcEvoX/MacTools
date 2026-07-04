@@ -44,6 +44,10 @@ enum MenuBarPanelLayout {
         contentTopPadding + contentBottomPadding
     }
 
+    static func contentBodyHeight(forContentHeight contentHeight: CGFloat) -> CGFloat {
+        max(0, contentHeight - contentVerticalPadding)
+    }
+
     static var minimumContentHeight: CGFloat {
         max(0, minimumPanelHeight - topChromeHeight)
     }
@@ -162,11 +166,7 @@ enum MenuBarPanelLayout {
     }
 
     private static func rowHeight(for item: PluginPanelItem) -> CGFloat {
-        guard
-            item.controlStyle == .disclosure,
-            item.isExpanded,
-            let detail = item.detail
-        else {
+        guard let detail = displayedDetail(for: item) else {
             return rowHeaderHeight + rowVerticalPadding
         }
 
@@ -174,6 +174,18 @@ enum MenuBarPanelLayout {
             + detailSpacing
             + detailHeight(for: detail.primaryControls)
             + rowVerticalPadding
+    }
+
+    private static func displayedDetail(for item: PluginPanelItem) -> PluginPanelDetail? {
+        guard let detail = item.detail else {
+            return nil
+        }
+
+        if item.controlStyle == .disclosure && !item.isExpanded {
+            return nil
+        }
+
+        return detail
     }
 
     private static func detailHeight(for controls: [PluginPanelControl]) -> CGFloat {
@@ -435,6 +447,7 @@ struct MenuBarContent: View {
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
 
     @ObservedObject var pluginHost: PluginHost
+    let contentBodyHeight: CGFloat
     let maximumFeatureListHeight: CGFloat
     let isPanelVisible: Bool
     let onDismiss: () -> Void
@@ -444,11 +457,6 @@ struct MenuBarContent: View {
 
     var body: some View {
         content
-        .frame(
-            width: MenuBarPanelLayout.width(for: pluginHost.panelItems),
-            height: preferredContentHeight,
-            alignment: .topLeading
-        )
         .background(
             MenuWindowAccessor { window in
                 secondaryPanelController.setHostWindow(isPanelVisible ? window : nil)
@@ -513,14 +521,13 @@ struct MenuBarContent: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            featureList
-                .frame(height: featureListHeight, alignment: .topLeading)
-        }
-        .padding(.top, MenuBarPanelLayout.contentTopPadding)
-        .padding(.horizontal, MenuBarPanelLayout.outerPadding)
-        .padding(.bottom, MenuBarPanelLayout.contentBottomPadding)
-        .frame(width: MenuBarPanelLayout.width(for: pluginHost.panelItems), alignment: .leading)
+        featureList
+            .frame(height: visibleFeatureListHeight, alignment: .topLeading)
+            .frame(
+                width: MenuBarPanelLayout.surfaceWidth,
+                height: contentBodyHeight,
+                alignment: .topLeading
+            )
     }
 
     @ViewBuilder
@@ -539,19 +546,16 @@ struct MenuBarContent: View {
         )
     }
 
+    private var visibleFeatureListHeight: CGFloat {
+        min(featureListHeight, contentBodyHeight)
+    }
+
     private var isFeatureListScrollable: Bool {
-        featureContentHeight > featureListHeight
+        featureContentHeight > visibleFeatureListHeight
     }
 
     private var featureContentHeight: CGFloat {
         MenuBarPanelLayout.featureContentHeight(for: pluginHost.panelItems)
-    }
-
-    private var preferredContentHeight: CGFloat {
-        MenuBarPanelLayout.preferredFeatureContentHeight(
-            featureContentHeight: featureContentHeight,
-            maximumFeatureListHeight: maximumFeatureListHeight
-        )
     }
 
     private func presentSettings() {

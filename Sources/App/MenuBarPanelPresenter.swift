@@ -99,6 +99,12 @@ final class MenuBarPanelPresenter: NSObject {
         popover.isShown
     }
 
+    #if DEBUG
+    var debugPopoverForTests: NSPopover {
+        popover
+    }
+    #endif
+
     func toggleFeaturePanel(relativeTo button: NSStatusBarButton) {
         toggle(.features, relativeTo: button)
     }
@@ -148,8 +154,11 @@ final class MenuBarPanelPresenter: NSObject {
         popover.animates = false
         popover.delegate = self
         popover.contentViewController = hostingController
+        // Keep popover sizing single-sourced from MenuBarPanelLayout.
+        // Letting SwiftUI also publish preferredContentSize can make AppKit
+        // resize the shown popover a second time during tab switches.
         if #available(macOS 14.0, *) {
-            hostingController.sizingOptions = .preferredContentSize
+            hostingController.sizingOptions = []
         }
         AppAppearancePreference.stored().apply(to: hostingController.view)
     }
@@ -474,6 +483,10 @@ struct MenuBarUnifiedPanelContent: View {
     let onPresentLaunchControlConfiguration: () -> Void
 
     var body: some View {
+        let contentBodyHeight = MenuBarPanelLayout.contentBodyHeight(
+            forContentHeight: model.contentHeight
+        )
+
         VStack(spacing: MenuBarPanelLayout.rootSpacing) {
             MenuBarPanelToolbar(
                 selectedTab: model.selectedTab,
@@ -486,8 +499,9 @@ struct MenuBarUnifiedPanelContent: View {
             .frame(height: MenuBarPanelLayout.toolbarHeight)
             .padding(.horizontal, MenuBarPanelLayout.outerPadding)
 
-            panelContent
-                .frame(width: MenuBarPanelLayout.baseWidth, height: model.contentHeight, alignment: .topLeading)
+            MenuBarPanelContentSurface(contentBodyHeight: contentBodyHeight) {
+                panelContent(contentBodyHeight: contentBodyHeight)
+            }
         }
         .padding(.top, MenuBarPanelLayout.outerPadding)
         .frame(
@@ -497,11 +511,11 @@ struct MenuBarUnifiedPanelContent: View {
         )
     }
 
-    private var panelContent: some View {
+    private func panelContent(contentBodyHeight: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             ComponentPanelContent(
                 pluginHost: pluginHost,
-                panelHeight: model.contentHeight,
+                contentBodyHeight: contentBodyHeight,
                 onDismiss: onDismiss
             )
             .opacity(model.selectedTab == .components ? 1 : 0)
@@ -510,6 +524,7 @@ struct MenuBarUnifiedPanelContent: View {
 
             MenuBarContent(
                 pluginHost: pluginHost,
+                contentBodyHeight: contentBodyHeight,
                 maximumFeatureListHeight: model.maximumFeatureListHeight,
                 isPanelVisible: model.isPanelVisible && model.selectedTab == .features,
                 onDismiss: onDismiss,
@@ -536,6 +551,33 @@ struct MenuBarUnifiedPanelContent: View {
         model.selectTab(tab)
     }
 
+}
+
+private struct MenuBarPanelContentSurface<Content: View>: View {
+    let contentBodyHeight: CGFloat
+    private let content: Content
+
+    init(contentBodyHeight: CGFloat, @ViewBuilder content: () -> Content) {
+        self.contentBodyHeight = contentBodyHeight
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(
+                width: MenuBarPanelLayout.surfaceWidth,
+                height: contentBodyHeight,
+                alignment: .topLeading
+            )
+            .padding(.top, MenuBarPanelLayout.contentTopPadding)
+            .padding(.horizontal, MenuBarPanelLayout.outerPadding)
+            .padding(.bottom, MenuBarPanelLayout.contentBottomPadding)
+            .frame(
+                width: MenuBarPanelLayout.baseWidth,
+                height: contentBodyHeight + MenuBarPanelLayout.contentVerticalPadding,
+                alignment: .topLeading
+            )
+    }
 }
 
 private struct MenuBarPanelToolbar: View {
