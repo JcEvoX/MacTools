@@ -127,27 +127,12 @@ struct MouseEnhancerSettingsView: View {
         icon: String,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            Image(systemName: icon)
-                .pluginSettingsRowIconStyle()
-
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
-                Text(title)
-                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                Text(description)
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-        .pluginSettingsListRowPadding()
+        MouseEnhancerToggleRow(
+            title: title,
+            description: description,
+            icon: icon,
+            isOn: isOn
+        )
     }
 
     private var mouseVerticalBinding: Binding<Bool> {
@@ -198,6 +183,57 @@ struct MouseEnhancerSettingsView: View {
                 onChange()
             }
         )
+    }
+}
+
+private struct MouseEnhancerToggleRow: View {
+    let title: String
+    let description: String
+    let icon: String
+    @Binding var isOn: Bool
+
+    @State private var toggleID = UUID()
+
+    init(
+        title: String,
+        description: String,
+        icon: String,
+        isOn: Binding<Bool>
+    ) {
+        self.title = title
+        self.description = description
+        self.icon = icon
+        _isOn = isOn
+    }
+
+    var body: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: icon)
+                .pluginSettingsRowIconStyle()
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(title)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                Text(description)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .id(toggleID)
+        }
+        .pluginSettingsListRowPadding()
+        .onAppear {
+            DispatchQueue.main.async {
+                toggleID = UUID()
+            }
+        }
     }
 }
 
