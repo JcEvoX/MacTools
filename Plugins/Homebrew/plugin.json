@@ -1,0 +1,31 @@
+{
+  "id": "homebrew",
+  "displayName": "Homebrew 管理",
+  "summary": "管理 Homebrew 包、库仓库并执行系统诊断",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Homebrew Manager",
+      "summary": "Manage Homebrew packages, repositories, and perform system diagnostics"
+    },
+    "zh-Hans": {
+      "displayName": "Homebrew 管理",
+      "summary": "管理 Homebrew 包、库仓库并执行系统诊断"
+    }
+  },
+  "version": "1.0.0",
+  "minHostVersion": "1.0.2",
+  "pluginKitVersion": 2,
+  "bundleRelativePath": "Homebrew.bundle",
+  "factoryClass": "HomebrewPlugin.HomebrewPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "HomebrewPlugin"
+  },
+  "capabilities": {
+    "primaryPanel": true,
+    "componentPanel": false,
+    "configuration": true
+  },
+  "permissions": [],
+  "category": "system"
+}
