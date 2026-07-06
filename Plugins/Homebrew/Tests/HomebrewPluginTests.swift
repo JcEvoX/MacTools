@@ -6,6 +6,16 @@ import MacToolsPluginKit
 @MainActor
 final class HomebrewPluginTests: XCTestCase {
     
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
+    }
+    
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
+        super.tearDown()
+    }
+    
     // Fake runner for testing
     @MainActor
     final class FakeHomebrewCommandRunner: HomebrewCommandRunning {
@@ -117,7 +127,6 @@ final class HomebrewPluginTests: XCTestCase {
         try? "test".write(to: tempBrewFile, atomically: true, encoding: .utf8)
         defer {
             try? FileManager.default.removeItem(at: tempBrewFile)
-            UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
         }
         
         // Test updating path
@@ -129,5 +138,94 @@ final class HomebrewPluginTests: XCTestCase {
         // Test empty path resets standard path discovery
         controller.updateCustomPath("")
         XCTAssertEqual(UserDefaults.standard.string(forKey: "mactools.homebrew.customPath"), nil)
+    }
+    
+    func testHandleActionInvokeActions() async throws {
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+        
+        let localization = PluginLocalization(bundle: .main)
+        let plugin = HomebrewPlugin(controller: controller, localization: localization)
+        
+        // 1. Scan Action
+        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.scan))
+        XCTAssertTrue(controller.isBusy)
+        
+        // Wait for it to finish
+        let deadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(controller.isBusy)
+        
+        // 2. Upgrade All Action
+        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.upgradeAll))
+        XCTAssertTrue(controller.isBusy)
+        XCTAssertEqual(controller.currentOperationName, "正在更新所有包...")
+        
+        // Cancel the operation to test Cancel action
+        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.stop))
+        
+        // Wait for it to settle
+        let cancelDeadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < cancelDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(runner.isCancelled)
+        
+        // 3. Cleanup Action
+        runner.isCancelled = false
+        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.cleanup))
+        XCTAssertTrue(controller.isBusy)
+        XCTAssertEqual(controller.currentOperationName, "正在清理 Homebrew 缓存...")
+        
+        let cleanDeadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < cleanDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(controller.isBusy)
+    }
+    
+    func testPanelStateBusyAndNotAvailable() {
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+        let localization = PluginLocalization(bundle: .main)
+        let plugin = HomebrewPlugin(controller: controller, localization: localization)
+        
+        // Case 1: Not installed
+        controller.isBrewAvailable = false
+        var state = plugin.primaryPanelState
+        XCTAssertNotNil(state.errorMessage)
+        
+        // Case 2: Available and Busy
+        controller.isBrewAvailable = true
+        controller.isBusy = true
+        controller.currentOperationName = "Scanning..."
+        state = plugin.primaryPanelState
+        XCTAssertNil(state.errorMessage)
+        XCTAssertTrue(state.isOn)
+        XCTAssertEqual(state.subtitle, "Scanning...")
+    }
+    
+    func testScanAllFailurePath() async throws {
+        let runner = FakeHomebrewCommandRunner()
+        runner.stubbedStatus = 1 // non-zero status indicating failure
+        
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+        
+        controller.scanAll()
+        
+        let deadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        
+        // Verify logs contain system error entries
+        let hasErrorLog = controller.logs.contains { $0.isError }
+        XCTAssertTrue(hasErrorLog)
     }
 }

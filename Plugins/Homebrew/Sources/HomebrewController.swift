@@ -35,6 +35,18 @@ public final class HomebrewController: ObservableObject {
         } else if let path = discoverBrewPath() {
             self.brewPath = path
             self.isBrewAvailable = true
+        } else {
+            Task { [weak self] in
+                guard let self = self else { return }
+                if let path = await self.discoverBrewPathViaShell() {
+                    self.brewPath = path
+                    self.isBrewAvailable = true
+                    self.onStateChange?()
+                    if self.installedPackages.isEmpty {
+                        self.scanAll()
+                    }
+                }
+            }
         }
     }
     
@@ -46,11 +58,23 @@ public final class HomebrewController: ObservableObject {
                 self.brewPath = path
                 self.isBrewAvailable = true
                 scanAll()
+                onStateChange?()
             } else {
                 self.brewPath = ""
                 self.isBrewAvailable = false
+                onStateChange?()
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    if let path = await self.discoverBrewPathViaShell() {
+                        self.brewPath = path
+                        self.isBrewAvailable = true
+                        self.onStateChange?()
+                        if self.installedPackages.isEmpty {
+                            self.scanAll()
+                        }
+                    }
+                }
             }
-            onStateChange?()
             return
         }
         
@@ -99,21 +123,49 @@ public final class HomebrewController: ObservableObject {
             }
         }
         
-        // Fallback: try finding via zsh login shell
+        return nil
+    }
+    
+    private func discoverBrewPathViaShell() async -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-l", "-c", "which brew"]
         let pipe = Pipe()
         process.standardOutput = pipe
+        
         do {
             try process.run()
-            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        
+        let timeoutTask = Task {
+            try? await Task.sleep(for: .seconds(3.0))
+            if process.isRunning {
+                process.terminate()
+            }
+        }
+        
+        let exitCode: Int32 = await withCheckedContinuation { continuation in
+            process.terminationHandler = { proc in
+                continuation.resume(returning: proc.terminationStatus)
+            }
+            if !process.isRunning {
+                process.terminationHandler = nil
+                continuation.resume(returning: process.terminationStatus)
+            }
+        }
+        
+        timeoutTask.cancel()
+        
+        if exitCode == 0 {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty, path.contains("/") {
                 return path
             }
-        } catch {}
+        }
+        
         return nil
     }
     
@@ -526,7 +578,7 @@ public final class HomebrewController: ObservableObject {
     public func install(package: BrewPackage) {
         runAsyncCommand(
             name: "正在安装 \(package.name)...",
-            args: [package.isCask ? "--cask" : nil, "install", package.name].compactMap { $0 }
+            args: ["install"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
                 self?.scanAll()
@@ -537,7 +589,7 @@ public final class HomebrewController: ObservableObject {
     public func uninstall(package: BrewPackage) {
         runAsyncCommand(
             name: "正在卸载 \(package.name)...",
-            args: [package.isCask ? "--cask" : nil, "uninstall", package.name].compactMap { $0 }
+            args: ["uninstall"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
                 self?.scanAll()
@@ -548,7 +600,7 @@ public final class HomebrewController: ObservableObject {
     public func upgrade(package: BrewPackage) {
         runAsyncCommand(
             name: "正在更新 \(package.name)...",
-            args: [package.isCask ? "--cask" : nil, "upgrade", package.name].compactMap { $0 }
+            args: ["upgrade"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
                 self?.scanAll()
@@ -638,6 +690,7 @@ public final class HomebrewController: ObservableObject {
         appendLog("[Command] brew \(args.joined(separator: " "))")
         
         Task {
+            let success: Bool
             do {
                 let status = try await runner.run(
                     executable: brewPath,
@@ -650,16 +703,17 @@ public final class HomebrewController: ObservableObject {
                     }
                 )
                 
-                let success = (status == 0)
+                success = (status == 0)
                 appendLog(success ? "[System] 操作成功完成" : "[System] 操作失败，错误码: \(status)", isError: !success)
-                completion(success)
             } catch {
                 appendLog("[System] 执行命令出错: \(error.localizedDescription)", isError: true)
-                completion(false)
+                success = false
             }
+            
             isBusy = false
             currentOperationName = ""
             onStateChange?()
+            completion(success)
         }
     }
     

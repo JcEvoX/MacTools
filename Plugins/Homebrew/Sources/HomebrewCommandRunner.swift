@@ -58,13 +58,17 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
 
         self.activeProcess = process
 
+        let group = DispatchGroup()
+
         // Attach readability handlers to stream output in real-time
         outputPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
             if let string = String(data: data, encoding: .utf8) {
+                group.enter()
                 Task { @MainActor in
                     onOutput(string)
+                    group.leave()
                 }
             }
         }
@@ -73,8 +77,10 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
             let data = handle.availableData
             guard !data.isEmpty else { return }
             if let string = String(data: data, encoding: .utf8) {
+                group.enter()
                 Task { @MainActor in
                     onError(string)
+                    group.leave()
                 }
             }
         }
@@ -87,7 +93,15 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
 
                 Task { [weak self] in
                     guard let self = self else { return }
-                    await self.clearProcess()
+                    
+                    // Wait for all pending UI output tasks to complete
+                    await withCheckedContinuation { (waitContinuation: CheckedContinuation<Void, Never>) in
+                        group.notify(queue: .global()) {
+                            waitContinuation.resume()
+                        }
+                    }
+                    
+                    await self.clearProcess(for: proc)
                     continuation.resume(returning: proc.terminationStatus)
                 }
             }
@@ -97,8 +111,9 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
             } catch {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
-                Task {
-                    self.clearProcess()
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    await self.clearProcess(for: process)
                 }
                 continuation.resume(throwing: error)
             }
@@ -109,10 +124,11 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
         if let process = activeProcess, process.isRunning {
             process.terminate()
         }
-        activeProcess = nil
     }
 
-    private func clearProcess() {
-        self.activeProcess = nil
+    private func clearProcess(for process: Process) {
+        if self.activeProcess === process {
+            self.activeProcess = nil
+        }
     }
 }

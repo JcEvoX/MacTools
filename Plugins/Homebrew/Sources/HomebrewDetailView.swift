@@ -342,7 +342,7 @@ struct HomebrewDetailView: View {
                             Text(pkg.name)
                                 .font(PluginSettingsTheme.Typography.rowTitle)
                             Spacer()
-                            Text(pkg.isCask ? "Cask" : "Formula")
+                            Text(pkg.isCask ? localization.string("detail.filter.cask", defaultValue: "Cask") : localization.string("detail.filter.formula", defaultValue: "Formula"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -481,7 +481,7 @@ struct HomebrewDetailView: View {
                             controller.updateCustomPath(customBrewPath)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(customBrewPath == controller.brewPath || customBrewPath.isEmpty)
+                        .disabled(customBrewPath == controller.brewPath)
                     }
                 }
                 .padding(12)
@@ -551,7 +551,7 @@ struct HomebrewDetailView: View {
                         controller.updateCustomPath(customBrewPath)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(customBrewPath.isEmpty)
+                    .disabled(customBrewPath == controller.brewPath)
                 }
             }
             .frame(maxWidth: 480)
@@ -560,10 +560,10 @@ struct HomebrewDetailView: View {
                 Text(localization.string("detail.diagnostics.pathHelpTitle", defaultValue: "Common Installation Locations:"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("• Apple Silicon Mac: /opt/homebrew/bin/brew")
+                Text(localization.string("detail.diagnostics.pathHelpAppleSilicon", defaultValue: "• Apple Silicon Mac: /opt/homebrew/bin/brew"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("• Intel Mac: /usr/local/bin/brew")
+                Text(localization.string("detail.diagnostics.pathHelpIntel", defaultValue: "• Intel Mac: /usr/local/bin/brew"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -646,9 +646,16 @@ struct HomebrewDetailView: View {
                     HStack {
                         Text(localization.string("detail.detail.website", defaultValue: "Homepage")).font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
                         Spacer()
-                        Link(pkg.homepage, destination: URL(string: pkg.homepage)!)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .lineLimit(1)
+                        if let url = URL(string: pkg.homepage) {
+                            Link(pkg.homepage, destination: url)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .lineLimit(1)
+                        } else {
+                            Text(pkg.homepage)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+                        }
                     }
                 }
             }
@@ -784,15 +791,22 @@ struct HomebrewDetailView: View {
             }
             
             VStack(spacing: 8) {
-                infoRow(label: localization.string("detail.detail.type", defaultValue: "Type"), value: pkg.isCask ? "Cask" : "Formula")
+                infoRow(label: localization.string("detail.detail.type", defaultValue: "Type"), value: pkg.isCask ? localization.string("detail.filter.cask", defaultValue: "Cask") : localization.string("detail.filter.formula", defaultValue: "Formula"))
                 infoRow(label: localization.string("detail.detail.latestAvailableVer", defaultValue: "Latest Available"), value: pkg.latestVersion)
                 if !pkg.homepage.isEmpty {
                     HStack {
                         Text(localization.string("detail.detail.website", defaultValue: "Homepage")).font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
                         Spacer()
-                        Link(pkg.homepage, destination: URL(string: pkg.homepage)!)
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .lineLimit(1)
+                        if let url = URL(string: pkg.homepage) {
+                            Link(pkg.homepage, destination: url)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .lineLimit(1)
+                        } else {
+                            Text(pkg.homepage)
+                                .font(PluginSettingsTheme.Typography.rowDescription)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+                        }
                     }
                 }
             }
@@ -911,10 +925,17 @@ struct HomebrewDetailView: View {
     // MARK: - Helper Methods
     
     private func fetchOnlinePackageDetail(_ pkg: BrewPackage) {
+        let requestedName = pkg.name
+        let requestedIsCask = pkg.isCask
         isFetchingOnlineDetail = true
         onlinePackageDetail = nil
         
         Task {
+            defer {
+                if selectedSearchPkg?.name == requestedName && selectedSearchPkg?.isCask == requestedIsCask {
+                    isFetchingOnlineDetail = false
+                }
+            }
             do {
                 let tempRunner = controller.runner
                 var jsonOutput = ""
@@ -926,8 +947,9 @@ struct HomebrewDetailView: View {
                     onError: { _ in }
                 )
                 
+                guard selectedSearchPkg?.name == requestedName && selectedSearchPkg?.isCask == requestedIsCask else { return }
+                
                 guard let data = jsonOutput.data(using: .utf8) else {
-                    isFetchingOnlineDetail = false
                     return
                 }
                 
@@ -954,6 +976,8 @@ struct HomebrewDetailView: View {
                 
                 let response = try JSONDecoder().decode(BrewInfoResponse.self, from: data)
                 
+                guard selectedSearchPkg?.name == requestedName && selectedSearchPkg?.isCask == requestedIsCask else { return }
+                
                 if pkg.isCask, let cask = response.casks.first {
                     onlinePackageDetail = BrewPackage(
                         name: cask.token,
@@ -978,8 +1002,6 @@ struct HomebrewDetailView: View {
                     )
                 }
             } catch {}
-            
-            isFetchingOnlineDetail = false
         }
     }
     

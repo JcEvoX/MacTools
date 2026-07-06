@@ -1,7 +1,7 @@
 import Foundation
 
 public struct BrewPackage: Identifiable, Hashable, Sendable, Codable {
-    public var id: String { name }
+    public var id: String { "\(isCask ? "cask" : "formula"):\(name)" }
     public let name: String
     public let version: String
     public let latestVersion: String
