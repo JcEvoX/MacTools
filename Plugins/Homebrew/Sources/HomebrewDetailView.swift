@@ -20,6 +20,7 @@ struct HomebrewDetailView: View {
     @State private var isFetchingOnlineDetail = false
     @State private var customBrewPath = ""
     @State private var pendingAction: HomebrewPendingAction?
+    @State private var didRequestInitialScan = false
     
     enum BrewTabSection: String, CaseIterable, Identifiable {
         case installed
@@ -31,10 +32,10 @@ struct HomebrewDetailView: View {
         
         func title(localization: PluginLocalization) -> String {
             switch self {
-            case .installed: return localization.string("detail.tabs.installed", defaultValue: "Installed")
-            case .search: return localization.string("detail.tabs.search", defaultValue: "Search")
-            case .taps: return localization.string("detail.tabs.taps", defaultValue: "Taps")
-            case .diagnostics: return localization.string("detail.tabs.diagnostics", defaultValue: "Diagnostics")
+            case .installed: return "已安装"
+            case .search: return "搜索"
+            case .taps: return "软件源"
+            case .diagnostics: return "诊断"
             }
         }
         
@@ -57,9 +58,9 @@ struct HomebrewDetailView: View {
         
         func title(localization: PluginLocalization) -> String {
             switch self {
-            case .all: return localization.string("detail.filter.all", defaultValue: "All")
-            case .formula: return localization.string("detail.filter.formula", defaultValue: "Formula")
-            case .cask: return localization.string("detail.filter.cask", defaultValue: "Cask")
+            case .all: return "全部"
+            case .formula: return "Formula"
+            case .cask: return "Cask"
             }
         }
     }
@@ -89,15 +90,17 @@ struct HomebrewDetailView: View {
             if !controller.isBrewAvailable {
                 pathNotFoundView
             } else {
-                // Tab Selector
-                tabBar
-                    .padding(.horizontal, contentPadding)
-                    .padding(.vertical, 8)
+                VStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                    tabBar
+                    statusSummaryBar
+                }
+                .padding(.horizontal, contentPadding)
+                .padding(.vertical, PluginSettingsTheme.Spacing.sectionHeaderContent)
                 
                 Divider()
                 
                 // Main Content Area
-                GeometryReader { geo in
+                GeometryReader { _ in
                     VStack(spacing: 0) {
                         Group {
                             switch activeTab {
@@ -126,9 +129,18 @@ struct HomebrewDetailView: View {
         .frame(minHeight: minimumContentHeight)
         .onAppear {
             customBrewPath = controller.brewPath
+            requestInitialScanIfNeeded()
         }
         .onChange(of: controller.brewPath) { _, newPath in
             customBrewPath = newPath
+        }
+        .onChange(of: controller.isBrewAvailable) { _, _ in
+            requestInitialScanIfNeeded()
+        }
+        .onChange(of: controller.isBusy) { _, isBusy in
+            if !isBusy {
+                requestInitialScanIfNeeded()
+            }
         }
         .confirmationDialog(
             pendingAction?.title(localization: localization)
@@ -182,417 +194,521 @@ struct HomebrewDetailView: View {
     }
     
     private var tabBar: some View {
-        HStack(spacing: 8) {
-            ForEach(BrewTabSection.allCases) { section in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        activeTab = section
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: section.icon)
-                        Text(section.title(localization: localization))
-                    }
-                    .font(.body.weight(activeTab == section ? .semibold : .regular))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(activeTab == section ? Color.accentColor.opacity(0.15) : Color.clear)
-                    )
-                    .foregroundStyle(activeTab == section ? Color.accentColor : Color.primary)
+        HStack {
+            Spacer(minLength: 0)
+            Picker("视图", selection: $activeTab) {
+                ForEach(BrewTabSection.allCases) { section in
+                    Label(section.title(localization: localization), systemImage: section.icon)
+                        .tag(section)
                 }
-                .buttonStyle(.plain)
             }
-            Spacer()
+            .pickerStyle(.segmented)
+            .controlSize(.large)
+            .labelsHidden()
+            .frame(minWidth: 500, idealWidth: 560, maxWidth: 620)
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var statusSummaryBar: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            statusMetric(
+                title: "已安装",
+                value: "\(controller.installedPackages.count)",
+                systemImage: "shippingbox.fill",
+                color: Color(nsColor: .secondaryLabelColor)
+            )
+            statusMetric(
+                title: "可更新",
+                value: "\(controller.outdatedPackages.count)",
+                systemImage: "arrow.up.circle.fill",
+                color: controller.outdatedPackages.isEmpty
+                    ? Color(nsColor: .secondaryLabelColor)
+                    : .orange
+            )
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+                Image(systemName: "terminal")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(controller.brewPath.isEmpty ? "未配置 brew" : controller.brewPath)
+                    .font(PluginSettingsTheme.Typography.monospacedValue)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+            .frame(minWidth: 160, maxWidth: 360, alignment: .trailing)
+        }
+        .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+        .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        .pluginSettingsCardBackground(.recessed)
+    }
+
+    private func statusMetric(
+        title: String,
+        value: String,
+        systemImage: String,
+        color: Color
+    ) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+            Text(title)
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(PluginSettingsTheme.Typography.monospacedValue)
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func refreshButton(title: String) -> some View {
+        Button {
+            controller.scanAll()
+        } label: {
+            Label(title, systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(!controller.isBrewAvailable || controller.isBusy)
+        .help("刷新 Homebrew 状态")
+    }
+
+    private func sectionHeader(title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(PluginSettingsTheme.Typography.sectionTitle)
+            .foregroundStyle(.secondary)
     }
     
     // MARK: - Tab Contents
     
     private var installedTabContent: some View {
-        HStack(spacing: 12) {
-            // Left List Column
-            VStack(spacing: 8) {
-                // Search & Filter
-                HStack(spacing: 8) {
-                    TextField(localization.string("detail.search.placeholder", defaultValue: "Search installed packages..."), text: $localSearchText)
-                        .textFieldStyle(.roundedBorder)
-                        .controlSize(.regular)
-                    
-                    Picker("", selection: $installedFilter) {
-                        ForEach(BrewPackageFilter.allCases) { filter in
-                            Text(filter.title(localization: localization)).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 100)
-                }
-                .padding(.horizontal, 4)
-                
-                // Package List
-                let filtered = controller.installedPackages.filter { pkg in
-                    let matchesText = localSearchText.isEmpty || pkg.name.localizedCaseInsensitiveContains(localSearchText) || pkg.desc.localizedCaseInsensitiveContains(localSearchText)
-                    let matchesFilter = (installedFilter == .all) ||
-                        (installedFilter == .formula && !pkg.isCask) ||
-                        (installedFilter == .cask && pkg.isCask)
-                    return matchesText && matchesFilter
-                }
-                
+        let filtered = filteredInstalledPackages
+
+        return HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            VStack(spacing: 0) {
+                installedToolbar
+                PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
+
                 if filtered.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "shippingbox")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.secondary)
-                        Text(localization.string("detail.search.noMatch", defaultValue: "No matching installed packages"))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.recessed)
+                    installedEmptyState
                 } else {
-                    List(filtered, selection: $selectedInstalledPkg) { pkg in
-                        HStack {
-                            Image(systemName: pkg.isCask ? "macwindow" : "terminal")
-                                .foregroundStyle(pkg.isCask ? .blue : .green)
-                                .font(.system(size: 13))
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(pkg.name)
-                                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                                if !pkg.desc.isEmpty {
-                                    Text(pkg.desc)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            Spacer()
-                            
-                            if pkg.isOutdated {
-                                Text(localization.string("detail.search.hasUpdate", defaultValue: "Update Available"))
-                                    .font(PluginSettingsTheme.Typography.statusBadge)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.orange.opacity(0.15), in: Capsule())
-                                    .foregroundStyle(.orange)
-                            }
-                            
-                            Text(pkg.version)
-                                .font(PluginSettingsTheme.Typography.monospacedValue)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(pkg)
-                        .padding(.vertical, 2)
-                    }
-                    .listStyle(.inset)
-                    .pluginSettingsCardBackground(.recessed)
+                    installedPackageList(filtered)
                 }
             }
-            .frame(width: 320)
-            
-            // Right Detail Column
-            VStack {
-                if let pkg = selectedInstalledPkg {
-                    packageDetailView(for: pkg)
-                } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text(localization.string("detail.detail.selectionHint", defaultValue: "Select an installed package to view details"))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.host)
-                }
-            }
-            .frame(maxWidth: .infinity)
+            .pluginSettingsCardBackground(.host)
+            .frame(width: 340)
+            .frame(maxHeight: .infinity)
+
+            installedDetailPane
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(.top, PluginSettingsTheme.Spacing.sectionHeaderContent)
         .padding(.horizontal, contentPadding)
         .padding(.bottom, contentPadding)
     }
-    
-    private var searchTabContent: some View {
-        HStack(spacing: 12) {
-            // Left List Column
-            VStack(spacing: 8) {
-                // Search bar
-                HStack {
-                    TextField(localization.string("detail.search.onlinePlaceholder", defaultValue: "Search online formulae or casks..."), text: $onlineSearchText, onCommit: {
-                        controller.search(query: onlineSearchText)
-                    })
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.regular)
-                    
-                    Button(localization.string("detail.search.button", defaultValue: "Search")) {
-                        controller.search(query: onlineSearchText)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(onlineSearchText.isEmpty || controller.isSearching)
-                }
-                .padding(.horizontal, 4)
-                
-                if controller.isSearching {
-                    VStack {
-                        ProgressView()
-                        Text(localization.string("detail.search.searching", defaultValue: "Searching Homebrew..."))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 8)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.recessed)
-                } else if controller.searchResults.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.secondary)
-                        Text(localization.string("detail.search.empty", defaultValue: "Enter keywords to search on Homebrew"))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.recessed)
-                } else {
-                    List(controller.searchResults, selection: $selectedSearchPkg) { pkg in
-                        HStack {
-                            Image(systemName: pkg.isCask ? "macwindow" : "terminal")
-                                .foregroundStyle(pkg.isCask ? .blue : .green)
-                            Text(pkg.name)
-                                .font(PluginSettingsTheme.Typography.rowTitle)
-                            Spacer()
-                            Text(pkg.isCask ? localization.string("detail.filter.cask", defaultValue: "Cask") : localization.string("detail.filter.formula", defaultValue: "Formula"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(pkg)
-                        .padding(.vertical, 2)
-                    }
-                    .listStyle(.inset)
-                    .pluginSettingsCardBackground(.recessed)
-                    .onChange(of: selectedSearchPkg) { _, newPkg in
-                        if let pkg = newPkg {
-                            fetchOnlinePackageDetail(pkg)
-                        }
-                    }
-                }
-            }
-            .frame(width: 320)
-            
-            // Right Detail Column
-            VStack {
-                if isFetchingOnlineDetail {
-                    VStack {
-                        ProgressView()
-                        Text(localization.string("detail.search.fetchingDetail", defaultValue: "Fetching detailed metadata..."))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 8)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.host)
-                } else if let pkg = onlinePackageDetail {
-                    onlinePackageDetailView(for: pkg)
-                } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text(localization.string("detail.detail.onlineHint", defaultValue: "Select search result to install package"))
-                            .font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .pluginSettingsCardBackground(.host)
-                }
-            }
-            .frame(maxWidth: .infinity)
+
+    private var filteredInstalledPackages: [BrewPackage] {
+        controller.installedPackages.filter { pkg in
+            let matchesText = localSearchText.isEmpty
+                || pkg.name.localizedCaseInsensitiveContains(localSearchText)
+                || pkg.desc.localizedCaseInsensitiveContains(localSearchText)
+            let matchesFilter = installedFilter == .all
+                || (installedFilter == .formula && !pkg.isCask)
+                || (installedFilter == .cask && pkg.isCask)
+            return matchesText && matchesFilter
         }
+    }
+
+    private var installedToolbar: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            TextField("搜索已安装包", text: $localSearchText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+
+            Picker("", selection: $installedFilter) {
+                ForEach(BrewPackageFilter.allCases) { filter in
+                    Text(filter.title(localization: localization)).tag(filter)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 96)
+
+            refreshButton(title: "刷新")
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    private func installedPackageList(_ packages: [BrewPackage]) -> some View {
+        List(packages, selection: $selectedInstalledPkg) { pkg in
+            installedPackageRow(pkg)
+                .tag(pkg)
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private func installedPackageRow(_ pkg: BrewPackage) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: pkg.isCask ? "macwindow" : "terminal")
+                .pluginSettingsRowIconStyle(pkg.isCask ? Color.blue : Color.green)
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
+                Text(pkg.name)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .lineLimit(1)
+                if !pkg.desc.isEmpty {
+                    Text(pkg.desc)
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+            if pkg.isOutdated {
+                Text("可更新")
+                    .font(PluginSettingsTheme.Typography.statusBadge)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.orange)
+            }
+
+            Text(pkg.version)
+                .font(PluginSettingsTheme.Typography.monospacedValue)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var installedDetailPane: some View {
+        Group {
+            if let pkg = selectedInstalledPkg {
+                packageDetailView(for: pkg)
+            } else {
+                emptyState(
+                    icon: "info.circle",
+                    title: "选择一个包查看详情"
+                )
+                .pluginSettingsCardBackground(.host)
+            }
+        }
+    }
+
+    private var installedEmptyState: some View {
+        let isUnfiltered = localSearchText.isEmpty && installedFilter == .all
+
+        return emptyState(
+            icon: controller.isBusy ? "arrow.clockwise" : "shippingbox",
+            title: controller.isBusy
+                ? "正在加载 Homebrew 状态"
+                : (isUnfiltered ? "尚未加载已安装包" : "没有匹配的已安装包")
+        )
+    }
+
+    private var searchTabContent: some View {
+        HStack(alignment: .top, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+            VStack(spacing: 0) {
+                searchToolbar
+                PluginSettingsListDivider(leadingInset: 0, trailingInset: 0)
+                searchResultsContent
+            }
+            .pluginSettingsCardBackground(.host)
+            .frame(width: 340)
+            .frame(maxHeight: .infinity)
+
+            searchDetailPane
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(.top, PluginSettingsTheme.Spacing.sectionHeaderContent)
         .padding(.horizontal, contentPadding)
         .padding(.bottom, contentPadding)
+    }
+
+    private var searchToolbar: some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            TextField("搜索软件包", text: $onlineSearchText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .onSubmit {
+                    runOnlineSearch()
+                }
+
+            Button {
+                runOnlineSearch()
+            } label: {
+                Label("搜索", systemImage: "magnifyingglass")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(onlineSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.isSearching)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        if controller.isSearching {
+            emptyState(icon: "arrow.clockwise", title: "正在搜索 Homebrew")
+        } else if controller.searchResults.isEmpty {
+            emptyState(icon: "magnifyingglass", title: "输入关键词搜索软件包")
+        } else {
+            List(controller.searchResults, selection: $selectedSearchPkg) { pkg in
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    Image(systemName: pkg.isCask ? "macwindow" : "terminal")
+                        .pluginSettingsRowIconStyle(pkg.isCask ? Color.blue : Color.green)
+                    Text(pkg.name)
+                        .font(PluginSettingsTheme.Typography.rowTitle)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(pkg.isCask ? "Cask" : "Formula")
+                        .font(PluginSettingsTheme.Typography.statusBadge)
+                        .foregroundStyle(.secondary)
+                }
+                .tag(pkg)
+                .padding(.vertical, 3)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .onChange(of: selectedSearchPkg) { _, newPkg in
+                if let pkg = newPkg {
+                    fetchOnlinePackageDetail(pkg)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var searchDetailPane: some View {
+        if isFetchingOnlineDetail {
+            emptyState(icon: "arrow.clockwise", title: "正在加载包详情")
+                .pluginSettingsCardBackground(.host)
+        } else if let pkg = onlinePackageDetail {
+            onlinePackageDetailView(for: pkg)
+        } else {
+            emptyState(icon: "plus.circle", title: "选择搜索结果后安装")
+                .pluginSettingsCardBackground(.host)
+        }
     }
     
     private var tapsTabContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Add Tap Card
-            VStack(alignment: .leading, spacing: 8) {
-                Text(localization.string("detail.taps.titleAdd", defaultValue: "Add Tap Repository"))
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
-                
-                HStack {
-                    TextField(localization.string("detail.taps.placeholderAdd", defaultValue: "Enter tap path (e.g., user/repo or repository URL)"), text: $newTapName)
+        VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                sectionHeader(title: "添加软件源", icon: "plus.circle")
+
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    TextField("user/repo 或仓库 URL", text: $newTapName)
                         .textFieldStyle(.roundedBorder)
-                        .controlSize(.regular)
-                    
-                    Button(localization.string("detail.taps.buttonAdd", defaultValue: "Add")) {
+                        .controlSize(.small)
+
+                    Button {
                         let trimmed = newTapName.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty else { return }
                         pendingAction = .tap(trimmed)
+                    } label: {
+                        Label("添加", systemImage: "plus")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(newTapName.isEmpty || controller.isBusy)
+                    .controlSize(.small)
+                    .disabled(newTapName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.isBusy)
                 }
+                .pluginSettingsListRowPadding(interactive: true)
+                .pluginSettingsCardBackground(.host)
             }
-            .padding(12)
-            .pluginSettingsCardBackground(.host)
-            
-            // Active Taps List
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(format: localization.string("detail.taps.titleList", defaultValue: "Active Taps (%d)"), controller.taps.count))
-                    .font(PluginSettingsTheme.Typography.sectionTitle)
-                    .foregroundStyle(.secondary)
-                
-                if controller.taps.isEmpty {
-                    Text(localization.string("detail.taps.empty", defaultValue: "No active tap repositories"))
+
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                sectionHeader(title: "已启用软件源（\(controller.taps.count)）", icon: "square.stack.3d.up")
+                tapListCard
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .padding(.top, PluginSettingsTheme.Spacing.sectionHeaderContent)
+        .padding(.horizontal, contentPadding)
+        .padding(.bottom, contentPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var tapListCard: some View {
+        VStack(spacing: 0) {
+            if controller.taps.isEmpty {
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    Image(systemName: "square.stack.3d.up")
+                        .pluginSettingsRowIconStyle()
+                    Text("暂无软件源")
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 60)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 6) {
-                            ForEach(controller.taps) { tap in
-                                HStack {
-                                    Image(systemName: "square.stack.3d.up")
-                                        .foregroundStyle(.secondary)
-                                    Text(tap.name)
-                                        .font(PluginSettingsTheme.Typography.rowTitle)
-                                    Spacer()
-                                    
-                                    Button(localization.string("detail.taps.buttonUntap", defaultValue: "Untap")) {
-                                        pendingAction = .untap(tap)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                    .disabled(controller.isBusy)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.02))
-                                .cornerRadius(6)
+                    Spacer()
+                }
+                .pluginSettingsListRowPadding()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(controller.taps) { tap in
+                            tapRow(tap)
+                            if tap.id != controller.taps.last?.id {
+                                PluginSettingsListDivider()
                             }
                         }
                     }
-                    .frame(maxHeight: .infinity)
                 }
+                .scrollIndicators(.automatic)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(12)
-            .pluginSettingsCardBackground(.host)
         }
-        .padding(.horizontal, contentPadding)
-        .padding(.bottom, contentPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pluginSettingsCardBackground(.host)
     }
-    
+
+    private func tapRow(_ tap: BrewTap) -> some View {
+        HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+            Image(systemName: "square.stack.3d.up")
+                .pluginSettingsRowIconStyle()
+            Text(tap.name)
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
+
+            Button(role: .destructive) {
+                pendingAction = .untap(tap)
+            } label: {
+                Label("移除", systemImage: "minus.circle")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(controller.isBusy)
+        }
+        .pluginSettingsListRowPadding(interactive: true)
+    }
+
     private var diagnosticsTabContent: some View {
         ScrollView {
-            VStack(spacing: 12) {
-                // Path Config Card
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(localization.string("detail.diagnostics.pathTitle", defaultValue: "Homebrew Path Configuration"))
-                        .font(PluginSettingsTheme.Typography.sectionTitle)
-                        .foregroundStyle(.secondary)
-                    
-                    HStack {
-                        TextField(localization.string("detail.diagnostics.pathPlaceholder", defaultValue: "Path to brew executable (e.g. /opt/homebrew/bin/brew)"), text: $customBrewPath)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                    sectionHeader(title: "brew 路径", icon: "terminal")
+
+                    HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                        TextField("例如 /opt/homebrew/bin/brew", text: $customBrewPath)
                             .textFieldStyle(.roundedBorder)
-                            .controlSize(.regular)
-                        
-                        Button(localization.string("detail.diagnostics.pathApply", defaultValue: "Apply")) {
+                            .controlSize(.small)
+
+                        Button {
                             controller.updateCustomPath(customBrewPath)
+                        } label: {
+                            Label("应用", systemImage: "checkmark")
                         }
                         .buttonStyle(.bordered)
-                        .disabled(customBrewPath == controller.brewPath)
+                        .controlSize(.small)
+                        .disabled(customBrewPath == controller.brewPath || customBrewPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    .pluginSettingsListRowPadding(interactive: true)
+                    .pluginSettingsCardBackground(.host)
                 }
-                .padding(12)
-                .pluginSettingsCardBackground(.host)
 
-                diagnosticRow(
-                    title: localization.string("detail.diagnostics.update.title", defaultValue: "Update Repositories (brew update)"),
-                    description: localization.string("detail.diagnostics.update.desc", defaultValue: "Sync the latest list of formulas and casks from remote servers."),
-                    icon: "arrow.clockwise.circle.fill",
-                    color: .blue,
-                    action: { controller.updateBrew() }
-                )
-                
-                diagnosticRow(
-                    title: localization.string("detail.diagnostics.upgrade.title", defaultValue: "Upgrade All Outdated Packages (brew upgrade)"),
-                    description: localization.string("detail.diagnostics.upgrade.desc", defaultValue: "Upgrade all outdated formulas and casks currently detected on your system."),
-                    icon: "arrow.up.circle.fill",
-                    color: .orange,
-                    action: { pendingAction = .upgradeAll }
-                )
-                
-                diagnosticRow(
-                    title: localization.string("detail.diagnostics.doctor.title", defaultValue: "Health Diagnostics (brew doctor)"),
-                    description: localization.string("detail.diagnostics.doctor.desc", defaultValue: "Diagnose potential issues with environment variables, permissions, and build paths."),
-                    icon: "heart.text.square.fill",
-                    color: .green,
-                    action: { controller.runDoctor() }
-                )
-                
-                diagnosticRow(
-                    title: localization.string("detail.diagnostics.cleanup.title", defaultValue: "Cleanup Trash & Caches (brew cleanup)"),
-                    description: localization.string("detail.diagnostics.cleanup.desc", defaultValue: "Remove outdated local downloads and caches to reclaim disk space."),
-                    icon: "trash.circle.fill",
-                    color: .red,
-                    action: { pendingAction = .cleanup }
-                )
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                    sectionHeader(title: "维护操作", icon: "wrench.and.screwdriver")
+
+                    VStack(spacing: 0) {
+                        diagnosticRow(
+                            title: "更新软件源",
+                            description: "同步 Homebrew formula 和 cask 列表。",
+                            icon: "arrow.clockwise.circle.fill",
+                            color: .blue,
+                            action: { controller.updateBrew() }
+                        )
+                        PluginSettingsListDivider()
+                        diagnosticRow(
+                            title: "更新所有包",
+                            description: "更新当前检测到的过期包。",
+                            icon: "arrow.up.circle.fill",
+                            color: .orange,
+                            action: { pendingAction = .upgradeAll }
+                        )
+                        PluginSettingsListDivider()
+                        diagnosticRow(
+                            title: "运行诊断",
+                            description: "检查环境变量、权限和构建路径。",
+                            icon: "heart.text.square.fill",
+                            color: .green,
+                            action: { controller.runDoctor() }
+                        )
+                        PluginSettingsListDivider()
+                        diagnosticRow(
+                            title: "清理缓存",
+                            description: "移除旧版本下载和缓存。",
+                            icon: "trash.circle.fill",
+                            color: .red,
+                            action: { pendingAction = .cleanup }
+                        )
+                    }
+                    .pluginSettingsCardBackground(.host)
+                }
             }
-            .padding(.bottom, 8)
+            .padding(.top, PluginSettingsTheme.Spacing.sectionHeaderContent)
+            .padding(.bottom, contentPadding)
         }
         .padding(.horizontal, contentPadding)
-        .padding(.bottom, contentPadding)
     }
 
     private var pathNotFoundView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: PluginSettingsTheme.Spacing.section) {
             Spacer()
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 48))
+                .font(.system(size: PluginSettingsTheme.Size.pageIcon))
                 .foregroundStyle(.orange)
             
-            Text(localization.string("detail.diagnostics.pathNotFoundTitle", defaultValue: "Homebrew Not Detected"))
+            Text("未检测到 Homebrew")
                 .font(PluginSettingsTheme.Typography.pageTitle)
             
-            Text(localization.string("detail.diagnostics.pathNotFoundDesc", defaultValue: "Homebrew was not found in standard system directories. Please ensure it is installed or provide the custom path to the 'brew' executable below:"))
+            Text("请确认已安装 Homebrew，或手动指定 brew 可执行文件路径。")
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
             
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    TextField(localization.string("detail.diagnostics.pathPlaceholder", defaultValue: "Path to brew executable (e.g. /opt/homebrew/bin/brew)"), text: $customBrewPath)
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
+                HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
+                    TextField("例如 /opt/homebrew/bin/brew", text: $customBrewPath)
                         .textFieldStyle(.roundedBorder)
-                        .controlSize(.regular)
+                        .controlSize(.small)
                     
-                    Button(localization.string("detail.diagnostics.pathApply", defaultValue: "Apply")) {
+                    Button {
                         controller.updateCustomPath(customBrewPath)
+                    } label: {
+                        Label("应用", systemImage: "checkmark")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(customBrewPath == controller.brewPath)
+                    .controlSize(.small)
+                    .disabled(customBrewPath.isEmpty)
                 }
             }
             .frame(maxWidth: 480)
             
             VStack(alignment: .leading, spacing: 6) {
-                Text(localization.string("detail.diagnostics.pathHelpTitle", defaultValue: "Common Installation Locations:"))
+                Text("常见安装位置")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(localization.string("detail.diagnostics.pathHelpAppleSilicon", defaultValue: "• Apple Silicon Mac: /opt/homebrew/bin/brew"))
+                Text("Apple Silicon Mac: /opt/homebrew/bin/brew")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(localization.string("detail.diagnostics.pathHelpIntel", defaultValue: "• Intel Mac: /usr/local/bin/brew"))
+                Text("Intel Mac: /usr/local/bin/brew")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 12)
             Spacer()
         }
-        .padding(24)
+        .padding(PluginSettingsTheme.Spacing.pagePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .pluginSettingsCardBackground(.host)
     }
@@ -604,30 +720,29 @@ struct HomebrewDetailView: View {
         color: Color,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             Image(systemName: icon)
-                .font(.system(size: 28))
-                .foregroundStyle(color)
-                .frame(width: 36)
+                .pluginSettingsRowIconStyle(color, visualScale: 1.1)
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                 Text(title)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
                 Text(description)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
             
-            Button(localization.string("detail.diagnostics.buttonExecute", defaultValue: "Execute")) {
+            Button {
                 action()
+            } label: {
+                Label("执行", systemImage: "play")
             }
             .buttonStyle(.bordered)
-            .controlSize(.regular)
+            .controlSize(.small)
             .disabled(controller.isBusy)
         }
-        .padding(12)
-        .pluginSettingsCardBackground(.host)
+        .pluginSettingsListRowPadding(interactive: true)
     }
     
     // MARK: - Component Views
@@ -945,6 +1060,38 @@ struct HomebrewDetailView: View {
     }
     
     // MARK: - Helper Methods
+
+    private func requestInitialScanIfNeeded() {
+        guard !didRequestInitialScan else { return }
+        guard controller.isBrewAvailable, !controller.isBusy else { return }
+        guard controller.installedPackages.isEmpty,
+              controller.outdatedPackages.isEmpty,
+              controller.taps.isEmpty else {
+            return
+        }
+
+        didRequestInitialScan = true
+        controller.scanAll()
+    }
+
+    private func emptyState(icon: String, title: String) -> some View {
+        VStack(spacing: PluginSettingsTheme.Spacing.controlCluster) {
+            if icon == "arrow.clockwise" {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: PluginSettingsTheme.Size.emptyStateIcon))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(title)
+                .font(PluginSettingsTheme.Typography.pageDescription)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
     
     private func fetchOnlinePackageDetail(_ pkg: BrewPackage) {
         let requestedName = pkg.name
@@ -1034,8 +1181,16 @@ struct HomebrewDetailView: View {
         } else {
             activeTab = .search
             onlineSearchText = name
-            controller.search(query: name)
+            runOnlineSearch()
         }
+    }
+
+    private func runOnlineSearch() {
+        let trimmed = onlineSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        selectedSearchPkg = nil
+        onlinePackageDetail = nil
+        controller.search(query: trimmed)
     }
 
     private func perform(_ action: HomebrewPendingAction) {

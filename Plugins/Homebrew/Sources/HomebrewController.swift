@@ -428,6 +428,8 @@ public final class HomebrewController: ObservableObject {
             searchResults.removeAll()
             return
         }
+        guard !isSearching else { return }
+        guard searchQuery != trimmed || searchResults.isEmpty else { return }
         
         searchQuery = trimmed
         isSearching = true

@@ -44,6 +44,10 @@ final class HomebrewPluginTests: XCTestCase {
                 matchKey = "outdated"
             } else if arguments.contains("info") && arguments.contains("--installed") {
                 matchKey = "info-installed"
+            } else if arguments.contains("search") && arguments.contains("--formula") {
+                matchKey = "search-formula"
+            } else if arguments.contains("search") && arguments.contains("--cask") {
+                matchKey = "search-cask"
             }
             
             if let output = stubbedOutputs[matchKey] {
@@ -68,13 +72,31 @@ final class HomebrewPluginTests: XCTestCase {
         XCTAssertEqual(plugin.metadata.title, "Homebrew")
     }
     
-    func testControlStyleIsDisclosure() {
+    func testPanelUsesManageButton() {
         let runner = FakeHomebrewCommandRunner()
         let controller = HomebrewController(runner: runner)
         let localization = PluginLocalization(bundle: .main)
         let plugin = HomebrewPlugin(controller: controller, localization: localization)
         
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .disclosure)
+        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
+        XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .dismissBeforeHandling)
+        XCTAssertEqual(plugin.primaryPanelDescriptor.buttonTitle, "管理")
+        XCTAssertNil(plugin.primaryPanelState.detail)
+    }
+
+    func testManageButtonRequestsConfigurationPresentation() {
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+        let localization = PluginLocalization(bundle: .main)
+        let plugin = HomebrewPlugin(controller: controller, localization: localization)
+        var requestCount = 0
+        plugin.requestConfigurationPresentation = {
+            requestCount += 1
+        }
+
+        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.manage))
+
+        XCTAssertEqual(requestCount, 1)
     }
     
     func testScanPopulatesPackagesAndTaps() async throws {
@@ -116,6 +138,32 @@ final class HomebrewPluginTests: XCTestCase {
         let ripPkg = try XCTUnwrap(controller.installedPackages.first { $0.name == "ripgrep" })
         XCTAssertFalse(ripPkg.isOutdated)
         XCTAssertEqual(ripPkg.requiredBy(in: controller.installedPackages), [])
+    }
+
+    func testSearchSkipsDuplicatePopulatedQuery() async throws {
+        let runner = FakeHomebrewCommandRunner()
+        runner.stubbedOutputs = [
+            "search-formula": "wget\n",
+            "search-cask": "warp\n"
+        ]
+
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+
+        controller.search(query: "w")
+        let deadline = Date().addingTimeInterval(5.0)
+        while controller.isSearching && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(controller.searchResults.map(\.name), ["warp", "wget"])
+        XCTAssertEqual(runner.runCalls.count, 2)
+
+        controller.search(query: " w ")
+
+        XCTAssertEqual(controller.searchResults.map(\.name), ["warp", "wget"])
+        XCTAssertEqual(runner.runCalls.count, 2)
     }
     
     func testCustomPathPersistence() {
