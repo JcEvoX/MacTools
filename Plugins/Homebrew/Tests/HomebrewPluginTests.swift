@@ -194,52 +194,62 @@ final class HomebrewPluginTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: "mactools.homebrew.customPath"), nil)
     }
     
-    func testHandleActionInvokeActions() async throws {
+    func testUnknownPanelActionIsIgnored() {
         let runner = FakeHomebrewCommandRunner()
         let controller = HomebrewController(runner: runner)
         controller.isBrewAvailable = true
         controller.brewPath = "/opt/homebrew/bin/brew"
-        
+
         let localization = PluginLocalization(bundle: .main)
         let plugin = HomebrewPlugin(controller: controller, localization: localization)
-        
-        // 1. Scan Action
-        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.scan))
-        XCTAssertTrue(controller.isBusy)
-        
-        // Wait for it to finish
-        let deadline = Date().addingTimeInterval(5.0)
+
+        plugin.handleAction(.invokeAction(controlID: "legacy-scan"))
+
+        XCTAssertFalse(controller.isBusy)
+        XCTAssertTrue(runner.runCalls.isEmpty)
+    }
+
+    func testCaskPackageActionsUseBrewSubcommandBeforeCaskFlag() async throws {
+        let runner = FakeHomebrewCommandRunner()
+        runner.stubbedStatus = 1
+
+        let controller = HomebrewController(runner: runner)
+        controller.isBrewAvailable = true
+        controller.brewPath = "/opt/homebrew/bin/brew"
+
+        let package = BrewPackage(
+            name: "iterm2",
+            version: "3.5.0",
+            latestVersion: "3.5.0",
+            isCask: true,
+            desc: "",
+            homepage: "",
+            isOutdated: false,
+            isPinned: false
+        )
+
+        controller.install(package: package)
+        var deadline = Date().addingTimeInterval(5.0)
         while controller.isBusy && Date() < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertFalse(controller.isBusy)
-        
-        // 2. Upgrade All Action
-        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.upgradeAll))
-        XCTAssertTrue(controller.isBusy)
-        XCTAssertEqual(controller.currentOperationName, "正在更新所有包...")
-        
-        // Cancel the operation to test Cancel action
-        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.stop))
-        
-        // Wait for it to settle
-        let cancelDeadline = Date().addingTimeInterval(5.0)
-        while controller.isBusy && Date() < cancelDeadline {
+        XCTAssertEqual(runner.runCalls.last, ["install", "--cask", "iterm2"])
+
+        runner.runCalls.removeAll()
+        controller.uninstall(package: package)
+        deadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertTrue(runner.isCancelled)
-        
-        // 3. Cleanup Action
-        runner.isCancelled = false
-        plugin.handleAction(.invokeAction(controlID: HomebrewPlugin.ControlID.cleanup))
-        XCTAssertTrue(controller.isBusy)
-        XCTAssertEqual(controller.currentOperationName, "正在清理 Homebrew 缓存...")
-        
-        let cleanDeadline = Date().addingTimeInterval(5.0)
-        while controller.isBusy && Date() < cleanDeadline {
+        XCTAssertEqual(runner.runCalls.last, ["uninstall", "--cask", "iterm2"])
+
+        runner.runCalls.removeAll()
+        controller.upgrade(package: package)
+        deadline = Date().addingTimeInterval(5.0)
+        while controller.isBusy && Date() < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertFalse(controller.isBusy)
+        XCTAssertEqual(runner.runCalls.last, ["upgrade", "--cask", "iterm2"])
     }
     
     func testPanelStateBusyAndNotAvailable() {
