@@ -19,6 +19,7 @@ struct HomebrewDetailView: View {
     @State private var onlinePackageDetail: BrewPackage?
     @State private var isFetchingOnlineDetail = false
     @State private var customBrewPath = ""
+    @State private var pendingAction: HomebrewPendingAction?
     
     enum BrewTabSection: String, CaseIterable, Identifiable {
         case installed
@@ -125,12 +126,32 @@ struct HomebrewDetailView: View {
         .frame(minHeight: minimumContentHeight)
         .onAppear {
             customBrewPath = controller.brewPath
-            if controller.isBrewAvailable && controller.installedPackages.isEmpty && !controller.isBusy {
-                controller.scanAll()
-            }
         }
         .onChange(of: controller.brewPath) { _, newPath in
             customBrewPath = newPath
+        }
+        .confirmationDialog(
+            pendingAction?.title(localization: localization)
+                ?? localization.string("detail.confirm.defaultTitle", defaultValue: "确认操作"),
+            isPresented: Binding(
+                get: { pendingAction != nil },
+                set: { if !$0 { pendingAction = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingAction {
+                Button(pendingAction.buttonTitle(localization: localization), role: pendingAction.role) {
+                    perform(pendingAction)
+                    self.pendingAction = nil
+                }
+            }
+            Button(localization.string("detail.confirm.cancel", defaultValue: "取消"), role: .cancel) {
+                pendingAction = nil
+            }
+        } message: {
+            if let pendingAction {
+                Text(pendingAction.message(localization: localization))
+            }
         }
     }
     
@@ -407,8 +428,9 @@ struct HomebrewDetailView: View {
                         .controlSize(.regular)
                     
                     Button(localization.string("detail.taps.buttonAdd", defaultValue: "Add")) {
-                        controller.tapRepository(name: newTapName)
-                        newTapName = ""
+                        let trimmed = newTapName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        pendingAction = .tap(trimmed)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(newTapName.isEmpty || controller.isBusy)
@@ -440,7 +462,7 @@ struct HomebrewDetailView: View {
                                     Spacer()
                                     
                                     Button(localization.string("detail.taps.buttonUntap", defaultValue: "Untap")) {
-                                        controller.untapRepository(tap: tap)
+                                        pendingAction = .untap(tap)
                                     }
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
@@ -500,7 +522,7 @@ struct HomebrewDetailView: View {
                     description: localization.string("detail.diagnostics.upgrade.desc", defaultValue: "Upgrade all outdated formulas and casks currently detected on your system."),
                     icon: "arrow.up.circle.fill",
                     color: .orange,
-                    action: { controller.upgradeAll() }
+                    action: { pendingAction = .upgradeAll }
                 )
                 
                 diagnosticRow(
@@ -516,7 +538,7 @@ struct HomebrewDetailView: View {
                     description: localization.string("detail.diagnostics.cleanup.desc", defaultValue: "Remove outdated local downloads and caches to reclaim disk space."),
                     icon: "trash.circle.fill",
                     color: .red,
-                    action: { controller.runCleanup() }
+                    action: { pendingAction = .cleanup }
                 )
             }
             .padding(.bottom, 8)
@@ -646,8 +668,8 @@ struct HomebrewDetailView: View {
                     HStack {
                         Text(localization.string("detail.detail.website", defaultValue: "Homepage")).font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
                         Spacer()
-                        if let url = URL(string: pkg.homepage) {
-                            Link(pkg.homepage, destination: url)
+                        if let homepageURL = validatedHomepageURL(pkg.homepage) {
+                            Link(pkg.homepage, destination: homepageURL)
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .lineLimit(1)
                         } else {
@@ -759,7 +781,7 @@ struct HomebrewDetailView: View {
                 }
                 
                 Button(role: .destructive) {
-                    controller.uninstall(package: pkg)
+                    pendingAction = .uninstall(pkg)
                 } label: {
                     Label(localization.string("detail.detail.actionUninstall", defaultValue: "Uninstall"), systemImage: "trash")
                 }
@@ -797,8 +819,8 @@ struct HomebrewDetailView: View {
                     HStack {
                         Text(localization.string("detail.detail.website", defaultValue: "Homepage")).font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
                         Spacer()
-                        if let url = URL(string: pkg.homepage) {
-                            Link(pkg.homepage, destination: url)
+                        if let homepageURL = validatedHomepageURL(pkg.homepage) {
+                            Link(pkg.homepage, destination: homepageURL)
                                 .font(PluginSettingsTheme.Typography.rowDescription)
                                 .lineLimit(1)
                         } else {
@@ -1013,6 +1035,138 @@ struct HomebrewDetailView: View {
             activeTab = .search
             onlineSearchText = name
             controller.search(query: name)
+        }
+    }
+
+    private func perform(_ action: HomebrewPendingAction) {
+        switch action {
+        case .upgradeAll:
+            controller.upgradeAll()
+        case .cleanup:
+            controller.runCleanup()
+        case let .uninstall(package):
+            controller.uninstall(package: package)
+        case let .tap(name):
+            controller.tapRepository(name: name)
+            newTapName = ""
+        case let .untap(tap):
+            controller.untapRepository(tap: tap)
+        }
+    }
+
+    private func validatedHomepageURL(_ value: String) -> URL? {
+        guard let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let url = components.url else {
+            return nil
+        }
+        return url
+    }
+}
+
+private enum HomebrewPendingAction: Identifiable {
+    case upgradeAll
+    case cleanup
+    case uninstall(BrewPackage)
+    case tap(String)
+    case untap(BrewTap)
+
+    var id: String {
+        switch self {
+        case .upgradeAll:
+            return "upgrade-all"
+        case .cleanup:
+            return "cleanup"
+        case let .uninstall(package):
+            return "uninstall-\(package.name)"
+        case let .tap(name):
+            return "tap-\(name)"
+        case let .untap(tap):
+            return "untap-\(tap.name)"
+        }
+    }
+
+    var role: ButtonRole? {
+        switch self {
+        case .cleanup,
+             .uninstall,
+             .untap:
+            return .destructive
+        case .upgradeAll,
+             .tap:
+            return nil
+        }
+    }
+
+    func title(localization: PluginLocalization) -> String {
+        switch self {
+        case .upgradeAll:
+            return localization.string("detail.confirm.upgradeAll.title", defaultValue: "确认更新所有包？")
+        case .cleanup:
+            return localization.string("detail.confirm.cleanup.title", defaultValue: "确认清理 Homebrew 缓存？")
+        case let .uninstall(package):
+            return localization.format(
+                "detail.confirm.uninstall.title",
+                defaultValue: "确认卸载 %@？",
+                package.name
+            )
+        case .tap:
+            return localization.string("detail.confirm.tap.title", defaultValue: "确认添加软件源？")
+        case let .untap(tap):
+            return localization.format(
+                "detail.confirm.untap.title",
+                defaultValue: "确认移除 %@？",
+                tap.name
+            )
+        }
+    }
+
+    func message(localization: PluginLocalization) -> String {
+        switch self {
+        case .upgradeAll:
+            return localization.string(
+                "detail.confirm.upgradeAll.message",
+                defaultValue: "将执行 brew upgrade，更新所有可升级的 Homebrew 包。此操作可能修改已安装软件。"
+            )
+        case .cleanup:
+            return localization.string(
+                "detail.confirm.cleanup.message",
+                defaultValue: "将执行 brew cleanup，删除 Homebrew 旧版本和下载缓存。"
+            )
+        case let .uninstall(package):
+            return localization.format(
+                "detail.confirm.uninstall.message",
+                defaultValue: "将执行 brew uninstall %@。如果其他包依赖它，相关功能可能受到影响。",
+                package.name
+            )
+        case let .tap(name):
+            return localization.format(
+                "detail.confirm.tap.message",
+                defaultValue: "将执行 brew tap %@，Homebrew 会从该软件源获取配方和 cask 信息。",
+                name
+            )
+        case let .untap(tap):
+            return localization.format(
+                "detail.confirm.untap.message",
+                defaultValue: "将执行 brew untap %@。依赖该软件源的包可能无法继续更新。",
+                tap.name
+            )
+        }
+    }
+
+    func buttonTitle(localization: PluginLocalization) -> String {
+        switch self {
+        case .upgradeAll:
+            return localization.string("detail.confirm.upgradeAll.button", defaultValue: "更新全部")
+        case .cleanup:
+            return localization.string("detail.confirm.cleanup.button", defaultValue: "清理")
+        case .uninstall:
+            return localization.string("detail.confirm.uninstall.button", defaultValue: "卸载")
+        case .tap:
+            return localization.string("detail.confirm.tap.button", defaultValue: "添加")
+        case .untap:
+            return localization.string("detail.confirm.untap.button", defaultValue: "移除")
         }
     }
 }

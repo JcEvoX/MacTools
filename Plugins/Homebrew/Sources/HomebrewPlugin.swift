@@ -24,6 +24,46 @@ private struct HomebrewPluginProvider: PluginProvider {
 }
 
 @MainActor
+private protocol HomebrewConfirmationPresenting: AnyObject {
+    func confirm(
+        title: String,
+        message: String,
+        confirmTitle: String,
+        isDestructive: Bool,
+        onConfirm: @escaping @MainActor () -> Void
+    )
+}
+
+@MainActor
+private final class HomebrewAlertConfirmationPresenter: HomebrewConfirmationPresenting {
+    private let localization: PluginLocalization
+
+    init(localization: PluginLocalization) {
+        self.localization = localization
+    }
+
+    func confirm(
+        title: String,
+        message: String,
+        confirmTitle: String,
+        isDestructive: Bool,
+        onConfirm: @escaping @MainActor () -> Void
+    ) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = isDestructive ? .warning : .informational
+        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: localization.string("confirm.cancel", defaultValue: "取消"))
+
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            onConfirm()
+        }
+    }
+}
+
+@MainActor
 public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     public enum ControlID {
         static let scan = "homebrew-scan"
@@ -45,6 +85,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     private let controller: HomebrewController
     private let localization: PluginLocalization
+    private let confirmationPresenter: HomebrewConfirmationPresenting
     private var isExpanded = false
 
     public init(
@@ -53,6 +94,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     ) {
         self.controller = controller
         self.localization = localization
+        self.confirmationPresenter = HomebrewAlertConfirmationPresenter(localization: localization)
         
         self.metadata = PluginMetadata(
             id: "homebrew",
@@ -69,10 +111,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     public func activate(context: PluginRuntimeContext) {
-        // Auto scan on launch to populate initial count
-        if controller.isBrewAvailable && controller.installedPackages.isEmpty {
-            controller.scanAll()
-        }
+        onStateChange?()
     }
 
     public func deactivate(reason: PluginDeactivationReason) {
@@ -81,7 +120,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
     }
 
     public func refresh() {
-        controller.scanAll()
+        onStateChange?()
     }
 
     public var primaryPanelState: PluginPanelState {
@@ -150,6 +189,9 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         if outdatedCount > 0 {
             return String(format: localization.string("panel.subtitle.upgradable", defaultValue: "%d package(s) upgradable"), outdatedCount)
         }
+        if controller.installedPackages.isEmpty {
+            return localization.string("panel.subtitle.ready", defaultValue: "Ready to check")
+        }
         return localization.string("panel.subtitle.upToDate", defaultValue: "All packages up to date")
     }
 
@@ -158,13 +200,41 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel {
         case ControlID.scan:
             controller.scanAll()
         case ControlID.upgradeAll:
-            controller.upgradeAll()
+            confirmUpgradeAll()
         case ControlID.cleanup:
-            controller.runCleanup()
+            confirmCleanup()
         case ControlID.stop:
             controller.cancelCurrentOperation()
         default:
             break
+        }
+    }
+
+    private func confirmUpgradeAll() {
+        confirmationPresenter.confirm(
+            title: localization.string("confirm.upgradeAll.title", defaultValue: "确认更新所有包？"),
+            message: localization.string(
+                "confirm.upgradeAll.message",
+                defaultValue: "将执行 brew upgrade，更新所有可升级的 Homebrew 包。此操作可能修改已安装软件。"
+            ),
+            confirmTitle: localization.string("confirm.upgradeAll.button", defaultValue: "更新全部"),
+            isDestructive: false
+        ) { [weak self] in
+            self?.controller.upgradeAll()
+        }
+    }
+
+    private func confirmCleanup() {
+        confirmationPresenter.confirm(
+            title: localization.string("confirm.cleanup.title", defaultValue: "确认清理 Homebrew 缓存？"),
+            message: localization.string(
+                "confirm.cleanup.message",
+                defaultValue: "将执行 brew cleanup，删除 Homebrew 旧版本和下载缓存。"
+            ),
+            confirmTitle: localization.string("confirm.cleanup.button", defaultValue: "清理"),
+            isDestructive: true
+        ) { [weak self] in
+            self?.controller.runCleanup()
         }
     }
 

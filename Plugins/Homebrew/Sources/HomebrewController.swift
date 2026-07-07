@@ -27,88 +27,57 @@ public final class HomebrewController: ObservableObject {
     
     public init(runner: any HomebrewCommandRunning = HomebrewCommandRunner()) {
         self.runner = runner
+
         if let customPath = UserDefaults.standard.string(forKey: "mactools.homebrew.customPath"),
-           !customPath.isEmpty,
-           FileManager.default.fileExists(atPath: customPath) {
-            self.brewPath = customPath
-            self.isBrewAvailable = true
-        } else if let path = discoverBrewPath() {
+           !customPath.isEmpty {
+            if let validatedPath = HomebrewExecutableValidator.validatedPath(for: customPath) {
+                self.brewPath = validatedPath
+                self.isBrewAvailable = true
+                return
+            }
+            UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
+        }
+
+        if let path = discoverBrewPath() {
             self.brewPath = path
             self.isBrewAvailable = true
-        } else {
-            Task { [weak self] in
-                guard let self = self else { return }
-                if let path = await self.discoverBrewPathViaShell() {
-                    self.brewPath = path
-                    self.isBrewAvailable = true
-                    self.onStateChange?()
-                    if self.installedPackages.isEmpty {
-                        self.scanAll()
-                    }
-                }
-            }
         }
     }
     
     public func updateCustomPath(_ path: String) {
-        var trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
             if let path = discoverBrewPath() {
                 self.brewPath = path
                 self.isBrewAvailable = true
-                scanAll()
-                onStateChange?()
             } else {
                 self.brewPath = ""
                 self.isBrewAvailable = false
-                onStateChange?()
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    if let path = await self.discoverBrewPathViaShell() {
-                        self.brewPath = path
-                        self.isBrewAvailable = true
-                        self.onStateChange?()
-                        if self.installedPackages.isEmpty {
-                            self.scanAll()
-                        }
-                    }
-                }
             }
+            onStateChange?()
             return
         }
-        
-        // Auto-append brew if pointing to directory containing brew
-        if (trimmed as NSString).lastPathComponent != "brew" {
-            let possiblePath = (trimmed as NSString).appendingPathComponent("brew")
-            if FileManager.default.fileExists(atPath: possiblePath) {
-                trimmed = possiblePath
-            }
+
+        guard let validatedPath = HomebrewExecutableValidator.validatedPath(for: trimmed) else {
+            appendLog("[System] Homebrew 路径无效，请选择可执行的 brew 文件。", isError: true)
+            onStateChange?()
+            return
         }
-        
-        UserDefaults.standard.set(trimmed, forKey: "mactools.homebrew.customPath")
-        self.brewPath = trimmed
-        self.isBrewAvailable = FileManager.default.fileExists(atPath: trimmed)
-        
-        if self.isBrewAvailable {
-            scanAll()
-        }
+
+        UserDefaults.standard.set(validatedPath, forKey: "mactools.homebrew.customPath")
+        self.brewPath = validatedPath
+        self.isBrewAvailable = true
+        appendLog("[System] 已更新 Homebrew 路径。")
         onStateChange?()
     }
     
     // MARK: - Path Discovery
     
     private func discoverBrewPath() -> String? {
-        let standardPaths = [
-            "/opt/homebrew/bin/brew",
-            "/usr/local/bin/brew",
-            "/opt/workbrew/bin/brew",
-            "/usr/bin/brew",
-            "/bin/brew"
-        ]
-        for path in standardPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
+        for path in HomebrewExecutableValidator.standardPaths {
+            if let validatedPath = HomebrewExecutableValidator.validatedPath(for: path) {
+                return validatedPath
             }
         }
         
@@ -117,55 +86,11 @@ public final class HomebrewController: ObservableObject {
             let dirs = envPath.components(separatedBy: ":")
             for dir in dirs {
                 let path = (dir as NSString).appendingPathComponent("brew")
-                if FileManager.default.fileExists(atPath: path) {
-                    return path
+                if let validatedPath = HomebrewExecutableValidator.validatedPath(for: path) {
+                    return validatedPath
                 }
             }
         }
-        
-        return nil
-    }
-    
-    private func discoverBrewPathViaShell() async -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "which brew"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        
-        let timeoutTask = Task {
-            try? await Task.sleep(for: .seconds(3.0))
-            if process.isRunning {
-                process.terminate()
-            }
-        }
-        
-        let exitCode: Int32 = await withCheckedContinuation { continuation in
-            process.terminationHandler = { proc in
-                continuation.resume(returning: proc.terminationStatus)
-            }
-            if !process.isRunning {
-                process.terminationHandler = nil
-                continuation.resume(returning: process.terminationStatus)
-            }
-        }
-        
-        timeoutTask.cancel()
-        
-        if exitCode == 0 {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty, path.contains("/") {
-                return path
-            }
-        }
-        
         return nil
     }
     

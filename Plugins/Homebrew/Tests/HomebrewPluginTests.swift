@@ -119,14 +119,20 @@ final class HomebrewPluginTests: XCTestCase {
     }
     
     func testCustomPathPersistence() {
+        UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
         let runner = FakeHomebrewCommandRunner()
         let controller = HomebrewController(runner: runner)
         
         let tempDir = FileManager.default.temporaryDirectory
-        let tempBrewFile = tempDir.appendingPathComponent("brew")
-        try? "test".write(to: tempBrewFile, atomically: true, encoding: .utf8)
+            .appendingPathComponent(UUID().uuidString)
+        let binDir = tempDir.appendingPathComponent("bin")
+        let tempBrewFile = binDir.appendingPathComponent("brew")
+        try? FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+        try? "#!/bin/sh\n# HOMEBREW test shim\n".write(to: tempBrewFile, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempBrewFile.path)
         defer {
-            try? FileManager.default.removeItem(at: tempBrewFile)
+            try? FileManager.default.removeItem(at: tempDir)
+            UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
         }
         
         // Test updating path
@@ -227,5 +233,29 @@ final class HomebrewPluginTests: XCTestCase {
         // Verify logs contain system error entries
         let hasErrorLog = controller.logs.contains { $0.isError }
         XCTAssertTrue(hasErrorLog)
+    }
+
+    func testInvalidCustomPathIsRejected() {
+        UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
+        let runner = FakeHomebrewCommandRunner()
+        let controller = HomebrewController(runner: runner)
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        let binDir = tempDir.appendingPathComponent("bin")
+        let invalidBrewFile = binDir.appendingPathComponent("brew")
+        try? FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+        try? "#!/bin/sh\n# not homebrew\n".write(to: invalidBrewFile, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: invalidBrewFile.path)
+        defer {
+            try? FileManager.default.removeItem(at: tempDir)
+            UserDefaults.standard.removeObject(forKey: "mactools.homebrew.customPath")
+        }
+
+        controller.updateCustomPath(invalidBrewFile.path)
+
+        XCTAssertNil(UserDefaults.standard.string(forKey: "mactools.homebrew.customPath"))
+        XCTAssertNotEqual(controller.brewPath, invalidBrewFile.path)
+        XCTAssertTrue(controller.logs.contains { $0.isError })
     }
 }

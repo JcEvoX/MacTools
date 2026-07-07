@@ -1,5 +1,77 @@
 import Foundation
 
+public enum HomebrewExecutableValidator {
+    public static let standardPaths = [
+        "/opt/homebrew/bin/brew",
+        "/usr/local/bin/brew",
+        "/opt/workbrew/bin/brew"
+    ]
+
+    public static func validatedPath(
+        for rawPath: String,
+        fileManager: FileManager = .default
+    ) -> String? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidate = (trimmed as NSString).expandingTildeInPath
+        if (candidate as NSString).lastPathComponent != "brew" {
+            candidate = (candidate as NSString).appendingPathComponent("brew")
+        }
+
+        let standardized = URL(fileURLWithPath: candidate).standardizedFileURL
+        guard isValidBrewExecutable(at: standardized.path, fileManager: fileManager) else {
+            return nil
+        }
+        return standardized.path
+    }
+
+    public static func isValidBrewExecutable(
+        at path: String,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard url.lastPathComponent == "brew",
+              url.deletingLastPathComponent().lastPathComponent == "bin" else {
+            return false
+        }
+
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue,
+              fileManager.isExecutableFile(atPath: url.path) else {
+            return false
+        }
+
+        let resolvedURL = url.resolvingSymlinksInPath().standardizedFileURL
+        var resolvedIsDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: resolvedURL.path, isDirectory: &resolvedIsDirectory),
+              !resolvedIsDirectory.boolValue,
+              fileManager.isExecutableFile(atPath: resolvedURL.path) else {
+            return false
+        }
+
+        return looksLikeHomebrewExecutable(at: resolvedURL)
+            || looksLikeHomebrewExecutable(at: url)
+    }
+
+    private static func looksLikeHomebrewExecutable(at url: URL) -> Bool {
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer { try? fileHandle.close() }
+
+        guard let data = try? fileHandle.read(upToCount: 16_384),
+              let sample = String(data: data, encoding: .utf8) else {
+            return false
+        }
+
+        return sample.contains("HOMEBREW")
+            || sample.contains("Homebrew")
+            || sample.contains("brew.rb")
+    }
+}
+
 public protocol HomebrewCommandRunning: Sendable {
     func run(
         executable: String,
@@ -33,7 +105,15 @@ public actor HomebrewCommandRunner: HomebrewCommandRunning {
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
+        guard let validatedExecutable = HomebrewExecutableValidator.validatedPath(for: executable) else {
+            throw NSError(
+                domain: "HomebrewCommandRunner",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "The configured Homebrew executable is invalid."]
+            )
+        }
+
+        process.executableURL = URL(fileURLWithPath: validatedExecutable)
         
         // Setup environment path, ensuring homebrew binaries are visible
         var env = ProcessInfo.processInfo.environment
