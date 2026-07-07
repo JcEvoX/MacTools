@@ -32,10 +32,10 @@ struct HomebrewDetailView: View {
         
         func title(localization: PluginLocalization) -> String {
             switch self {
-            case .installed: return "已安装"
-            case .search: return "搜索"
-            case .taps: return "软件源"
-            case .diagnostics: return "诊断"
+            case .installed: return localization.string("detail.tabs.installed", defaultValue: "已安装")
+            case .search: return localization.string("detail.tabs.search", defaultValue: "搜索")
+            case .taps: return localization.string("detail.tabs.taps", defaultValue: "软件源")
+            case .diagnostics: return localization.string("detail.tabs.diagnostics", defaultValue: "诊断")
             }
         }
         
@@ -58,9 +58,9 @@ struct HomebrewDetailView: View {
         
         func title(localization: PluginLocalization) -> String {
             switch self {
-            case .all: return "全部"
-            case .formula: return "Formula"
-            case .cask: return "Cask"
+            case .all: return localization.string("detail.filter.all", defaultValue: "全部")
+            case .formula: return localization.string("detail.filter.formula", defaultValue: "Formula")
+            case .cask: return localization.string("detail.filter.cask", defaultValue: "Cask")
             }
         }
     }
@@ -196,7 +196,7 @@ struct HomebrewDetailView: View {
     private var tabBar: some View {
         HStack {
             Spacer(minLength: 0)
-            Picker("视图", selection: $activeTab) {
+            Picker(localization.string("detail.tabs.picker", defaultValue: "视图"), selection: $activeTab) {
                 ForEach(BrewTabSection.allCases) { section in
                     Label(section.title(localization: localization), systemImage: section.icon)
                         .tag(section)
@@ -214,13 +214,13 @@ struct HomebrewDetailView: View {
     private var statusSummaryBar: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
             statusMetric(
-                title: "已安装",
+                title: localization.string("detail.status.installed", defaultValue: "已安装"),
                 value: "\(controller.installedPackages.count)",
                 systemImage: "shippingbox.fill",
                 color: Color(nsColor: .secondaryLabelColor)
             )
             statusMetric(
-                title: "可更新",
+                title: localization.string("detail.status.outdated", defaultValue: "可更新"),
                 value: "\(controller.outdatedPackages.count)",
                 systemImage: "arrow.up.circle.fill",
                 color: controller.outdatedPackages.isEmpty
@@ -234,7 +234,9 @@ struct HomebrewDetailView: View {
                 Image(systemName: "terminal")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(controller.brewPath.isEmpty ? "未配置 brew" : controller.brewPath)
+                Text(controller.brewPath.isEmpty
+                     ? localization.string("detail.status.brewPathMissing", defaultValue: "未配置 brew")
+                     : controller.brewPath)
                     .font(PluginSettingsTheme.Typography.monospacedValue)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -276,7 +278,7 @@ struct HomebrewDetailView: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(!controller.isBrewAvailable || controller.isBusy)
-        .help("刷新 Homebrew 状态")
+        .help(localization.string("detail.refresh.help", defaultValue: "刷新 Homebrew 状态"))
     }
 
     private func sectionHeader(title: String, icon: String) -> some View {
@@ -327,7 +329,7 @@ struct HomebrewDetailView: View {
 
     private var installedToolbar: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            TextField("搜索已安装包", text: $localSearchText)
+            TextField(localization.string("detail.search.placeholder", defaultValue: "搜索已安装包"), text: $localSearchText)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
 
@@ -341,7 +343,7 @@ struct HomebrewDetailView: View {
             .controlSize(.small)
             .frame(width: 96)
 
-            refreshButton(title: "刷新")
+            refreshButton(title: localization.string("detail.refresh.button", defaultValue: "刷新"))
         }
         .pluginSettingsListRowPadding(interactive: true)
     }
@@ -375,7 +377,7 @@ struct HomebrewDetailView: View {
             Spacer(minLength: PluginSettingsTheme.Spacing.rowContentControl)
 
             if pkg.isOutdated {
-                Text("可更新")
+                Text(localization.string("detail.search.hasUpdate", defaultValue: "可更新"))
                     .font(PluginSettingsTheme.Typography.statusBadge)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -398,7 +400,7 @@ struct HomebrewDetailView: View {
             } else {
                 emptyState(
                     icon: "info.circle",
-                    title: "选择一个包查看详情"
+                    title: localization.string("detail.detail.selectionHint", defaultValue: "选择一个包查看详情")
                 )
                 .pluginSettingsCardBackground(.host)
             }
@@ -411,8 +413,10 @@ struct HomebrewDetailView: View {
         return emptyState(
             icon: controller.isBusy ? "arrow.clockwise" : "shippingbox",
             title: controller.isBusy
-                ? "正在加载 Homebrew 状态"
-                : (isUnfiltered ? "尚未加载已安装包" : "没有匹配的已安装包")
+                ? localization.string("detail.search.loadingInstalled", defaultValue: "正在加载 Homebrew 状态")
+                : (isUnfiltered
+                   ? localization.string("detail.search.notLoaded", defaultValue: "尚未加载已安装包")
+                   : localization.string("detail.search.noMatch", defaultValue: "没有匹配的已安装包"))
         )
     }
 
@@ -437,7 +441,7 @@ struct HomebrewDetailView: View {
 
     private var searchToolbar: some View {
         HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-            TextField("搜索软件包", text: $onlineSearchText)
+            TextField(localization.string("detail.search.onlinePlaceholder", defaultValue: "搜索软件包"), text: $onlineSearchText)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
                 .onSubmit {
@@ -447,7 +451,7 @@ struct HomebrewDetailView: View {
             Button {
                 runOnlineSearch()
             } label: {
-                Label("搜索", systemImage: "magnifyingglass")
+                Label(localization.string("detail.search.button", defaultValue: "搜索"), systemImage: "magnifyingglass")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -459,9 +463,9 @@ struct HomebrewDetailView: View {
     @ViewBuilder
     private var searchResultsContent: some View {
         if controller.isSearching {
-            emptyState(icon: "arrow.clockwise", title: "正在搜索 Homebrew")
+            emptyState(icon: "arrow.clockwise", title: localization.string("detail.search.searching", defaultValue: "正在搜索 Homebrew"))
         } else if controller.searchResults.isEmpty {
-            emptyState(icon: "magnifyingglass", title: "输入关键词搜索软件包")
+            emptyState(icon: "magnifyingglass", title: localization.string("detail.search.empty", defaultValue: "输入关键词搜索软件包"))
         } else {
             List(controller.searchResults, selection: $selectedSearchPkg) { pkg in
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
@@ -471,7 +475,9 @@ struct HomebrewDetailView: View {
                         .font(PluginSettingsTheme.Typography.rowTitle)
                         .lineLimit(1)
                     Spacer()
-                    Text(pkg.isCask ? "Cask" : "Formula")
+                    Text(pkg.isCask
+                         ? localization.string("detail.filter.cask", defaultValue: "Cask")
+                         : localization.string("detail.filter.formula", defaultValue: "Formula"))
                         .font(PluginSettingsTheme.Typography.statusBadge)
                         .foregroundStyle(.secondary)
                 }
@@ -491,12 +497,12 @@ struct HomebrewDetailView: View {
     @ViewBuilder
     private var searchDetailPane: some View {
         if isFetchingOnlineDetail {
-            emptyState(icon: "arrow.clockwise", title: "正在加载包详情")
+            emptyState(icon: "arrow.clockwise", title: localization.string("detail.search.fetchingDetail", defaultValue: "正在加载包详情"))
                 .pluginSettingsCardBackground(.host)
         } else if let pkg = onlinePackageDetail {
             onlinePackageDetailView(for: pkg)
         } else {
-            emptyState(icon: "plus.circle", title: "选择搜索结果后安装")
+            emptyState(icon: "plus.circle", title: localization.string("detail.detail.onlineHint", defaultValue: "选择搜索结果后安装"))
                 .pluginSettingsCardBackground(.host)
         }
     }
@@ -504,10 +510,10 @@ struct HomebrewDetailView: View {
     private var tapsTabContent: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                sectionHeader(title: "添加软件源", icon: "plus.circle")
+                sectionHeader(title: localization.string("detail.taps.titleAdd", defaultValue: "添加软件源"), icon: "plus.circle")
 
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    TextField("user/repo 或仓库 URL", text: $newTapName)
+                    TextField(localization.string("detail.taps.placeholderAdd", defaultValue: "user/repo 或仓库 URL"), text: $newTapName)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
 
@@ -516,7 +522,7 @@ struct HomebrewDetailView: View {
                         guard !trimmed.isEmpty else { return }
                         pendingAction = .tap(trimmed)
                     } label: {
-                        Label("添加", systemImage: "plus")
+                        Label(localization.string("detail.taps.buttonAdd", defaultValue: "添加"), systemImage: "plus")
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -527,7 +533,10 @@ struct HomebrewDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                sectionHeader(title: "已启用软件源（\(controller.taps.count)）", icon: "square.stack.3d.up")
+                sectionHeader(
+                    title: localization.format("detail.taps.titleList", defaultValue: "已启用软件源（%d）", controller.taps.count),
+                    icon: "square.stack.3d.up"
+                )
                 tapListCard
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -544,7 +553,7 @@ struct HomebrewDetailView: View {
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
                     Image(systemName: "square.stack.3d.up")
                         .pluginSettingsRowIconStyle()
-                    Text("暂无软件源")
+                    Text(localization.string("detail.taps.empty", defaultValue: "暂无软件源"))
                         .font(PluginSettingsTheme.Typography.rowDescription)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -582,7 +591,7 @@ struct HomebrewDetailView: View {
             Button(role: .destructive) {
                 pendingAction = .untap(tap)
             } label: {
-                Label("移除", systemImage: "minus.circle")
+                Label(localization.string("detail.taps.buttonUntap", defaultValue: "移除"), systemImage: "minus.circle")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -595,17 +604,17 @@ struct HomebrewDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                    sectionHeader(title: "brew 路径", icon: "terminal")
+                    sectionHeader(title: localization.string("detail.diagnostics.pathTitle", defaultValue: "brew 路径"), icon: "terminal")
 
                     HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                        TextField("例如 /opt/homebrew/bin/brew", text: $customBrewPath)
+                        TextField(localization.string("detail.diagnostics.pathPlaceholder", defaultValue: "例如 /opt/homebrew/bin/brew"), text: $customBrewPath)
                             .textFieldStyle(.roundedBorder)
                             .controlSize(.small)
 
                         Button {
                             controller.updateCustomPath(customBrewPath)
                         } label: {
-                            Label("应用", systemImage: "checkmark")
+                            Label(localization.string("detail.diagnostics.pathApply", defaultValue: "应用"), systemImage: "checkmark")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -616,36 +625,36 @@ struct HomebrewDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                    sectionHeader(title: "维护操作", icon: "wrench.and.screwdriver")
+                    sectionHeader(title: localization.string("detail.diagnostics.maintenance.title", defaultValue: "维护操作"), icon: "wrench.and.screwdriver")
 
                     VStack(spacing: 0) {
                         diagnosticRow(
-                            title: "更新软件源",
-                            description: "同步 Homebrew formula 和 cask 列表。",
+                            title: localization.string("detail.diagnostics.update.title", defaultValue: "更新软件源"),
+                            description: localization.string("detail.diagnostics.update.desc", defaultValue: "同步 Homebrew formula 和 cask 列表。"),
                             icon: "arrow.clockwise.circle.fill",
                             color: .blue,
                             action: { controller.updateBrew() }
                         )
                         PluginSettingsListDivider()
                         diagnosticRow(
-                            title: "更新所有包",
-                            description: "更新当前检测到的过期包。",
+                            title: localization.string("detail.diagnostics.upgrade.title", defaultValue: "更新所有包"),
+                            description: localization.string("detail.diagnostics.upgrade.desc", defaultValue: "更新当前检测到的过期包。"),
                             icon: "arrow.up.circle.fill",
                             color: .orange,
                             action: { pendingAction = .upgradeAll }
                         )
                         PluginSettingsListDivider()
                         diagnosticRow(
-                            title: "运行诊断",
-                            description: "检查环境变量、权限和构建路径。",
+                            title: localization.string("detail.diagnostics.doctor.title", defaultValue: "运行诊断"),
+                            description: localization.string("detail.diagnostics.doctor.desc", defaultValue: "检查环境变量、权限和构建路径。"),
                             icon: "heart.text.square.fill",
                             color: .green,
                             action: { controller.runDoctor() }
                         )
                         PluginSettingsListDivider()
                         diagnosticRow(
-                            title: "清理缓存",
-                            description: "移除旧版本下载和缓存。",
+                            title: localization.string("detail.diagnostics.cleanup.title", defaultValue: "清理缓存"),
+                            description: localization.string("detail.diagnostics.cleanup.desc", defaultValue: "移除旧版本下载和缓存。"),
                             icon: "trash.circle.fill",
                             color: .red,
                             action: { pendingAction = .cleanup }
@@ -667,10 +676,10 @@ struct HomebrewDetailView: View {
                 .font(.system(size: PluginSettingsTheme.Size.pageIcon))
                 .foregroundStyle(.orange)
             
-            Text("未检测到 Homebrew")
+            Text(localization.string("detail.diagnostics.pathNotFoundTitle", defaultValue: "未检测到 Homebrew"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
             
-            Text("请确认已安装 Homebrew，或手动指定 brew 可执行文件路径。")
+            Text(localization.string("detail.diagnostics.pathNotFoundDesc", defaultValue: "请确认已安装 Homebrew，或手动指定 brew 可执行文件路径。"))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -678,14 +687,14 @@ struct HomebrewDetailView: View {
             
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
                 HStack(spacing: PluginSettingsTheme.Spacing.rowContentControl) {
-                    TextField("例如 /opt/homebrew/bin/brew", text: $customBrewPath)
+                    TextField(localization.string("detail.diagnostics.pathPlaceholder", defaultValue: "例如 /opt/homebrew/bin/brew"), text: $customBrewPath)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.small)
                     
                     Button {
                         controller.updateCustomPath(customBrewPath)
                     } label: {
-                        Label("应用", systemImage: "checkmark")
+                        Label(localization.string("detail.diagnostics.pathApply", defaultValue: "应用"), systemImage: "checkmark")
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -695,7 +704,7 @@ struct HomebrewDetailView: View {
             .frame(maxWidth: 480)
             
             VStack(alignment: .leading, spacing: 6) {
-                Text("常见安装位置")
+                Text(localization.string("detail.diagnostics.pathHelpTitle", defaultValue: "常见安装位置"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text("Apple Silicon Mac: /opt/homebrew/bin/brew")
@@ -736,7 +745,7 @@ struct HomebrewDetailView: View {
             Button {
                 action()
             } label: {
-                Label("执行", systemImage: "play")
+                Label(localization.string("detail.diagnostics.buttonExecute", defaultValue: "执行"), systemImage: "play")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -801,7 +810,7 @@ struct HomebrewDetailView: View {
             
             if !pkg.dependencies.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(String(format: localization.string("detail.detail.dependencies", defaultValue: "Dependencies (%d)"), pkg.dependencies.count))
+                    Text(localization.format("detail.detail.dependencies", defaultValue: "Dependencies (%d)", pkg.dependencies.count))
                         .font(PluginSettingsTheme.Typography.sectionTitle)
                         .foregroundStyle(.secondary)
                     
@@ -828,7 +837,7 @@ struct HomebrewDetailView: View {
             let usedBy = pkg.requiredBy(in: controller.installedPackages)
             if !usedBy.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(String(format: localization.string("detail.detail.usedBy", defaultValue: "Required By (%d)"), usedBy.count))
+                    Text(localization.format("detail.detail.usedBy", defaultValue: "Required By (%d)", usedBy.count))
                         .font(PluginSettingsTheme.Typography.sectionTitle)
                         .foregroundStyle(.secondary)
                     
@@ -928,7 +937,12 @@ struct HomebrewDetailView: View {
             }
             
             VStack(spacing: 8) {
-                infoRow(label: localization.string("detail.detail.type", defaultValue: "Type"), value: pkg.isCask ? localization.string("detail.filter.cask", defaultValue: "Cask") : localization.string("detail.filter.formula", defaultValue: "Formula"))
+                infoRow(
+                    label: localization.string("detail.detail.type", defaultValue: "Type"),
+                    value: pkg.isCask
+                        ? localization.string("detail.filter.cask", defaultValue: "Cask")
+                        : localization.string("detail.filter.formula", defaultValue: "Formula")
+                )
                 infoRow(label: localization.string("detail.detail.latestAvailableVer", defaultValue: "Latest Available"), value: pkg.latestVersion)
                 if !pkg.homepage.isEmpty {
                     HStack {

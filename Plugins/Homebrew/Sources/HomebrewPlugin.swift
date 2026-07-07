@@ -15,7 +15,7 @@ private struct HomebrewPluginProvider: PluginProvider {
 
     func makePlugins() -> [any MacToolsPlugin] {
         let localization = PluginLocalization(bundle: context.resourceBundle)
-        let controller = HomebrewController()
+        let controller = HomebrewController(localization: localization)
         return [HomebrewPlugin(
             controller: controller,
             localization: localization
@@ -30,12 +30,7 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     }
 
     public let metadata: PluginMetadata
-
-    public let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
-        controlStyle: .button,
-        menuActionBehavior: .dismissBeforeHandling,
-        buttonTitle: "管理"
-    )
+    public let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
 
     public var onStateChange: (() -> Void)?
     public var requestPermissionGuidance: ((String) -> Void)?
@@ -51,6 +46,11 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
     ) {
         self.controller = controller
         self.localization = localization
+        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitle: localization.string("panel.action.manage", defaultValue: "管理")
+        )
         
         self.metadata = PluginMetadata(
             id: "homebrew",
@@ -87,7 +87,9 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
             isEnabled: true,
             isVisible: true,
             detail: nil,
-            errorMessage: controller.isBrewAvailable ? nil : "需要配置 brew 路径"
+            errorMessage: controller.isBrewAvailable
+                ? nil
+                : localization.string("panel.error.brewPathRequired", defaultValue: "需要配置 brew 路径")
         )
     }
 
@@ -133,12 +135,12 @@ public final class HomebrewPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginCon
 
     private var subtitleText: String {
         guard controller.isBrewAvailable else {
-            return "需要配置 brew 路径"
+            return localization.string("panel.error.brewPathRequired", defaultValue: "需要配置 brew 路径")
         }
         if controller.isBusy {
             return controller.currentOperationName
         }
-        return "管理包、软件源与诊断"
+        return localization.string("panel.subtitle.manage", defaultValue: "管理包、软件源与诊断")
     }
 
     private func handleInvoke(controlID: String) {

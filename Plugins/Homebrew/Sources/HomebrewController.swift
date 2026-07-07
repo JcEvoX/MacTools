@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import MacToolsPluginKit
 
 @MainActor
 public final class HomebrewController: ObservableObject {
@@ -24,9 +25,14 @@ public final class HomebrewController: ObservableObject {
     public var onStateChange: (() -> Void)?
     
     let runner: any HomebrewCommandRunning
+    private let localization: PluginLocalization
     
-    public init(runner: any HomebrewCommandRunning = HomebrewCommandRunner()) {
+    public init(
+        runner: any HomebrewCommandRunning = HomebrewCommandRunner(),
+        localization: PluginLocalization = PluginLocalization(bundle: .main)
+    ) {
         self.runner = runner
+        self.localization = localization
 
         if let customPath = UserDefaults.standard.string(forKey: "mactools.homebrew.customPath"),
            !customPath.isEmpty {
@@ -60,7 +66,10 @@ public final class HomebrewController: ObservableObject {
         }
 
         guard let validatedPath = HomebrewExecutableValidator.validatedPath(for: trimmed) else {
-            appendLog("[System] Homebrew 路径无效，请选择可执行的 brew 文件。", isError: true)
+            appendLog(localization.string(
+                "log.path.invalid",
+                defaultValue: "[System] Homebrew 路径无效，请选择可执行的 brew 文件。"
+            ), isError: true)
             onStateChange?()
             return
         }
@@ -68,7 +77,7 @@ public final class HomebrewController: ObservableObject {
         UserDefaults.standard.set(validatedPath, forKey: "mactools.homebrew.customPath")
         self.brewPath = validatedPath
         self.isBrewAvailable = true
-        appendLog("[System] 已更新 Homebrew 路径。")
+        appendLog(localization.string("log.path.updated", defaultValue: "[System] 已更新 Homebrew 路径。"))
         onStateChange?()
     }
     
@@ -118,9 +127,9 @@ public final class HomebrewController: ObservableObject {
     public func scanAll() {
         guard isBrewAvailable, !isBusy else { return }
         isBusy = true
-        currentOperationName = "正在扫描包与更新..."
+        currentOperationName = localization.string("operation.scanAll", defaultValue: "正在扫描包与更新...")
         clearLogs()
-        appendLog("[System] 开始扫描 Homebrew 状态...")
+        appendLog(localization.string("log.scan.started", defaultValue: "[System] 开始扫描 Homebrew 状态..."))
         
         Task {
             do {
@@ -136,9 +145,13 @@ public final class HomebrewController: ObservableObject {
                 // 4. Load full package details in background (desc, homepage, etc.)
                 try await loadPackageDetails()
                 
-                appendLog("[System] 扫描完成！")
+                appendLog(localization.string("log.scan.completed", defaultValue: "[System] 扫描完成。"))
             } catch {
-                appendLog("[System] 扫描发生错误: \(error.localizedDescription)", isError: true)
+                appendLog(localization.format(
+                    "log.scan.failed",
+                    defaultValue: "[System] 扫描发生错误：%@",
+                    error.localizedDescription
+                ), isError: true)
             }
             
             isBusy = false
@@ -148,7 +161,7 @@ public final class HomebrewController: ObservableObject {
     }
     
     private func loadTaps() async throws {
-        appendLog("[System] 正在获取已启用的软件源 (Taps)...")
+        appendLog(localization.string("log.taps.loading", defaultValue: "[System] 正在获取已启用的软件源..."))
         let tempRunner = self.runner
         var outputLines: [String] = []
         
@@ -167,11 +180,11 @@ public final class HomebrewController: ObservableObject {
             .filter { !$0.isEmpty }
         
         taps = tapNames.map { BrewTap(name: $0) }
-        appendLog("[System] 获取到 \(taps.count) 个软件源")
+        appendLog(localization.format("log.taps.loaded", defaultValue: "[System] 获取到 %d 个软件源", taps.count))
     }
     
     private func loadInstalledPackagesFast() async throws {
-        appendLog("[System] 正在快速获取已安装包列表...")
+        appendLog(localization.string("log.installed.loading", defaultValue: "[System] 正在获取已安装包列表..."))
         let tempRunner = self.runner
         
         var formulaOutput = ""
@@ -229,11 +242,11 @@ public final class HomebrewController: ObservableObject {
         }
         
         self.installedPackages = tempPackages.sorted { $0.name.lowercased() < $1.name.lowercased() }
-        appendLog("[System] 快速加载已安装包: \(installedPackages.count) 个")
+        appendLog(localization.format("log.installed.loaded", defaultValue: "[System] 已加载 %d 个已安装包", installedPackages.count))
     }
     
     private func loadOutdatedPackages() async throws {
-        appendLog("[System] 正在获取待更新包列表...")
+        appendLog(localization.string("log.outdated.loading", defaultValue: "[System] 正在获取待更新包列表..."))
         let tempRunner = self.runner
         var jsonOutput = ""
         
@@ -323,14 +336,18 @@ public final class HomebrewController: ObservableObject {
                 )
             }
             
-            appendLog("[System] 获取到 \(outdatedPackages.count) 个待更新包")
+            appendLog(localization.format("log.outdated.loaded", defaultValue: "[System] 获取到 %d 个待更新包", outdatedPackages.count))
         } catch {
-            appendLog("[System] 解析待更新包失败: \(error.localizedDescription)", isError: true)
+            appendLog(localization.format(
+                "log.outdated.parseFailed",
+                defaultValue: "[System] 解析待更新包失败：%@",
+                error.localizedDescription
+            ), isError: true)
         }
     }
     
     private func loadPackageDetails() async throws {
-        appendLog("[System] 正在加载包详细元数据...")
+        appendLog(localization.string("log.details.loading", defaultValue: "[System] 正在加载包详细元数据..."))
         let tempRunner = self.runner
         var jsonOutput = ""
         
@@ -414,9 +431,13 @@ public final class HomebrewController: ObservableObject {
                 return pkg
             }
             
-            appendLog("[System] 包详细元数据加载完成")
+            appendLog(localization.string("log.details.loaded", defaultValue: "[System] 包详细元数据加载完成"))
         } catch {
-            appendLog("[System] 解析详细元数据失败: \(error.localizedDescription)", isError: true)
+            appendLog(localization.format(
+                "log.details.parseFailed",
+                defaultValue: "[System] 解析详细元数据失败：%@",
+                error.localizedDescription
+            ), isError: true)
         }
     }
     
@@ -504,7 +525,7 @@ public final class HomebrewController: ObservableObject {
     
     public func install(package: BrewPackage) {
         runAsyncCommand(
-            name: "正在安装 \(package.name)...",
+            name: localization.format("operation.install", defaultValue: "正在安装 %@...", package.name),
             args: ["install"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
@@ -515,7 +536,7 @@ public final class HomebrewController: ObservableObject {
     
     public func uninstall(package: BrewPackage) {
         runAsyncCommand(
-            name: "正在卸载 \(package.name)...",
+            name: localization.format("operation.uninstall", defaultValue: "正在卸载 %@...", package.name),
             args: ["uninstall"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
@@ -526,7 +547,7 @@ public final class HomebrewController: ObservableObject {
     
     public func upgrade(package: BrewPackage) {
         runAsyncCommand(
-            name: "正在更新 \(package.name)...",
+            name: localization.format("operation.upgrade", defaultValue: "正在更新 %@...", package.name),
             args: ["upgrade"] + (package.isCask ? ["--cask"] : []) + [package.name]
         ) { [weak self] success in
             if success {
@@ -537,7 +558,7 @@ public final class HomebrewController: ObservableObject {
     
     public func pin(package: BrewPackage) {
         runAsyncCommand(
-            name: "正在锁定 \(package.name)...",
+            name: localization.format("operation.pin", defaultValue: "正在锁定 %@...", package.name),
             args: ["pin", package.name]
         ) { [weak self] success in
             if success {
@@ -548,7 +569,7 @@ public final class HomebrewController: ObservableObject {
     
     public func unpin(package: BrewPackage) {
         runAsyncCommand(
-            name: "正在解锁 \(package.name)...",
+            name: localization.format("operation.unpin", defaultValue: "正在解锁 %@...", package.name),
             args: ["unpin", package.name]
         ) { [weak self] success in
             if success {
@@ -560,7 +581,7 @@ public final class HomebrewController: ObservableObject {
     // MARK: - Global Operations
     
     public func upgradeAll() {
-        runAsyncCommand(name: "正在更新所有包...", args: ["upgrade"]) { [weak self] success in
+        runAsyncCommand(name: localization.string("operation.upgradeAll", defaultValue: "正在更新所有包..."), args: ["upgrade"]) { [weak self] success in
             if success {
                 self?.scanAll()
             }
@@ -568,7 +589,7 @@ public final class HomebrewController: ObservableObject {
     }
     
     public func updateBrew() {
-        runAsyncCommand(name: "正在更新 Homebrew 源...", args: ["update"]) { [weak self] success in
+        runAsyncCommand(name: localization.string("operation.updateBrew", defaultValue: "正在更新 Homebrew 源..."), args: ["update"]) { [weak self] success in
             if success {
                 self?.scanAll()
             }
@@ -576,11 +597,11 @@ public final class HomebrewController: ObservableObject {
     }
     
     public func runDoctor() {
-        runAsyncCommand(name: "正在运行 Homebrew 诊断 (Doctor)...", args: ["doctor"]) { _ in }
+        runAsyncCommand(name: localization.string("operation.doctor", defaultValue: "正在运行 Homebrew 诊断..."), args: ["doctor"]) { _ in }
     }
     
     public func runCleanup() {
-        runAsyncCommand(name: "正在清理 Homebrew 缓存...", args: ["cleanup"]) { _ in }
+        runAsyncCommand(name: localization.string("operation.cleanup", defaultValue: "正在清理 Homebrew 缓存..."), args: ["cleanup"]) { _ in }
     }
     
     // MARK: - Tap Actions
@@ -588,7 +609,7 @@ public final class HomebrewController: ObservableObject {
     public func tapRepository(name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        runAsyncCommand(name: "正在启用软件源 \(trimmed)...", args: ["tap", trimmed]) { [weak self] success in
+        runAsyncCommand(name: localization.format("operation.tap", defaultValue: "正在启用软件源 %@...", trimmed), args: ["tap", trimmed]) { [weak self] success in
             if success {
                 self?.scanAll()
             }
@@ -596,7 +617,7 @@ public final class HomebrewController: ObservableObject {
     }
     
     public func untapRepository(tap: BrewTap) {
-        runAsyncCommand(name: "正在注销软件源 \(tap.name)...", args: ["untap", tap.name]) { [weak self] success in
+        runAsyncCommand(name: localization.format("operation.untap", defaultValue: "正在移除软件源 %@...", tap.name), args: ["untap", tap.name]) { [weak self] success in
             if success {
                 self?.scanAll()
             }
@@ -631,9 +652,18 @@ public final class HomebrewController: ObservableObject {
                 )
                 
                 success = (status == 0)
-                appendLog(success ? "[System] 操作成功完成" : "[System] 操作失败，错误码: \(status)", isError: !success)
+                appendLog(
+                    success
+                        ? localization.string("log.command.completed", defaultValue: "[System] 操作成功完成")
+                        : localization.format("log.command.failedStatus", defaultValue: "[System] 操作失败，错误码：%d", status),
+                    isError: !success
+                )
             } catch {
-                appendLog("[System] 执行命令出错: \(error.localizedDescription)", isError: true)
+                appendLog(localization.format(
+                    "log.command.failed",
+                    defaultValue: "[System] 执行命令出错：%@",
+                    error.localizedDescription
+                ), isError: true)
                 success = false
             }
             
@@ -647,7 +677,7 @@ public final class HomebrewController: ObservableObject {
     public func cancelCurrentOperation() {
         Task {
             await runner.cancel()
-            appendLog("[System] 操作已被用户取消", isError: true)
+            appendLog(localization.string("log.command.cancelled", defaultValue: "[System] 操作已被用户取消"), isError: true)
             isBusy = false
             currentOperationName = ""
             onStateChange?()
